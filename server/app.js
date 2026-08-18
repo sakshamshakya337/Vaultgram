@@ -27,14 +27,24 @@ app.use(
   })
 );
 
-// CORS configuration supporting dynamic ALLOWED_ORIGIN env variable
+// CORS configuration supporting dynamic ALLOWED_ORIGIN env variable (auto-strips trailing slashes)
 const allowedOriginEnv = process.env.ALLOWED_ORIGIN || '*';
-const allowedOrigins = allowedOriginEnv.split(',').map((o) => o.trim());
+const allowedOrigins = allowedOriginEnv
+  .split(',')
+  .map((o) => o.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOriginEnv === '*' || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.replace(/\/+$/, '');
+      if (
+        allowedOriginEnv === '*' ||
+        allowedOrigins.includes('*') ||
+        allowedOrigins.includes(cleanOrigin) ||
+        cleanOrigin.endsWith('.vercel.app')
+      ) {
         return callback(null, true);
       }
       return callback(new Error(`Origin ${origin} not allowed by CORS`));
