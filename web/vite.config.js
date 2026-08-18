@@ -11,11 +11,23 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+        includeAssets: [
+          'favicon.svg',
+          'favicon-32x32.png',
+          'favicon-16x16.png',
+          'apple-touch-icon.png',
+          'apple-touch-icon-180x180.png',
+          'apple-touch-icon-152x152.png',
+          'apple-touch-icon-120x120.png',
+          'pwa-192x192.png',
+          'pwa-512x512.png',
+          'pwa-maskable-192x192.png',
+          'pwa-maskable-512x512.png'
+        ],
         manifest: {
           name: 'StreamVault',
           short_name: 'StreamVault',
-          description: 'TikTok & Reels style cloud video streaming powered by Telegram Cloud Vault',
+          description: 'Reels feed and personal cloud storage vault',
           theme_color: '#09090b',
           background_color: '#000000',
           display: 'standalone',
@@ -33,7 +45,19 @@ export default defineConfig(({ mode }) => {
               src: '/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-maskable-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable'
+            },
+            {
+              src: '/pwa-maskable-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
         },

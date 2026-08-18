@@ -1,24 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="streamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#06b6d4" />
-      <stop offset="50%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#ec4899" />
-    </linearGradient>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#18181b" />
-      <stop offset="100%" stop-color="#09090b" />
+      <stop offset="0%" stop-color="#0c0d14" />
+      <stop offset="50%" stop-color="#09090b" />
+      <stop offset="100%" stop-color="#050507" />
     </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="45%" stop-color="#4facfe" />
+      <stop offset="80%" stop-color="#6b11ff" />
+      <stop offset="100%" stop-color="#ff0844" />
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="100%" stop-color="#4facfe" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
   </defs>
-  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" stroke="#27272a" stroke-width="8" />
-  
-  <!-- Outer glowing ring / Reels border -->
-  <circle cx="256" cy="256" r="160" fill="none" stroke="url(#streamGrad)" stroke-width="18" stroke-dasharray="80 30" />
-  
-  <!-- Play & Stream Symbol -->
-  <path d="M220 176 L340 256 L220 336 Z" fill="url(#streamGrad)" stroke="#ffffff" stroke-width="6" stroke-linejoin="round" />
-  
-  <!-- Sparkle dots -->
-  <circle cx="340" cy="180" r="12" fill="#06b6d4" />
-  <circle cx="170" cy="320" r="10" fill="#ec4899" />
+
+  <!-- Background Base with Squircle shape -->
+  <rect width="512" height="512" rx="120" fill="url(#bgGrad)" />
+  <rect width="504" height="504" x="4" y="4" rx="116" fill="none" stroke="url(#accentGrad)" stroke-width="8" opacity="0.8" />
+
+  <!-- Background Glow Orb -->
+  <circle cx="256" cy="256" r="140" fill="url(#shieldGrad)" opacity="0.15" filter="url(#glow)" />
+
+  <!-- Outer Ring with Dynamic Segment -->
+  <circle cx="256" cy="256" r="165" fill="none" stroke="url(#accentGrad)" stroke-width="22" stroke-dasharray="180 50" stroke-linecap="round" />
+
+  <!-- Inner Cloud / Vault Hexagon Frame -->
+  <polygon points="256,120 370,185 370,325 256,390 142,325 142,185" fill="#13141f" stroke="url(#accentGrad)" stroke-width="12" stroke-linejoin="round" />
+
+  <!-- Play / Stream Triangle in Center -->
+  <path d="M226 195 L320 256 L226 317 Z" fill="url(#accentGrad)" stroke="#ffffff" stroke-width="6" stroke-linejoin="round" />
+
+  <!-- Orbiting Satellite Sparkles -->
+  <circle cx="370" cy="185" r="14" fill="#00f2fe" filter="url(#glow)" />
+  <circle cx="142" cy="325" r="12" fill="#ff0844" filter="url(#glow)" />
+  <circle cx="256" cy="120" r="10" fill="#ffffff" />
 </svg>
