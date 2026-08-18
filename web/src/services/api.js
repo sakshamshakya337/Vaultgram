@@ -8,6 +8,7 @@ export const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 
 const TOKEN_KEY = 'streamvault_token';
+const REFRESH_TOKEN_KEY = 'streamvault_refresh_token';
 const USER_KEY = 'streamvault_user';
 
 export const getStoredToken = () => {
@@ -27,6 +28,26 @@ export const setStoredToken = (token) => {
 export const removeStoredToken = () => {
   try {
     localStorage.removeItem(TOKEN_KEY);
+  } catch {}
+};
+
+export const getStoredRefreshToken = () => {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+export const setStoredRefreshToken = (token) => {
+  try {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  } catch {}
+};
+
+export const removeStoredRefreshToken = () => {
+  try {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   } catch {}
 };
 
@@ -51,6 +72,8 @@ export const removeStoredUser = () => {
   } catch {}
 };
 
+let refreshPromise = null;
+
 async function request(path, options = {}) {
   const token = getStoredToken();
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -63,10 +86,50 @@ async function request(path, options = {}) {
   };
 
   const url = `${BASE_URL}${path}`;
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     ...options,
     headers,
   });
+
+  // If token expired (401) and not already on a refresh/login route, attempt refresh
+  if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/refresh')) {
+    const refreshToken = getStoredRefreshToken();
+    if (refreshToken) {
+      try {
+        if (!refreshPromise) {
+          refreshPromise = fetch(`${BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          })
+            .then((r) => r.json())
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const refreshData = await refreshPromise;
+        if (refreshData?.accessToken) {
+          setStoredToken(refreshData.accessToken);
+          if (refreshData.refreshToken) {
+            setStoredRefreshToken(refreshData.refreshToken);
+          }
+
+          // Retry original request with new token
+          const retryHeaders = {
+            ...headers,
+            Authorization: `Bearer ${refreshData.accessToken}`,
+          };
+          response = await fetch(url, {
+            ...options,
+            headers: retryHeaders,
+          });
+        }
+      } catch (err) {
+        console.warn('Auto token refresh failed:', err);
+      }
+    }
+  }
 
   const data = await response.json().catch(() => null);
 
@@ -141,9 +204,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      if (data?.token) {
-        setStoredToken(data.token);
-        setStoredUser(data.user);
+      const token = data?.accessToken || data?.token;
+      if (token) {
+        setStoredToken(token);
+        if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
+        if (data.user) setStoredUser(data.user);
       }
       return data;
     },
@@ -152,9 +217,24 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ username, email, password }),
       });
-      if (data?.token) {
-        setStoredToken(data.token);
-        setStoredUser(data.user);
+      const token = data?.accessToken || data?.token;
+      if (token) {
+        setStoredToken(token);
+        if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
+        if (data.user) setStoredUser(data.user);
+      }
+      return data;
+    },
+    refresh: async () => {
+      const refreshToken = getStoredRefreshToken();
+      if (!refreshToken) return null;
+      const data = await request('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (data?.accessToken) {
+        setStoredToken(data.accessToken);
+        if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
       }
       return data;
     },
@@ -165,10 +245,37 @@ export const api = {
       }
       return data;
     },
-    logout: () => {
+    logout: async () => {
+      const refreshToken = getStoredRefreshToken();
+      try {
+        if (refreshToken) {
+          await request('/auth/logout', {
+            method: 'POST',
+            body: JSON.stringify({ refreshToken }),
+          });
+        }
+      } catch {}
       removeStoredToken();
+      removeStoredRefreshToken();
       removeStoredUser();
     },
+
+    // PIN lock APIs
+    setPin: (pin) =>
+      request('/auth/pin/set', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+    verifyPin: (pin) =>
+      request('/auth/pin/verify', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+    removePin: (pin) =>
+      request('/auth/pin/remove', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
   },
 
   videos: {
@@ -205,7 +312,6 @@ export const api = {
         if (res?.categories && Array.isArray(res.categories)) {
           return res.categories;
         }
-        // Fallback
         const listRes = await request('/videos?fileCategory=video&limit=100');
         const items = listRes?.items || listRes?.videos || (Array.isArray(listRes) ? listRes : []);
         const categories = new Set();
@@ -220,6 +326,18 @@ export const api = {
         return ['Trending', 'Music', 'Gaming', 'Tech', 'Comedy', 'Entertainment', 'Tutorials'];
       }
     },
+
+    getLockedStatus: () => request('/videos/categories/locked-status'),
+
+    lockCategory: (category) =>
+      request(`/videos/categories/${encodeURIComponent(category)}/lock`, {
+        method: 'POST',
+      }),
+
+    unlockCategory: (category) =>
+      request(`/videos/categories/${encodeURIComponent(category)}/unlock`, {
+        method: 'POST',
+      }),
 
     get: (id) => request(`/videos/${id}`),
 

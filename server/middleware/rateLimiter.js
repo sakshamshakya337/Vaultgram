@@ -30,8 +30,18 @@ const streamLimiter = rateLimit({
   message: { message: 'Stream request rate limit exceeded.' },
 });
 
+// PIN verification limiter: 5 attempts per 10 minutes to block PIN brute-forcing
+const pinVerifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: isDev ? 100 : 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many incorrect PIN attempts. Please try again after 10 minutes.' },
+});
+
 module.exports = {
   generalLimiter,
   authLimiter,
   streamLimiter,
+  pinVerifyLimiter,
 };

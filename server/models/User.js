@@ -32,6 +32,15 @@ const userSchema = new mongoose.Schema(
       enum: ['user', 'admin'],
       default: 'user',
     },
+    pinHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    lockedCategories: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 );
@@ -53,6 +62,16 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
   } catch (err) {
     console.error('comparePassword error:', err.message);
+    return false;
+  }
+};
+
+userSchema.methods.comparePin = async function (enteredPin) {
+  if (!enteredPin || !this.pinHash) return false;
+  try {
+    return await bcrypt.compare(String(enteredPin), this.pinHash);
+  } catch (err) {
+    console.error('comparePin error:', err.message);
     return false;
   }
 };

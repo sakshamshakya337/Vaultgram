@@ -20,9 +20,17 @@ const {
   emptyTrash,
 } = require('../controllers/mediaController');
 const { protect, optionalAuth } = require('../middleware/auth');
+const {
+  lockCategory,
+  unlockCategory,
+  getLockedStatus,
+} = require('../controllers/authController');
 
 // ─── Reels / Video Feed & Categories ─────────────────────────────────────────
 router.get('/feed', optionalAuth, getFeed);
+router.get('/categories/locked-status', optionalAuth, getLockedStatus);
+router.post('/categories/:category/lock', protect, lockCategory);
+router.post('/categories/:category/unlock', protect, unlockCategory);
 router.get('/categories', optionalAuth, getCategories);
 
 // ─── Drive Stats & Folders ───────────────────────────────────────────────────
