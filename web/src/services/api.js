@@ -370,6 +370,54 @@ export const api = {
     },
   },
 
+  drive: {
+    list: async (params = {}) => {
+      const queryParams = new URLSearchParams();
+      if (params.folderId) queryParams.set('folderId', params.folderId);
+      if (params.fileCategory && params.fileCategory !== 'all') queryParams.set('fileCategory', params.fileCategory);
+      if (params.filter) queryParams.set('filter', params.filter);
+      if (params.sort) queryParams.set('sort', params.sort);
+      if (params.limit) queryParams.set('limit', params.limit || '100');
+
+      return request(`/videos?${queryParams.toString()}`);
+    },
+
+    getLibrary: () => request('/videos/user/library'),
+
+    createFolder: (title, parentFolderId = null) =>
+      request('/videos/folder', {
+        method: 'POST',
+        body: JSON.stringify({ title, parentFolderId }),
+      }),
+
+    rename: (id, title) =>
+      request(`/videos/${id}/rename`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      }),
+
+    move: (id, targetFolderId) =>
+      request(`/videos/${id}/move`, {
+        method: 'PATCH',
+        body: JSON.stringify({ targetFolderId }),
+      }),
+
+    trash: (id) =>
+      request(`/videos/${id}/trash`, {
+        method: 'POST',
+      }),
+
+    restore: (id) =>
+      request(`/videos/${id}/restore`, {
+        method: 'POST',
+      }),
+
+    delete: (id) =>
+      request(`/videos/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
   stream: {
     getUrl: (id, download = false) => {
       const token = getAccessToken();

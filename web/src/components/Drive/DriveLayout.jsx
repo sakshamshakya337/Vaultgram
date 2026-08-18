@@ -1,59 +1,87 @@
-import React, { useState, useMemo } from 'react';
-import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/VideoFeedContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../services/api';
 import { DriveSidebar } from './DriveSidebar';
 import { DriveHeader } from './DriveHeader';
 import { DriveFolderGrid } from './DriveFolderGrid';
 import { DriveFilesGrid } from './DriveFilesGrid';
 import { DriveFilesList } from './DriveFilesList';
 import { DesktopVideoModal } from './DesktopVideoModal';
+import { NewFolderModal } from './NewFolderModal';
+import { RenameModal } from './RenameModal';
 
 export const DriveLayout = () => {
   const {
     videos,
-    loading,
     selectedCategory,
     setSelectedCategory,
     requestCategory,
     categories,
+    lockedCategories,
+    sessionUnlockedCategories,
+    setCategoryLockTarget,
     setIsUploadOpen,
   } = useVideoFeed();
 
-  const { isAuthenticated, setIsAuthOpen } = useAuth();
+  const { isAuthenticated, hasPin } = useAuth();
 
+  // Navigation & Data
   const [currentNav, setCurrentNav] = useState('all'); // 'all', 'starred', 'recent', 'trash'
+  const [currentFolder, setCurrentFolder] = useState(null); // null = root
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [selectedVideo, setSelectedVideo] = useState(null);
 
-  // Compute category counts for folder badges
-  const categoryCounts = useMemo(() => {
-    const counts = {};
-    (videos || []).forEach((v) => {
-      if (v.category) {
-        const cat = v.category.toLowerCase().trim();
-        counts[cat] = (counts[cat] || 0) + 1;
+  // Drive state
+  const [driveItems, setDriveItems] = useState([]);
+  const [loadingDrive, setLoadingDrive] = useState(false);
+
+  // Modals
+  const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
+
+  // Load drive items (folders and files)
+  const loadDriveItems = useCallback(async () => {
+    setLoadingDrive(true);
+    try {
+      if (searchQuery.trim()) {
+        const res = await api.drive.list({ limit: 100 });
+        const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
+        setDriveItems(items);
+      } else {
+        const res = await api.drive.list({
+          folderId: currentFolder?._id || null,
+          filter: currentNav,
+          limit: 100,
+        });
+        const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
+        setDriveItems(items);
       }
-    });
-    return counts;
-  }, [videos]);
-
-  // Filter videos based on navigation, category, and search query
-  const filteredVideos = useMemo(() => {
-    let list = [...(videos || [])];
-
-    // Nav-level filtering
-    if (currentNav === 'starred') {
-      list = list.filter((v) => !!v.isStarred);
-    } else if (currentNav === 'recent') {
-      list = list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    } else if (currentNav === 'trash') {
-      return []; // Stub for Trash
+    } catch (err) {
+      console.warn('Drive items fetch error:', err.message);
+      setDriveItems(videos || []);
+    } finally {
+      setLoadingDrive(false);
     }
+  }, [currentFolder, currentNav, searchQuery, videos]);
 
-    // Category filtering
-    if (currentNav === 'all' && selectedCategory !== 'All') {
+  useEffect(() => {
+    loadDriveItems();
+  }, [loadDriveItems]);
+
+  // Separate folders and files
+  const folders = useMemo(() => {
+    if (currentFolder || currentNav !== 'all') return [];
+    return driveItems.filter((item) => item.isFolder);
+  }, [driveItems, currentFolder, currentNav]);
+
+  const files = useMemo(() => {
+    let list = driveItems.filter((item) => !item.isFolder);
+
+    // If viewing a category filter
+    if (selectedCategory !== 'All' && currentNav === 'all') {
       list = list.filter(
         (v) => (v.category || '').toLowerCase() === selectedCategory.toLowerCase()
       );
@@ -71,27 +99,64 @@ export const DriveLayout = () => {
     }
 
     return list;
-  }, [videos, currentNav, selectedCategory, searchQuery]);
+  }, [driveItems, selectedCategory, currentNav, searchQuery]);
+
+  // Handle opening custom folder with PIN check
+  const handleOpenFolder = (folder) => {
+    const title = folder.title || '';
+    const folderId = folder._id || folder.id;
+    const isLocked =
+      (lockedCategories || []).some((lc) => lc.toLowerCase() === title.toLowerCase()) ||
+      (lockedCategories || []).some((lc) => lc.toLowerCase() === folderId.toLowerCase());
+    const isUnlockedSession =
+      sessionUnlockedCategories?.has(title.toLowerCase()) ||
+      sessionUnlockedCategories?.has(folderId.toLowerCase());
+
+    if (isLocked && !isUnlockedSession && hasPin) {
+      setCategoryLockTarget(title);
+    } else {
+      setCurrentFolder(folder);
+    }
+  };
+
+  const handleOpenCategory = (cat) => {
+    requestCategory(cat);
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    if (window.confirm('Are you sure you want to delete this folder?')) {
+      try {
+        await api.drive.delete(folderId);
+        loadDriveItems();
+      } catch (err) {
+        alert(err.message || 'Failed to delete folder');
+      }
+    }
+  };
 
   const handleResetToRoot = () => {
     setCurrentNav('all');
+    setCurrentFolder(null);
     setSelectedCategory('All');
     setSearchQuery('');
   };
 
-  const isAtRoot = currentNav === 'all' && selectedCategory === 'All' && !searchQuery.trim();
+  const isAtRoot = currentNav === 'all' && !currentFolder && selectedCategory === 'All' && !searchQuery.trim();
+  const categoryFoldersList = categories.filter((c) => c !== 'All');
 
   return (
     <div className="flex w-screen h-screen bg-black text-white overflow-hidden select-none font-sans">
-      {/* 1. Left Sidebar (~260px) */}
+      {/* 1. Left Sidebar */}
       <DriveSidebar
         currentNav={currentNav}
         onSelectNav={(nav) => {
           setCurrentNav(nav);
+          setCurrentFolder(null);
           if (nav !== 'all') {
             setSelectedCategory('All');
           }
         }}
+        onOpenNewFolder={() => setIsNewFolderOpen(true)}
       />
 
       {/* 2. Main Drive Layout Area */}
@@ -108,11 +173,15 @@ export const DriveLayout = () => {
 
         {/* Scrollable Main Content */}
         <main className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
-          {/* FOLDERS SECTION (Visible when at root My Drive) */}
+          {/* FOLDERS SECTION */}
           {isAtRoot && (
             <DriveFolderGrid
-              categoryCounts={categoryCounts}
-              onSelectCategory={(cat) => requestCategory(cat)}
+              folders={folders}
+              categoryFolders={categoryFoldersList}
+              onOpenFolder={handleOpenFolder}
+              onOpenCategory={handleOpenCategory}
+              onRenameFolder={(folder) => setRenameTarget(folder)}
+              onDeleteFolder={handleDeleteFolder}
             />
           )}
 
@@ -121,7 +190,9 @@ export const DriveLayout = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  {currentNav === 'starred'
+                  {currentFolder
+                    ? `Folder: ${currentFolder.title}`
+                    : currentNav === 'starred'
                     ? 'Starred Videos'
                     : currentNav === 'recent'
                     ? 'Recent Uploads'
@@ -132,13 +203,22 @@ export const DriveLayout = () => {
                     : `#${selectedCategory} Files`}
                 </h3>
                 <span className="text-xs font-mono text-zinc-500">
-                  ({filteredVideos.length})
+                  ({files.length})
                 </span>
               </div>
+
+              {currentFolder && (
+                <button
+                  onClick={handleResetToRoot}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
+                >
+                  ← Back to My Drive
+                </button>
+              )}
             </div>
 
             {/* Empty State */}
-            {filteredVideos.length === 0 && !loading && (
+            {files.length === 0 && !loadingDrive && (
               <div className="p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
                 <div className="w-16 h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600">
                   {currentNav === 'starred' ? (
@@ -158,41 +238,50 @@ export const DriveLayout = () => {
                       ? 'Trash is Empty'
                       : searchQuery
                       ? 'No Matching Videos'
-                      : 'No Videos in this Category'}
+                      : 'No Files in this Folder'}
                   </h4>
                   <p className="text-xs text-zinc-400">
                     {currentNav === 'starred'
-                      ? 'Click the heart icon on any video card to star it.'
+                      ? 'Click the heart icon on any file to star it.'
                       : currentNav === 'trash'
                       ? 'Items you delete will appear here.'
                       : searchQuery
-                      ? `No files match "${searchQuery}". Try a different keyword.`
-                      : 'Upload your first video to start building your cloud library.'}
+                      ? `No files match "${searchQuery}".`
+                      : 'Upload your first media file or create a folder.'}
                   </p>
                 </div>
 
                 {currentNav === 'all' && (
-                  <button
-                    onClick={() => setIsUploadOpen(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Upload Video</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsUploadOpen(true)}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Upload Video</span>
+                    </button>
+                    <button
+                      onClick={() => setIsNewFolderOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-colors cursor-pointer"
+                    >
+                      <FolderPlus className="w-4 h-4 text-blue-400" />
+                      <span>New Folder</span>
+                    </button>
+                  </div>
                 )}
               </div>
             )}
 
             {/* Grid vs List View */}
-            {filteredVideos.length > 0 && (
+            {files.length > 0 && (
               viewMode === 'grid' ? (
                 <DriveFilesGrid
-                  videos={filteredVideos}
+                  videos={files}
                   onSelectVideo={(v) => setSelectedVideo(v)}
                 />
               ) : (
                 <DriveFilesList
-                  videos={filteredVideos}
+                  videos={files}
                   onSelectVideo={(v) => setSelectedVideo(v)}
                 />
               )
@@ -205,6 +294,21 @@ export const DriveLayout = () => {
       <DesktopVideoModal
         video={selectedVideo}
         onClose={() => setSelectedVideo(null)}
+      />
+
+      {/* New Folder Modal */}
+      <NewFolderModal
+        isOpen={isNewFolderOpen}
+        onClose={() => setIsNewFolderOpen(false)}
+        currentFolderId={currentFolder?._id || null}
+        onFolderCreated={loadDriveItems}
+      />
+
+      {/* Rename Modal */}
+      <RenameModal
+        item={renameTarget}
+        onClose={() => setRenameTarget(null)}
+        onRenamed={loadDriveItems}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles,
   Plus,
@@ -7,16 +7,21 @@ import {
   Clock,
   Trash2,
   Folder,
+  FolderPlus,
   Lock,
   Unlock,
   Cloud,
   Shield,
-  HardDrive
+  Upload
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/VideoFeedContext';
 import { useAuth } from '../../contexts/AuthContext';
 
-export const DriveSidebar = ({ currentNav, onSelectNav }) => {
+export const DriveSidebar = ({
+  currentNav,
+  onSelectNav,
+  onOpenNewFolder,
+}) => {
   const {
     categories,
     selectedCategory,
@@ -28,6 +33,7 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
   } = useVideoFeed();
 
   const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
+  const [showNewMenu, setShowNewMenu] = useState(false);
 
   const handleQuickLockToggle = async (e, cat) => {
     e.stopPropagation();
@@ -41,7 +47,7 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
   return (
     <aside className="w-64 h-screen bg-zinc-950 border-r border-white/10 flex flex-col justify-between shrink-0 select-none">
       {/* Top Header & Logo */}
-      <div className="p-5 flex flex-col gap-5 shrink-0">
+      <div className="p-5 flex flex-col gap-4 shrink-0">
         {/* Brand Logo */}
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center p-0.5 shadow-lg shadow-cyan-500/20">
@@ -57,14 +63,42 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
           </div>
         </div>
 
-        {/* Primary "+ New Upload" Button */}
-        <button
-          onClick={() => setIsUploadOpen(true)}
-          className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-blue-500 text-white font-bold text-sm shadow-xl shadow-cyan-500/20 hover:opacity-95 active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <Plus className="w-5 h-5 stroke-[2.5]" />
-          <span>New Upload</span>
-        </button>
+        {/* Primary "+ New" Action Button with Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowNewMenu((prev) => !prev)}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-blue-500 text-white font-bold text-sm shadow-xl shadow-cyan-500/20 hover:opacity-95 active:scale-[0.98] transition-all cursor-pointer"
+          >
+            <Plus className="w-5 h-5 stroke-[2.5]" />
+            <span>New Action</span>
+          </button>
+
+          {showNewMenu && (
+            <div className="absolute left-0 right-0 top-14 z-50 rounded-2xl bg-zinc-900 border border-white/10 p-1.5 shadow-2xl backdrop-blur-xl animate-fade-in space-y-1">
+              <button
+                onClick={() => {
+                  setShowNewMenu(false);
+                  setIsUploadOpen(true);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-cyan-400" />
+                <span>Upload Media</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowNewMenu(false);
+                  if (onOpenNewFolder) onOpenNewFolder();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <FolderPlus className="w-4 h-4 text-blue-400" />
+                <span>New Folder</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Navigation & Categories Scrollable Area */}
@@ -83,7 +117,7 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
             }`}
           >
             <Video className="w-4 h-4" />
-            <span>My Videos</span>
+            <span>My Cloud Drive</span>
           </button>
 
           <button
@@ -126,7 +160,7 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
         {/* Categories / Folders Section */}
         <div className="space-y-1 pt-2 border-t border-white/5">
           <div className="px-3.5 py-1.5 flex items-center justify-between text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
-            <span>Categories</span>
+            <span>File Categories</span>
             <span className="text-[10px] text-zinc-600 font-mono">
               {categories.filter((c) => c !== 'All').length}
             </span>
@@ -159,7 +193,6 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
                     <span className="truncate">#{cat}</span>
                   </div>
 
-                  {/* Lock Toggle Action Button */}
                   <button
                     onClick={(e) => handleQuickLockToggle(e, cat)}
                     className={`p-1 rounded-md transition-all cursor-pointer ${
@@ -172,11 +205,7 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
                     title={isLocked ? 'Folder Locked (Click to Unlock)' : 'Lock Folder with PIN'}
                   >
                     {isLocked ? (
-                      isUnlockedThisSession ? (
-                        <Unlock className="w-3.5 h-3.5" />
-                      ) : (
-                        <Lock className="w-3.5 h-3.5" />
-                      )
+                      isUnlockedThisSession ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />
                     ) : (
                       <Lock className="w-3.5 h-3.5" />
                     )}
