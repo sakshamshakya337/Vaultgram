@@ -22,29 +22,69 @@ export const VideoFeedProvider = ({ children }) => {
   const [sessionUnlockedCategories, setSessionUnlockedCategories] = useState(new Set());
   const [categoryLockTarget, setCategoryLockTarget] = useState(null);
 
-  // App Lock State (PIN required on start / app visibility change if user has PIN set)
-  const [isAppLocked, setIsAppLocked] = useState(hasPin);
+  // Inactivity timeout: 3 minutes (180,000 ms)
+  const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000;
 
-  // Sync app lock state with user PIN configuration
+  // App Lock State (PIN required after 3 minutes of inactivity)
+  const [isAppLocked, setIsAppLocked] = useState(false);
+  const lastActivityRef = useRef(Date.now());
+  const lastHiddenTimeRef = useRef(null);
+
+  // Track user activity across interactions
   useEffect(() => {
-    if (hasPin) {
-      setIsAppLocked(true);
-    } else {
+    const updateActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    const events = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll', 'click'];
+    events.forEach((evt) => window.addEventListener(evt, updateActivity, { passive: true }));
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, updateActivity));
+    };
+  }, []);
+
+  // 3-Minute Inactivity and Visibility Checker
+  useEffect(() => {
+    if (!hasPin) {
       setIsAppLocked(false);
+      return;
     }
-  }, [hasPin]);
 
-  // Page Visibility API: re-lock app on tab return if PIN is set
-  useEffect(() => {
+    // Periodic check every 10s for 3-minute idle inactivity
+    const interval = setInterval(() => {
+      if (hasPin && !isAppLocked) {
+        const idleTime = Date.now() - lastActivityRef.current;
+        if (idleTime >= INACTIVITY_TIMEOUT_MS) {
+          setIsAppLocked(true);
+        }
+      }
+    }, 10000);
+
+    // Page Visibility API: Lock only if user was away for 3 minutes or more
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && hasPin) {
-        setIsAppLocked(true);
+      if (document.visibilityState === 'hidden') {
+        lastHiddenTimeRef.current = Date.now();
+      } else if (document.visibilityState === 'visible' && hasPin) {
+        const now = Date.now();
+        const hiddenDuration = lastHiddenTimeRef.current ? now - lastHiddenTimeRef.current : 0;
+        const idleDuration = now - lastActivityRef.current;
+
+        if (hiddenDuration >= INACTIVITY_TIMEOUT_MS || idleDuration >= INACTIVITY_TIMEOUT_MS) {
+          setIsAppLocked(true);
+        }
+        lastActivityRef.current = now;
+        lastHiddenTimeRef.current = null;
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [hasPin]);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [hasPin, isAppLocked]);
 
   // Audio Autoplay: Starts muted, unlocked on first interaction
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
