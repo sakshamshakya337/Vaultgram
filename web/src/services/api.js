@@ -320,6 +320,14 @@ export const api = {
       return request(`/videos?${queryParams.toString()}`);
     },
 
+    search: async (q, category) => {
+      const queryParams = new URLSearchParams();
+      if (q) queryParams.set('q', q);
+      queryParams.set('fileCategory', 'video');
+      if (category && category !== 'All') queryParams.set('category', category);
+      return request(`/media/search?${queryParams.toString()}`);
+    },
+
     getCategories: async () => {
       try {
         const res = await request('/videos/categories');
@@ -399,6 +407,24 @@ export function formatBytes(bytes) {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+export function formatRelativeTime(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now - date) / 1000);
+
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 export default api;
