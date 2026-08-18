@@ -30,6 +30,7 @@ export const DriveSidebar = ({
     sessionUnlockedCategories,
     toggleCategoryLock,
     setIsUploadOpen,
+    triggerInstall,
   } = useVideoFeed();
 
   const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
