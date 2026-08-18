@@ -76,6 +76,13 @@ export const ReelsContainer = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeVideoIndex, videos.length]);
 
+  // Auto-trigger biometric / PIN unlock on entering Reels tab if locked
+  useEffect(() => {
+    if (hasPin && !sessionUnlockedReels) {
+      setCategoryLockTarget('Reels');
+    }
+  }, [hasPin, sessionUnlockedReels, setCategoryLockTarget]);
+
   // 1. PIN Security Gate: Prompt user to set a PIN if none exists
   if (!hasPin) {
     return (
@@ -106,13 +113,13 @@ export const ReelsContainer = () => {
         </div>
         <h3 className="text-lg font-bold text-white mb-1.5">Reels Feed Locked</h3>
         <p className="text-xs text-zinc-400 max-w-xs mb-6 leading-relaxed">
-          Enter your PIN passcode to unlock full-screen vertical video reels for this session.
+          Unlock with Face ID, Fingerprint, or PIN passcode to access video reels.
         </p>
         <button
           onClick={() => setCategoryLockTarget('Reels')}
-          className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-rose-500 via-purple-600 to-rose-600 text-white font-bold text-xs shadow-lg shadow-rose-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+          className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
         >
-          Unlock Reels Feed
+          Unlock with Fingerprint / PIN
         </button>
       </div>
     );

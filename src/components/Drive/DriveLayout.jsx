@@ -48,15 +48,18 @@ export const DriveLayout = () => {
   const loadDriveItems = useCallback(async () => {
     setLoadingDrive(true);
     try {
+      const unlockedCats = Array.from(sessionUnlockedCategories || []).join(',');
       if (searchQuery.trim()) {
-        const res = await api.drive.list({ limit: 100 });
+        const res = await api.drive.list({ limit: 100, unlockedCategories: unlockedCats });
         const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
         setDriveItems(items);
       } else {
         const res = await api.drive.list({
           folderId: currentFolder?._id || null,
+          category: selectedCategory !== 'All' ? selectedCategory : undefined,
           filter: currentNav,
           limit: 100,
+          unlockedCategories: unlockedCats,
         });
         const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
         setDriveItems(items);
@@ -67,7 +70,7 @@ export const DriveLayout = () => {
     } finally {
       setLoadingDrive(false);
     }
-  }, [currentFolder, currentNav, searchQuery, videos]);
+  }, [currentFolder, currentNav, searchQuery, selectedCategory, sessionUnlockedCategories, videos]);
 
   useEffect(() => {
     loadDriveItems();

@@ -419,10 +419,12 @@ export const api = {
     list: async (params = {}) => {
       const queryParams = new URLSearchParams();
       if (params.folderId) queryParams.set('folderId', params.folderId);
+      if (params.category && params.category !== 'All') queryParams.set('category', params.category);
       if (params.fileCategory && params.fileCategory !== 'all') queryParams.set('fileCategory', params.fileCategory);
       if (params.filter) queryParams.set('filter', params.filter);
       if (params.sort) queryParams.set('sort', params.sort);
       if (params.limit) queryParams.set('limit', params.limit || '100');
+      if (params.unlockedCategories) queryParams.set('unlockedCategories', params.unlockedCategories);
 
       return request(`/videos?${queryParams.toString()}`);
     },

@@ -94,8 +94,39 @@ exports.listMedia = async (req, res) => {
       query.fileType = fileType;
     }
 
+    // ─── Locked Categories Security Protection ──────────────────────────────────
+    const userLocked = Array.isArray(req.user?.lockedCategories) ? req.user.lockedCategories : [];
+    const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
+      ? req.query.unlockedCategories
+      : Array.isArray(req.query?.unlockedCategories)
+      ? req.query.unlockedCategories.join(',')
+      : '';
+
+    const unlockedList = rawUnlocked
+      .split(',')
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+
+    const activeLockedCategories = userLocked.filter(
+      (c) => !unlockedList.includes(c.toLowerCase())
+    );
+
+    // If requesting a specific locked category without session unlock, block with 403
     if (category && category !== 'All') {
+      if (activeLockedCategories.some((c) => c.toLowerCase() === category.toLowerCase())) {
+        return res.status(403).json({
+          locked: true,
+          message: `Category "${category}" is locked. Unlock with biometric or PIN passcode.`,
+          items: [],
+          total: 0,
+        });
+      }
       query.category = category;
+    } else if (activeLockedCategories.length > 0) {
+      // Exclude all locked categories from the general dashboard listing
+      query.category = {
+        $nin: activeLockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
+      };
     }
 
     let sort = { isFolder: -1, createdAt: -1 };
