@@ -7,7 +7,7 @@ const RefreshToken = require('../models/RefreshToken');
 
 const generateAccessToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'fallback_secret', {
-    expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m',
+    expiresIn: process.env.JWT_ACCESS_EXPIRY || process.env.JWT_EXPIRY || '30d',
   });
 };
 

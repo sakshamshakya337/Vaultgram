@@ -19,10 +19,33 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initAuth = async () => {
+      const savedUser = getStoredUser();
+      const token = getAccessToken();
       const savedRefreshToken = getStoredRefreshToken();
-      if (savedRefreshToken) {
+
+      if (token && savedUser) {
+        // Instant restore from storage - no waiting / no flicker!
+        setUser(savedUser);
         try {
-          // Silent refresh on app load
+          const meRes = await api.auth.me();
+          if (meRes?.user) {
+            setUser(meRes.user);
+            setStoredUser(meRes.user);
+          }
+        } catch (err) {
+          if (err.status === 401 && savedRefreshToken) {
+            const refreshRes = await api.auth.refresh().catch(() => null);
+            if (refreshRes?.accessToken) {
+              const meRes = await api.auth.me().catch(() => null);
+              if (meRes?.user) {
+                setUser(meRes.user);
+                setStoredUser(meRes.user);
+              }
+            }
+          }
+        }
+      } else if (savedRefreshToken) {
+        try {
           const refreshRes = await api.auth.refresh();
           if (refreshRes?.accessToken) {
             const meRes = await api.auth.me();
@@ -33,9 +56,6 @@ export const AuthProvider = ({ children }) => {
           }
         } catch (err) {
           console.warn('Initial session restore note:', err.message);
-          clearAccessToken();
-          setUser(null);
-          removeStoredUser();
         }
       }
       setLoading(false);

@@ -7,22 +7,47 @@ const RAW_API_URL = import.meta.env.VITE_API_BASE_URL || '';
 export const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 
+const ACCESS_TOKEN_KEY = 'streamvault_access_token';
 const REFRESH_TOKEN_KEY = 'streamvault_refresh_token';
 const USER_KEY = 'streamvault_user';
 
-// In-Memory Access Token (never stored in localStorage for security)
+// Persistent Access Token & in-memory cache
 let inMemoryAccessToken = '';
+try {
+  inMemoryAccessToken = localStorage.getItem(ACCESS_TOKEN_KEY) || '';
+} catch {}
 
-export const getAccessToken = () => inMemoryAccessToken;
+export const getAccessToken = () => {
+  if (inMemoryAccessToken) return inMemoryAccessToken;
+  try {
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY) || '';
+    if (token) inMemoryAccessToken = token;
+    return token;
+  } catch {
+    return '';
+  }
+};
+
 export const setAccessToken = (token) => {
   inMemoryAccessToken = token || '';
-};
-export const clearAccessToken = () => {
-  inMemoryAccessToken = '';
+  try {
+    if (token) {
+      localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+    }
+  } catch {}
 };
 
-// Backward compatibility helper
-export const getStoredToken = () => inMemoryAccessToken;
+export const clearAccessToken = () => {
+  inMemoryAccessToken = '';
+  try {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+  } catch {}
+};
+
+// Backward compatibility helpers
+export const getStoredToken = () => getAccessToken();
 export const setStoredToken = (token) => setAccessToken(token);
 export const removeStoredToken = () => clearAccessToken();
 
