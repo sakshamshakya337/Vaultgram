@@ -25,13 +25,17 @@ export const ReelCard = ({ video, isActive, index }) => {
   const videoId = video._id || video.id;
   const streamUrl = video.streamUrl || api.stream.getUrl(videoId);
 
-  // Play/pause and reset logic based on isActive prop (controlled by IntersectionObserver)
+  // Play/pause and audio setup based on isActive prop
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
 
     if (isActive) {
       vid.currentTime = 0;
+      vid.volume = 1.0;
+      // If user has unlocked audio, play with sound
+      vid.muted = !isAudioUnlocked || isCardMuted;
+
       const playPromise = vid.play();
       if (playPromise !== undefined) {
         playPromise
@@ -40,8 +44,7 @@ export const ReelCard = ({ video, isActive, index }) => {
             setHasError(false);
           })
           .catch((err) => {
-            // Autoplay with sound might have been blocked, try muted fallback
-            console.log('Autoplay caught:', err.name);
+            console.log('Autoplay caught (falling back to muted):', err.name);
             vid.muted = true;
             vid.play()
               .then(() => setIsPlaying(true))
@@ -54,22 +57,35 @@ export const ReelCard = ({ video, isActive, index }) => {
       setIsPlaying(false);
       setProgress(0);
     }
-  }, [isActive]);
+  }, [isActive, isAudioUnlocked, isCardMuted]);
 
-  // Sync mute state with global audio unlock
+  // Sync mute state when global isAudioUnlocked changes
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
-    vid.muted = !isAudioUnlocked || isCardMuted;
+    if (isAudioUnlocked && !isCardMuted) {
+      vid.muted = false;
+      vid.volume = 1.0;
+    } else {
+      vid.muted = true;
+    }
   }, [isAudioUnlocked, isCardMuted]);
 
-  // Handle single tap (play/pause + unlock audio) vs double tap (like)
+  // Handle single tap (toggle play/pause & unlock sound) vs double tap (like)
   const handleContainerClick = (e) => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 300;
 
-    // First unlock session audio on any user tap
-    unlockAudio();
+    // Immediately unlock audio on user gesture
+    if (!isAudioUnlocked) {
+      unlockAudio();
+      setIsCardMuted(false);
+      const vid = videoRef.current;
+      if (vid) {
+        vid.muted = false;
+        vid.volume = 1.0;
+      }
+    }
 
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
       // Double tap -> Like
@@ -114,8 +130,22 @@ export const ReelCard = ({ video, isActive, index }) => {
   };
 
   const toggleMute = () => {
-    unlockAudio();
-    setIsCardMuted((prev) => !prev);
+    const vid = videoRef.current;
+    if (!isAudioUnlocked) {
+      unlockAudio();
+      setIsCardMuted(false);
+      if (vid) {
+        vid.muted = false;
+        vid.volume = 1.0;
+      }
+    } else {
+      const nextMuted = !isCardMuted;
+      setIsCardMuted(nextMuted);
+      if (vid) {
+        vid.muted = nextMuted;
+        vid.volume = nextMuted ? 0 : 1.0;
+      }
+    }
   };
 
   const handleTimeUpdate = () => {
@@ -124,15 +154,6 @@ export const ReelCard = ({ video, isActive, index }) => {
     const current = vid.currentTime;
     const total = vid.duration;
     setProgress((current / total) * 100);
-  };
-
-  const handleSeek = (e) => {
-    e.stopPropagation();
-    const vid = videoRef.current;
-    if (!vid || !vid.duration) return;
-    const newPercent = parseFloat(e.target.value);
-    vid.currentTime = (newPercent / 100) * vid.duration;
-    setProgress(newPercent);
   };
 
   const retryStream = (e) => {
@@ -174,6 +195,7 @@ export const ReelCard = ({ video, isActive, index }) => {
         playsInline
         webkit-playsinline="true"
         loop
+        crossOrigin="anonymous"
         preload={isActive ? 'auto' : 'metadata'}
         muted={isActuallyMuted}
         onTimeUpdate={handleTimeUpdate}
