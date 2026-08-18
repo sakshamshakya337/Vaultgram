@@ -1,19 +1,26 @@
 {
-  "name": "personal-storage",
+  "name": "streamvault",
   "version": "1.0.0",
   "private": true,
-  "description": "Personal Storage — Private Cloud Vault powered by Telegram & MongoDB",
+  "description": "StreamVault — TikTok/Reels Style Cloud Video Vault powered by Telegram & MongoDB",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently -n \"SERVER,WEB-PWA\" -c \"bgBlue.bold,bgMagenta.bold\" \"npm run server\" \"npm run web\"",
     "dev:server": "nodemon server.js",
-    "dev:client": "vite",
     "dev:web": "npm --prefix web run dev",
-    "build": "vite build",
+    "dev:drive": "vite",
+    "dev:all": "concurrently -n \"SERVER,WEB-PWA,DRIVE\" -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" \"npm run server\" \"npm run web\" \"npm run dev:drive\"",
+    "server": "nodemon server.js",
+    "web": "npm --prefix web run dev",
+    "drive": "vite",
+    "build": "npm --prefix web run build",
     "build:web": "npm --prefix web run build",
+    "build:drive": "vite build",
+    "build:all": "npm run build:drive && npm run build:web",
+    "install:all": "npm install && npm --prefix web install",
     "start": "node server.js",
-    "preview": "vite preview"
+    "preview": "npm --prefix web run preview"
   },
   "dependencies": {
     "autoprefixer": "^10.5.4",
