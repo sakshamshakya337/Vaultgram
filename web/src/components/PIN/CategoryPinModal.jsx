@@ -9,6 +9,8 @@ export const CategoryPinModal = () => {
     categoryLockTarget,
     setCategoryLockTarget,
     unlockCategoryForSession,
+    unlockReelsForSession,
+    fetchVideos,
   } = useVideoFeed();
 
   const [error, setError] = useState('');
@@ -17,6 +19,8 @@ export const CategoryPinModal = () => {
 
   if (!categoryLockTarget) return null;
 
+  const isReelsLock = categoryLockTarget === 'Reels';
+
   const handlePinSubmit = async (pin, clearPin) => {
     setError('');
     setLoading(true);
@@ -24,7 +28,12 @@ export const CategoryPinModal = () => {
     try {
       const res = await verifyPin(pin);
       if (res?.valid) {
-        unlockCategoryForSession(categoryLockTarget);
+        if (isReelsLock) {
+          unlockReelsForSession();
+          fetchVideos('All', true);
+        } else {
+          unlockCategoryForSession(categoryLockTarget);
+        }
         setCategoryLockTarget(null);
         setError('');
       } else {
@@ -48,8 +57,12 @@ export const CategoryPinModal = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl p-4 animate-fade-in select-none">
       <div className="w-full max-w-sm rounded-3xl bg-zinc-950 border border-white/10 p-6 shadow-2xl">
         <PinKeypad
-          title={`Unlock #${categoryLockTarget}`}
-          subtitle="This category is protected by a PIN lock"
+          title={isReelsLock ? 'Unlock Reels Feed' : `Unlock ${categoryLockTarget}`}
+          subtitle={
+            isReelsLock
+              ? 'Enter passcode to access video reels'
+              : 'This folder is protected by a PIN passcode'
+          }
           onSubmit={handlePinSubmit}
           onCancel={() => setCategoryLockTarget(null)}
           error={error}

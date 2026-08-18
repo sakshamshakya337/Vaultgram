@@ -3,6 +3,7 @@ import {
   Sparkles,
   Plus,
   Video,
+  Film,
   Heart,
   Clock,
   Trash2,
@@ -107,6 +108,23 @@ export const DriveSidebar = ({
       <div className="flex-1 overflow-y-auto no-scrollbar px-3 space-y-6">
         {/* Main Nav Items */}
         <div className="space-y-1">
+          <button
+            onClick={() => onSelectNav('reels')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'reels'
+                ? 'bg-gradient-to-r from-rose-500/20 to-purple-500/20 text-rose-300 border border-rose-500/40 shadow-lg shadow-rose-500/10'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Film className={`w-4 h-4 ${currentNav === 'reels' ? 'text-rose-400' : 'text-zinc-400'}`} />
+            <div className="flex items-center justify-between flex-1">
+              <span>Reels</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-mono">
+                FEED
+              </span>
+            </div>
+          </button>
+
           <button
             onClick={() => {
               onSelectNav('all');

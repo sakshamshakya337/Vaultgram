@@ -329,6 +329,9 @@ export const api = {
       if (params.limit) {
         queryParams.set('limit', params.limit);
       }
+      if (params.unlockedCategories) {
+        queryParams.set('unlockedCategories', params.unlockedCategories);
+      }
       return request(`/videos/feed?${queryParams.toString()}`);
     },
 

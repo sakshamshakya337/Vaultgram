@@ -22,7 +22,10 @@ export const VideoFeedProvider = ({ children }) => {
   const [sessionUnlockedCategories, setSessionUnlockedCategories] = useState(new Set());
   const [categoryLockTarget, setCategoryLockTarget] = useState(null);
 
-  // 3-Minute Inactivity Timer for re-locking opened protected folders
+  // Session-only unlocked Reels state (gated behind PIN)
+  const [sessionUnlockedReels, setSessionUnlockedReels] = useState(false);
+
+  // 3-Minute Inactivity Timer for re-locking opened protected folders and Reels
   const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000;
   const lastActivityRef = useRef(Date.now());
   const lastHiddenTimeRef = useRef(null);
@@ -41,19 +44,22 @@ export const VideoFeedProvider = ({ children }) => {
     };
   }, []);
 
-  // 3-Minute Inactivity Re-lock for protected folders (app itself stays unlocked)
+  // 3-Minute Inactivity Re-lock for protected folders & Reels
   useEffect(() => {
     // Periodic check every 10s for 3-minute idle inactivity
     const interval = setInterval(() => {
       const idleTime = Date.now() - lastActivityRef.current;
-      if (idleTime >= INACTIVITY_TIMEOUT_MS && sessionUnlockedCategories.size > 0) {
-        setSessionUnlockedCategories(new Set());
-        // If viewing a locked folder, return to root
-        const isCurrentLocked = lockedCategories.some(
-          (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
-        );
-        if (isCurrentLocked) {
-          setSelectedCategory('All');
+      if (idleTime >= INACTIVITY_TIMEOUT_MS) {
+        if (sessionUnlockedCategories.size > 0 || sessionUnlockedReels) {
+          setSessionUnlockedCategories(new Set());
+          setSessionUnlockedReels(false);
+          // If viewing a locked folder, return to root
+          const isCurrentLocked = lockedCategories.some(
+            (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
+          );
+          if (isCurrentLocked) {
+            setSelectedCategory('All');
+          }
         }
       }
     }, 10000);
@@ -67,8 +73,9 @@ export const VideoFeedProvider = ({ children }) => {
         const idleDuration = now - lastActivityRef.current;
 
         if (hiddenDuration >= INACTIVITY_TIMEOUT_MS || idleDuration >= INACTIVITY_TIMEOUT_MS) {
-          if (sessionUnlockedCategories.size > 0) {
+          if (sessionUnlockedCategories.size > 0 || sessionUnlockedReels) {
             setSessionUnlockedCategories(new Set());
+            setSessionUnlockedReels(false);
             const isCurrentLocked = lockedCategories.some(
               (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
             );
@@ -88,7 +95,7 @@ export const VideoFeedProvider = ({ children }) => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [lockedCategories, selectedCategory, sessionUnlockedCategories]);
+  }, [lockedCategories, selectedCategory, sessionUnlockedCategories, sessionUnlockedReels]);
 
   // Audio Autoplay: Starts muted, unlocked on first interaction
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
@@ -150,45 +157,59 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, []);
 
-  // Fetch initial videos for category with generation tracking
-  const fetchVideos = useCallback(async (cat = selectedCategory) => {
-    const gen = ++requestGenRef.current;
-    currentCategoryRef.current = cat;
-
-    setLoading(true);
-    setLoadingMore(false);
-    setError(null);
-    setNextCursor(null);
-    setHasMore(false);
-    setActiveVideoIndex(0);
-
-    try {
-      const res = await api.videos.getFeed({
-        category: cat,
-        limit: 10,
-      });
-
-      // Ignore response if category changed while request was in-flight
-      if (gen !== requestGenRef.current) return;
-
-      const rawList = res?.items || (Array.isArray(res) ? res : []);
-      setVideos(rawList);
-      setNextCursor(res?.nextCursor || null);
-      setHasMore(!!res?.hasMore);
-      setActiveVideoIndex(0);
-    } catch (err) {
-      if (gen !== requestGenRef.current) return;
-      console.warn('API fetch feed warning:', err.message);
-      setError(err.message);
-    } finally {
-      if (gen === requestGenRef.current) {
+  // Fetch initial videos for category with generation tracking and PIN check
+  const fetchVideos = useCallback(
+    async (cat = selectedCategory, forceUnlock = false) => {
+      // SECURITY: If user has a PIN and hasn't unlocked Reels in this session, do not fetch data
+      if (hasPin && !sessionUnlockedReels && !forceUnlock) {
+        setVideos([]);
         setLoading(false);
+        return;
       }
-    }
-  }, [selectedCategory]);
+
+      const gen = ++requestGenRef.current;
+      currentCategoryRef.current = cat;
+
+      setLoading(true);
+      setLoadingMore(false);
+      setError(null);
+      setNextCursor(null);
+      setHasMore(false);
+      setActiveVideoIndex(0);
+
+      try {
+        const unlockedCats = Array.from(sessionUnlockedCategories).join(',');
+        const res = await api.videos.getFeed({
+          category: cat,
+          limit: 10,
+          unlockedCategories: unlockedCats,
+        });
+
+        // Ignore response if category changed while request was in-flight
+        if (gen !== requestGenRef.current) return;
+
+        const rawList = res?.items || (Array.isArray(res) ? res : []);
+        setVideos(rawList);
+        setNextCursor(res?.nextCursor || null);
+        setHasMore(!!res?.hasMore);
+        setActiveVideoIndex(0);
+      } catch (err) {
+        if (gen !== requestGenRef.current) return;
+        console.warn('API fetch feed warning:', err.message);
+        setError(err.message);
+      } finally {
+        if (gen === requestGenRef.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [selectedCategory, hasPin, sessionUnlockedReels, sessionUnlockedCategories]
+  );
 
   // Infinite scroll load more with cursor bound to current category generation
   const loadMoreVideos = useCallback(async () => {
+    if (hasPin && !sessionUnlockedReels) return;
+
     const gen = requestGenRef.current;
     const targetCategory = currentCategoryRef.current;
     const targetCursor = nextCursor;
@@ -197,10 +218,12 @@ export const VideoFeedProvider = ({ children }) => {
 
     setLoadingMore(true);
     try {
+      const unlockedCats = Array.from(sessionUnlockedCategories).join(',');
       const res = await api.videos.getFeed({
         category: targetCategory,
         cursor: targetCursor,
         limit: 10,
+        unlockedCategories: unlockedCats,
       });
 
       if (gen !== requestGenRef.current || targetCategory !== currentCategoryRef.current) {
@@ -225,7 +248,7 @@ export const VideoFeedProvider = ({ children }) => {
         setLoadingMore(false);
       }
     }
-  }, [loading, loadingMore, hasMore, nextCursor]);
+  }, [loading, loadingMore, hasMore, nextCursor, hasPin, sessionUnlockedReels, sessionUnlockedCategories]);
 
   useEffect(() => {
     if (!loading && !loadingMore && hasMore && videos.length > 0 && activeVideoIndex >= videos.length - 3) {
@@ -238,8 +261,10 @@ export const VideoFeedProvider = ({ children }) => {
   }, [fetchCategories]);
 
   useEffect(() => {
-    fetchVideos(selectedCategory);
-  }, [selectedCategory, fetchVideos]);
+    if (!hasPin || sessionUnlockedReels) {
+      fetchVideos(selectedCategory);
+    }
+  }, [selectedCategory, sessionUnlockedReels, hasPin, fetchVideos]);
 
   // Audio unlock trigger on first user interaction
   const unlockAudio = useCallback(() => {
@@ -272,6 +297,11 @@ export const VideoFeedProvider = ({ children }) => {
       return next;
     });
     setSelectedCategory(cat);
+  }, []);
+
+  // Unlock entire Reels Feed for the current session
+  const unlockReelsForSession = useCallback(() => {
+    setSessionUnlockedReels(true);
   }, []);
 
   // Lock / Unlock folder/category toggle
@@ -342,6 +372,8 @@ export const VideoFeedProvider = ({ children }) => {
         toggleCategoryLock,
         sessionUnlockedCategories,
         unlockCategoryForSession,
+        sessionUnlockedReels,
+        unlockReelsForSession,
         categoryLockTarget,
         setCategoryLockTarget,
         fetchCategories,

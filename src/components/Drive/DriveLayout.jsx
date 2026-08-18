@@ -11,6 +11,7 @@ import { DriveFilesList } from './DriveFilesList';
 import { DesktopVideoModal } from './DesktopVideoModal';
 import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
+import { ReelsContainer } from '../Reels/ReelsContainer';
 
 export const DriveLayout = () => {
   const {
@@ -171,123 +172,131 @@ export const DriveLayout = () => {
           onResetToRoot={handleResetToRoot}
         />
 
-        {/* Scrollable Main Content */}
-        <main className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
-          {/* FOLDERS SECTION */}
-          {isAtRoot && (
-            <DriveFolderGrid
-              folders={folders}
-              categoryFolders={categoryFoldersList}
-              onOpenFolder={handleOpenFolder}
-              onOpenCategory={handleOpenCategory}
-              onRenameFolder={(folder) => setRenameTarget(folder)}
-              onDeleteFolder={handleDeleteFolder}
-            />
-          )}
-
-          {/* FILES SECTION */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  {currentFolder
-                    ? `Folder: ${currentFolder.title}`
-                    : currentNav === 'starred'
-                    ? 'Starred Videos'
-                    : currentNav === 'recent'
-                    ? 'Recent Uploads'
-                    : currentNav === 'trash'
-                    ? 'Trash'
-                    : selectedCategory === 'All'
-                    ? 'All Files'
-                    : `#${selectedCategory} Files`}
-                </h3>
-                <span className="text-xs font-mono text-zinc-500">
-                  ({files.length})
-                </span>
-              </div>
-
-              {currentFolder && (
-                <button
-                  onClick={handleResetToRoot}
-                  className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
-                >
-                  ← Back to My Drive
-                </button>
-              )}
+        {/* Scrollable Main Content / Centered Desktop Reels */}
+        {currentNav === 'reels' ? (
+          <div className="flex-1 flex items-center justify-center p-6 bg-zinc-950/60 overflow-hidden">
+            <div className="w-full max-w-[420px] h-[calc(100vh-6rem)] rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black relative">
+              <ReelsContainer />
             </div>
+          </div>
+        ) : (
+          <main className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
+            {/* FOLDERS SECTION */}
+            {isAtRoot && (
+              <DriveFolderGrid
+                folders={folders}
+                categoryFolders={categoryFoldersList}
+                onOpenFolder={handleOpenFolder}
+                onOpenCategory={handleOpenCategory}
+                onRenameFolder={(folder) => setRenameTarget(folder)}
+                onDeleteFolder={handleDeleteFolder}
+              />
+            )}
 
-            {/* Empty State */}
-            {files.length === 0 && !loadingDrive && (
-              <div className="p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
-                <div className="w-16 h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600">
-                  {currentNav === 'starred' ? (
-                    <Heart className="w-8 h-8 text-rose-500/40" />
-                  ) : currentNav === 'trash' ? (
-                    <Trash2 className="w-8 h-8 text-zinc-600" />
-                  ) : (
-                    <FolderOpen className="w-8 h-8 text-cyan-500/40" />
-                  )}
+            {/* FILES SECTION */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                    {currentFolder
+                      ? `Folder: ${currentFolder.title}`
+                      : currentNav === 'starred'
+                      ? 'Starred Videos'
+                      : currentNav === 'recent'
+                      ? 'Recent Uploads'
+                      : currentNav === 'trash'
+                      ? 'Trash'
+                      : selectedCategory === 'All'
+                      ? 'All Files'
+                      : `#${selectedCategory} Files`}
+                  </h3>
+                  <span className="text-xs font-mono text-zinc-500">
+                    ({files.length})
+                  </span>
                 </div>
 
-                <div className="max-w-xs">
-                  <h4 className="text-base font-bold text-white mb-1">
-                    {currentNav === 'starred'
-                      ? 'No Starred Videos'
-                      : currentNav === 'trash'
-                      ? 'Trash is Empty'
-                      : searchQuery
-                      ? 'No Matching Videos'
-                      : 'No Files in this Folder'}
-                  </h4>
-                  <p className="text-xs text-zinc-400">
-                    {currentNav === 'starred'
-                      ? 'Click the heart icon on any file to star it.'
-                      : currentNav === 'trash'
-                      ? 'Items you delete will appear here.'
-                      : searchQuery
-                      ? `No files match "${searchQuery}".`
-                      : 'Upload your first media file or create a folder.'}
-                  </p>
-                </div>
-
-                {currentNav === 'all' && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsUploadOpen(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Upload Video</span>
-                    </button>
-                    <button
-                      onClick={() => setIsNewFolderOpen(true)}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-colors cursor-pointer"
-                    >
-                      <FolderPlus className="w-4 h-4 text-blue-400" />
-                      <span>New Folder</span>
-                    </button>
-                  </div>
+                {currentFolder && (
+                  <button
+                    onClick={handleResetToRoot}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
+                  >
+                    ← Back to My Drive
+                  </button>
                 )}
               </div>
-            )}
 
-            {/* Grid vs List View */}
-            {files.length > 0 && (
-              viewMode === 'grid' ? (
-                <DriveFilesGrid
-                  videos={files}
-                  onSelectVideo={(v) => setSelectedVideo(v)}
-                />
-              ) : (
-                <DriveFilesList
-                  videos={files}
-                  onSelectVideo={(v) => setSelectedVideo(v)}
-                />
-              )
-            )}
-          </div>
-        </main>
+              {/* Empty State */}
+              {files.length === 0 && !loadingDrive && (
+                <div className="p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
+                  <div className="w-16 h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600">
+                    {currentNav === 'starred' ? (
+                      <Heart className="w-8 h-8 text-rose-500/40" />
+                    ) : currentNav === 'trash' ? (
+                      <Trash2 className="w-8 h-8 text-zinc-600" />
+                    ) : (
+                      <FolderOpen className="w-8 h-8 text-cyan-500/40" />
+                    )}
+                  </div>
+
+                  <div className="max-w-xs">
+                    <h4 className="text-base font-bold text-white mb-1">
+                      {currentNav === 'starred'
+                        ? 'No Starred Videos'
+                        : currentNav === 'trash'
+                        ? 'Trash is Empty'
+                        : searchQuery
+                        ? 'No Matching Videos'
+                        : 'No Files in this Folder'}
+                    </h4>
+                    <p className="text-xs text-zinc-400">
+                      {currentNav === 'starred'
+                        ? 'Click the heart icon on any file to star it.'
+                        : currentNav === 'trash'
+                        ? 'Items you delete will appear here.'
+                        : searchQuery
+                        ? `No files match "${searchQuery}".`
+                        : 'Upload your first media file or create a folder.'}
+                    </p>
+                  </div>
+
+                  {currentNav === 'all' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setIsUploadOpen(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Upload Video</span>
+                      </button>
+                      <button
+                        onClick={() => setIsNewFolderOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-colors cursor-pointer"
+                      >
+                        <FolderPlus className="w-4 h-4 text-blue-400" />
+                        <span>New Folder</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Grid vs List View */}
+              {files.length > 0 && (
+                viewMode === 'grid' ? (
+                  <DriveFilesGrid
+                    videos={files}
+                    onSelectVideo={(v) => setSelectedVideo(v)}
+                  />
+                ) : (
+                  <DriveFilesList
+                    videos={files}
+                    onSelectVideo={(v) => setSelectedVideo(v)}
+                  />
+                )
+              )}
+            </div>
+          </main>
+        )}
       </div>
 
       {/* Desktop Video Playback Modal with HTML5 Controls */}

@@ -527,6 +527,23 @@ exports.getFeed = async (req, res) => {
 
     if (category && category !== 'All') {
       query.category = category;
+    } else if (req.user) {
+      // Exclude user's locked categories UNLESS separately unlocked this session
+      const userLocked = req.user.lockedCategories || [];
+      const unlockedList = (unlockedCategories || '')
+        .split(',')
+        .map((c) => c.trim().toLowerCase())
+        .filter(Boolean);
+
+      const activeLockedCategories = userLocked.filter(
+        (c) => !unlockedList.includes(c.toLowerCase())
+      );
+
+      if (activeLockedCategories.length > 0) {
+        query.category = {
+          $nin: activeLockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
+        };
+      }
     }
 
     if (cursor) {
