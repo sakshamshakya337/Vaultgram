@@ -530,21 +530,36 @@ exports.getFeed = async (req, res) => {
     if (category && category !== 'All') {
       query.category = category;
     } else if (req.user) {
-      // Exclude user's locked categories UNLESS separately unlocked this session
-      const userLocked = req.user.lockedCategories || [];
-      const unlockedList = (unlockedCategories || '')
-        .split(',')
-        .map((c) => c.trim().toLowerCase())
-        .filter(Boolean);
+      try {
+        // Exclude user's locked categories UNLESS separately unlocked this session
+        const userLocked = Array.isArray(req.user.lockedCategories) ? req.user.lockedCategories : [];
+        const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
+          ? req.query.unlockedCategories
+          : Array.isArray(req.query?.unlockedCategories)
+          ? req.query.unlockedCategories.join(',')
+          : '';
 
-      const activeLockedCategories = userLocked.filter(
-        (c) => !unlockedList.includes(c.toLowerCase())
-      );
+        const unlockedList = rawUnlocked
+          .split(',')
+          .map((c) => c.trim().toLowerCase())
+          .filter(Boolean);
 
-      if (activeLockedCategories.length > 0) {
-        query.category = {
-          $nin: activeLockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
-        };
+        const activeLockedCategories = userLocked.filter(
+          (c) => !unlockedList.includes(c.toLowerCase())
+        );
+
+        if (activeLockedCategories.length > 0) {
+          query.category = {
+            $nin: activeLockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
+          };
+        }
+      } catch (catFilterErr) {
+        console.warn('[getFeed category filter fallback warning]:', catFilterErr.message);
+        if (Array.isArray(req.user.lockedCategories) && req.user.lockedCategories.length > 0) {
+          query.category = {
+            $nin: req.user.lockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
+          };
+        }
       }
     }
 
