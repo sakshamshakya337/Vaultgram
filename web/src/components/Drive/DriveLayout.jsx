@@ -136,6 +136,16 @@ export const DriveLayout = () => {
     }
   };
 
+  const handleDeleteFile = async (fileId) => {
+    try {
+      await api.drive.delete(fileId);
+      setDriveItems((prev) => prev.filter((item) => (item._id || item.id) !== fileId));
+      loadDriveItems();
+    } catch (err) {
+      alert(err.message || 'Failed to delete file');
+    }
+  };
+
   const handleResetToRoot = () => {
     setCurrentNav('all');
     setCurrentFolder(null);
@@ -250,23 +260,22 @@ export const DriveLayout = () => {
                     ) : currentNav === 'trash' ? (
                       <Trash2 className="w-8 h-8 text-zinc-600" />
                     ) : (
-                      <FolderOpen className="w-8 h-8 text-cyan-500/40" />
+                      <Folder className="w-8 h-8 text-zinc-600" />
                     )}
                   </div>
-
-                  <div className="max-w-xs">
-                    <h4 className="text-base font-bold text-white mb-1">
+                  <div>
+                    <h4 className="text-sm font-bold text-white mb-1">
                       {currentNav === 'starred'
-                        ? 'No Starred Videos'
+                        ? 'No Starred Files'
                         : currentNav === 'trash'
                         ? 'Trash is Empty'
                         : searchQuery
-                        ? 'No Matching Videos'
+                        ? 'No Files Found'
                         : 'No Files in this Folder'}
                     </h4>
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
                       {currentNav === 'starred'
-                        ? 'Click the heart icon on any file to star it.'
+                        ? 'Like or star videos to save them here for quick access.'
                         : currentNav === 'trash'
                         ? 'Items you delete will appear here.'
                         : searchQuery
@@ -302,11 +311,13 @@ export const DriveLayout = () => {
                   <DriveFilesGrid
                     videos={files}
                     onSelectVideo={(v) => setSelectedVideo(v)}
+                    onDeleteVideo={handleDeleteFile}
                   />
                 ) : (
                   <DriveFilesList
                     videos={files}
                     onSelectVideo={(v) => setSelectedVideo(v)}
+                    onDeleteVideo={handleDeleteFile}
                   />
                 )
               )}
@@ -331,6 +342,7 @@ export const DriveLayout = () => {
       <DesktopVideoModal
         video={selectedVideo}
         onClose={() => setSelectedVideo(null)}
+        onDelete={handleDeleteFile}
       />
 
       {/* New Folder Modal */}
