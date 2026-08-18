@@ -70,10 +70,7 @@ const StreamVaultApp = () => {
       */}
       {isDesktop ? <DriveLayout /> : <StreamVaultMobileLayout />}
 
-      {/* Fullscreen PIN Lock Overlay */}
-      <PinLockOverlay />
-
-      {/* Category Folder Unlock PIN Modal */}
+      {/* Category & Custom Folder Unlock PIN Modal */}
       <CategoryPinModal />
 
       {/* Set / Change PIN Modal */}

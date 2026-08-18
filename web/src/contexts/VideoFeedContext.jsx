@@ -18,19 +18,16 @@ export const VideoFeedProvider = ({ children }) => {
   const [categories, setCategories] = useState(['All']);
   const [lockedCategories, setLockedCategories] = useState([]);
 
-  // Session-only unlocked categories (never persisted)
+  // Session-only unlocked folders/categories (never persisted)
   const [sessionUnlockedCategories, setSessionUnlockedCategories] = useState(new Set());
   const [categoryLockTarget, setCategoryLockTarget] = useState(null);
 
-  // Inactivity timeout: 3 minutes (180,000 ms)
+  // 3-Minute Inactivity Timer for re-locking opened protected folders
   const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000;
-
-  // App Lock State (PIN required after 3 minutes of inactivity)
-  const [isAppLocked, setIsAppLocked] = useState(false);
   const lastActivityRef = useRef(Date.now());
   const lastHiddenTimeRef = useRef(null);
 
-  // Track user activity across interactions
+  // Track user interaction activity
   useEffect(() => {
     const updateActivity = () => {
       lastActivityRef.current = Date.now();
@@ -44,34 +41,41 @@ export const VideoFeedProvider = ({ children }) => {
     };
   }, []);
 
-  // 3-Minute Inactivity and Visibility Checker
+  // 3-Minute Inactivity Re-lock for protected folders (app itself stays unlocked)
   useEffect(() => {
-    if (!hasPin) {
-      setIsAppLocked(false);
-      return;
-    }
-
     // Periodic check every 10s for 3-minute idle inactivity
     const interval = setInterval(() => {
-      if (hasPin && !isAppLocked) {
-        const idleTime = Date.now() - lastActivityRef.current;
-        if (idleTime >= INACTIVITY_TIMEOUT_MS) {
-          setIsAppLocked(true);
+      const idleTime = Date.now() - lastActivityRef.current;
+      if (idleTime >= INACTIVITY_TIMEOUT_MS && sessionUnlockedCategories.size > 0) {
+        setSessionUnlockedCategories(new Set());
+        // If viewing a locked folder, return to root
+        const isCurrentLocked = lockedCategories.some(
+          (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
+        );
+        if (isCurrentLocked) {
+          setSelectedCategory('All');
         }
       }
     }, 10000);
 
-    // Page Visibility API: Lock only if user was away for 3 minutes or more
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         lastHiddenTimeRef.current = Date.now();
-      } else if (document.visibilityState === 'visible' && hasPin) {
+      } else if (document.visibilityState === 'visible') {
         const now = Date.now();
         const hiddenDuration = lastHiddenTimeRef.current ? now - lastHiddenTimeRef.current : 0;
         const idleDuration = now - lastActivityRef.current;
 
         if (hiddenDuration >= INACTIVITY_TIMEOUT_MS || idleDuration >= INACTIVITY_TIMEOUT_MS) {
-          setIsAppLocked(true);
+          if (sessionUnlockedCategories.size > 0) {
+            setSessionUnlockedCategories(new Set());
+            const isCurrentLocked = lockedCategories.some(
+              (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
+            );
+            if (isCurrentLocked) {
+              setSelectedCategory('All');
+            }
+          }
         }
         lastActivityRef.current = now;
         lastHiddenTimeRef.current = null;
@@ -84,7 +88,7 @@ export const VideoFeedProvider = ({ children }) => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [hasPin, isAppLocked]);
+  }, [lockedCategories, selectedCategory, sessionUnlockedCategories]);
 
   // Audio Autoplay: Starts muted, unlocked on first interaction
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
@@ -199,7 +203,6 @@ export const VideoFeedProvider = ({ children }) => {
         limit: 10,
       });
 
-      // Discard stale responses from older generations or switched categories
       if (gen !== requestGenRef.current || targetCategory !== currentCategoryRef.current) {
         return;
       }
@@ -224,7 +227,6 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, [loading, loadingMore, hasMore, nextCursor]);
 
-  // Automatically trigger loadMore when scrolling close to bottom of current valid feed
   useEffect(() => {
     if (!loading && !loadingMore && hasMore && videos.length > 0 && activeVideoIndex >= videos.length - 3) {
       loadMoreVideos();
@@ -247,14 +249,13 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, [isAudioUnlocked]);
 
-  // Category selection handler with PIN protection check
+  // Folder / Category selection handler with PIN protection check
   const requestCategory = useCallback(
     (cat) => {
       const isLocked = lockedCategories.some((lc) => lc.toLowerCase() === cat.toLowerCase());
       const isUnlockedThisSession = sessionUnlockedCategories.has(cat.toLowerCase());
 
       if (isLocked && !isUnlockedThisSession && hasPin) {
-        // Trigger category PIN modal
         setCategoryLockTarget(cat);
       } else {
         setSelectedCategory(cat);
@@ -263,7 +264,7 @@ export const VideoFeedProvider = ({ children }) => {
     [lockedCategories, sessionUnlockedCategories, hasPin]
   );
 
-  // Unlock category for the current session
+  // Unlock folder/category for the current session
   const unlockCategoryForSession = useCallback((cat) => {
     setSessionUnlockedCategories((prev) => {
       const next = new Set(prev);
@@ -273,7 +274,7 @@ export const VideoFeedProvider = ({ children }) => {
     setSelectedCategory(cat);
   }, []);
 
-  // Lock / Unlock category toggle
+  // Lock / Unlock folder/category toggle
   const toggleCategoryLock = useCallback(
     async (cat) => {
       const isCurrentlyLocked = lockedCategories.some((lc) => lc.toLowerCase() === cat.toLowerCase());
@@ -343,8 +344,6 @@ export const VideoFeedProvider = ({ children }) => {
         unlockCategoryForSession,
         categoryLockTarget,
         setCategoryLockTarget,
-        isAppLocked,
-        setIsAppLocked,
         fetchCategories,
         fetchVideos,
         loadMoreVideos,
