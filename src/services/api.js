@@ -1,15 +1,50 @@
 /**
- * Google Drive Platform Frontend API Client
+ * StreamVault Frontend API Client
+ * TikTok / Instagram-Reels Style Video Streaming PWA
  */
 
-const BASE_URL = '/api/v1';
+const RAW_API_URL = import.meta.env.VITE_API_BASE_URL || '';
+export const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
+const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 
-const TOKEN_KEY = 'personal_storage_token';
-const USER_KEY = 'personal_storage_user';
+const REFRESH_TOKEN_KEY = 'streamvault_refresh_token';
+const USER_KEY = 'streamvault_user';
 
-export const getStoredToken = () => localStorage.getItem(TOKEN_KEY) || '';
-export const setStoredToken = (token) => localStorage.setItem(TOKEN_KEY, token);
-export const removeStoredToken = () => localStorage.removeItem(TOKEN_KEY);
+// In-Memory Access Token (never stored in localStorage for security)
+let inMemoryAccessToken = '';
+
+export const getAccessToken = () => inMemoryAccessToken;
+export const setAccessToken = (token) => {
+  inMemoryAccessToken = token || '';
+};
+export const clearAccessToken = () => {
+  inMemoryAccessToken = '';
+};
+
+// Backward compatibility helper
+export const getStoredToken = () => inMemoryAccessToken;
+export const setStoredToken = (token) => setAccessToken(token);
+export const removeStoredToken = () => clearAccessToken();
+
+export const getStoredRefreshToken = () => {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+export const setStoredRefreshToken = (token) => {
+  try {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  } catch {}
+};
+
+export const removeStoredRefreshToken = () => {
+  try {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  } catch {}
+};
 
 export const getStoredUser = () => {
   try {
@@ -19,11 +54,23 @@ export const getStoredUser = () => {
     return null;
   }
 };
-export const setStoredUser = (user) => localStorage.setItem(USER_KEY, JSON.stringify(user));
-export const removeStoredUser = () => localStorage.removeItem(USER_KEY);
+
+export const setStoredUser = (user) => {
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {}
+};
+
+export const removeStoredUser = () => {
+  try {
+    localStorage.removeItem(USER_KEY);
+  } catch {}
+};
+
+let refreshPromise = null;
 
 async function request(path, options = {}) {
-  const token = getStoredToken();
+  const token = getAccessToken();
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers = {
@@ -33,16 +80,70 @@ async function request(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const url = `${BASE_URL}${path}`;
+  let response = await fetch(url, {
     ...options,
     headers,
   });
+
+  // Interceptor: If 401 Unauthorized, perform silent refresh and retry request
+  if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/register') && !path.startsWith('/auth/refresh')) {
+    const refreshToken = getStoredRefreshToken();
+    if (refreshToken) {
+      try {
+        if (!refreshPromise) {
+          refreshPromise = fetch(`${BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          })
+            .then(async (r) => {
+              if (!r.ok) {
+                const errJson = await r.json().catch(() => null);
+                throw new Error(errJson?.message || 'Refresh failed');
+              }
+              return r.json();
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const refreshData = await refreshPromise;
+        if (refreshData?.accessToken) {
+          setAccessToken(refreshData.accessToken);
+          if (refreshData.refreshToken) {
+            setStoredRefreshToken(refreshData.refreshToken);
+          }
+
+          // Retry the original failed request with the new access token
+          const retryHeaders = {
+            ...headers,
+            Authorization: `Bearer ${refreshData.accessToken}`,
+          };
+          response = await fetch(url, {
+            ...options,
+            headers: retryHeaders,
+          });
+        }
+      } catch (err) {
+        console.warn('Silent token refresh failed:', err.message);
+        clearAccessToken();
+        removeStoredRefreshToken();
+        removeStoredUser();
+        window.dispatchEvent(new Event('auth:unauthorized'));
+      }
+    }
+  }
 
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
     const message = data?.message || `HTTP error ${response.status}`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -51,11 +152,12 @@ async function request(path, options = {}) {
 export function uploadWithProgress(formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const token = getStoredToken();
+    const token = getAccessToken();
 
+    const endpoint = `${BASE_URL}/videos/upload`;
     const url = token
-      ? `${BASE_URL}/media/upload?token=${encodeURIComponent(token)}`
-      : `${BASE_URL}/media/upload`;
+      ? `${endpoint}?token=${encodeURIComponent(token)}`
+      : endpoint;
 
     xhr.open('POST', url);
     xhr.setRequestHeader('bypass-tunnel-reminder', 'true');
@@ -110,23 +212,43 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      if (data?.token) {
-        setStoredToken(data.token);
-        setStoredUser(data.user);
+      const token = data?.accessToken || data?.token;
+      if (token) {
+        setAccessToken(token);
+        if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
+        if (data.user) setStoredUser(data.user);
       }
       return data;
     },
+
     register: async (username, email, password) => {
       const data = await request('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ username, email, password }),
       });
-      if (data?.token) {
-        setStoredToken(data.token);
-        setStoredUser(data.user);
+      const token = data?.accessToken || data?.token;
+      if (token) {
+        setAccessToken(token);
+        if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
+        if (data.user) setStoredUser(data.user);
       }
       return data;
     },
+
+    refresh: async () => {
+      const refreshToken = getStoredRefreshToken();
+      if (!refreshToken) return null;
+      const data = await request('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (data?.accessToken) {
+        setAccessToken(data.accessToken);
+        if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
+      }
+      return data;
+    },
+
     me: async () => {
       const data = await request('/auth/me');
       if (data?.user) {
@@ -134,55 +256,171 @@ export const api = {
       }
       return data;
     },
-    logout: () => {
-      removeStoredToken();
+
+    logout: async () => {
+      const refreshToken = getStoredRefreshToken();
+      try {
+        if (refreshToken) {
+          await request('/auth/logout', {
+            method: 'POST',
+            body: JSON.stringify({ refreshToken }),
+          });
+        }
+      } catch {}
+      clearAccessToken();
+      removeStoredRefreshToken();
       removeStoredUser();
+    },
+
+    // PIN lock APIs
+    setPin: (pin) =>
+      request('/auth/pin/set', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+
+    verifyPin: (pin) =>
+      request('/auth/pin/verify', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+
+    removePin: (pin) =>
+      request('/auth/pin/remove', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+  },
+
+  videos: {
+    getFeed: async (params = {}) => {
+      const queryParams = new URLSearchParams();
+      if (params.category && params.category !== 'All') {
+        queryParams.set('category', params.category);
+      }
+      if (params.cursor) {
+        queryParams.set('cursor', params.cursor);
+      }
+      if (params.limit) {
+        queryParams.set('limit', params.limit);
+      }
+      return request(`/videos/feed?${queryParams.toString()}`);
+    },
+
+    list: async (params = {}) => {
+      const queryParams = new URLSearchParams();
+      queryParams.set('fileCategory', 'video');
+      if (params.category && params.category !== 'All') {
+        queryParams.set('category', params.category);
+      }
+      if (params.page) queryParams.set('page', params.page);
+      if (params.limit) queryParams.set('limit', params.limit || '50');
+      if (params.sort) queryParams.set('sort', params.sort);
+
+      return request(`/videos?${queryParams.toString()}`);
+    },
+
+    search: async (q, category) => {
+      const queryParams = new URLSearchParams();
+      if (q) queryParams.set('q', q);
+      queryParams.set('fileCategory', 'video');
+      if (category && category !== 'All') queryParams.set('category', category);
+      return request(`/media/search?${queryParams.toString()}`);
+    },
+
+    getCategories: async () => {
+      try {
+        const res = await request('/videos/categories');
+        if (res?.categories && Array.isArray(res.categories)) {
+          return res.categories;
+        }
+        const listRes = await request('/videos?fileCategory=video&limit=100');
+        const items = listRes?.items || listRes?.videos || (Array.isArray(listRes) ? listRes : []);
+        const categories = new Set();
+        items.forEach((item) => {
+          if (item.category && typeof item.category === 'string' && item.category.trim()) {
+            categories.add(item.category.trim());
+          }
+        });
+        return Array.from(categories);
+      } catch (err) {
+        console.warn('Failed to load categories:', err.message);
+        return ['Trending', 'Music', 'Gaming', 'Tech', 'Comedy', 'Entertainment', 'Tutorials'];
+      }
+    },
+
+    getLockedStatus: () => request('/videos/categories/locked-status'),
+
+    lockCategory: (category) =>
+      request(`/videos/categories/${encodeURIComponent(category)}/lock`, {
+        method: 'POST',
+      }),
+
+    unlockCategory: (category) =>
+      request(`/videos/categories/${encodeURIComponent(category)}/unlock`, {
+        method: 'POST',
+      }),
+
+    get: (id) => request(`/videos/${id}`),
+
+    toggleLike: (id) => request(`/media/${id}/like`, { method: 'POST' }),
+
+    upload: (formData, onProgress) => {
+      return uploadWithProgress(formData, onProgress);
     },
   },
 
   drive: {
-    list: (params = {}) => {
-      const qs = new URLSearchParams(params).toString();
-      return request(`/media${qs ? `?${qs}` : ''}`);
+    list: async (params = {}) => {
+      const queryParams = new URLSearchParams();
+      if (params.folderId) queryParams.set('folderId', params.folderId);
+      if (params.fileCategory && params.fileCategory !== 'all') queryParams.set('fileCategory', params.fileCategory);
+      if (params.filter) queryParams.set('filter', params.filter);
+      if (params.sort) queryParams.set('sort', params.sort);
+      if (params.limit) queryParams.set('limit', params.limit || '100');
+
+      return request(`/videos?${queryParams.toString()}`);
     },
-    get: (id) => request(`/media/${id}`),
-    search: (q, fileCategory, category) => {
-      const params = {};
-      if (q) params.q = q;
-      if (fileCategory && fileCategory !== 'all') params.fileCategory = fileCategory;
-      if (category && category !== 'All') params.category = category;
-      const qs = new URLSearchParams(params).toString();
-      return request(`/media/search?${qs}`);
-    },
-    upload: (formData, onProgress) => {
-      return uploadWithProgress(formData, onProgress);
-    },
-    createFolder: (title, folderId) =>
-      request('/media/folder', {
+
+    getLibrary: () => request('/videos/user/library'),
+
+    createFolder: (title, parentFolderId = null) =>
+      request('/videos/folder', {
         method: 'POST',
-        body: JSON.stringify({ title, folderId }),
+        body: JSON.stringify({ title, parentFolderId }),
       }),
+
     rename: (id, title) =>
-      request(`/media/${id}/rename`, {
+      request(`/videos/${id}/rename`, {
         method: 'PATCH',
         body: JSON.stringify({ title }),
       }),
+
     move: (id, targetFolderId) =>
-      request(`/media/${id}/move`, {
+      request(`/videos/${id}/move`, {
         method: 'PATCH',
         body: JSON.stringify({ targetFolderId }),
       }),
-    toggleStar: (id) => request(`/media/${id}/star`, { method: 'POST' }),
-    trash: (id) => request(`/media/${id}/trash`, { method: 'POST' }),
-    restore: (id) => request(`/media/${id}/restore`, { method: 'POST' }),
-    emptyTrash: () => request('/media/trash/empty', { method: 'DELETE' }),
-    getFolders: () => request('/media/folders'),
-    getLibrary: () => request('/media/user/library'),
+
+    trash: (id) =>
+      request(`/videos/${id}/trash`, {
+        method: 'POST',
+      }),
+
+    restore: (id) =>
+      request(`/videos/${id}/restore`, {
+        method: 'POST',
+      }),
+
+    delete: (id) =>
+      request(`/videos/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   stream: {
     getUrl: (id, download = false) => {
-      const token = getStoredToken();
+      const token = getAccessToken();
       const base = `${BASE_URL}/stream/${id}`;
       const params = [];
       if (token) params.push(`token=${encodeURIComponent(token)}`);
@@ -190,26 +428,7 @@ export const api = {
       return params.length > 0 ? `${base}?${params.join('&')}` : base;
     },
   },
-
-  // Backward compatibility alias
-  media: {
-    list: (params) => api.drive.list(params),
-    get: (id) => api.drive.get(id),
-    upload: (formData, onProgress) => api.drive.upload(formData, onProgress),
-    delete: (id) => api.drive.trash(id),
-    toggleLike: (id) => api.drive.toggleStar(id),
-    getLibrary: () => api.drive.getLibrary(),
-  },
 };
-
-export function formatBytes(bytes, decimals = 1) {
-  if (!bytes || bytes === 0) return '0 B';
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-}
 
 export function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return '0:00';
@@ -223,13 +442,28 @@ export function formatDuration(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+export function formatViews(num) {
+  if (!num || num === 0) return '0';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toString();
+}
+
+export function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
 export function formatRelativeTime(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
   const now = new Date();
   const seconds = Math.floor((now - date) / 1000);
 
-  if (seconds < 60) return 'Just now';
+  if (seconds < 60) return 'just now';
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
@@ -238,7 +472,7 @@ export function formatRelativeTime(dateString) {
   if (days < 30) return `${days}d ago`;
   const months = Math.floor(days / 30);
   if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 export default api;

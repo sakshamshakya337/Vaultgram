@@ -1,219 +1,264 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
-  HardDrive,
-  Star,
+  Sparkles,
+  Plus,
+  Video,
+  Heart,
   Clock,
   Trash2,
-  Plus,
+  Folder,
   FolderPlus,
-  UploadCloud,
-  FileText,
-  Image as ImageIcon,
-  Video,
-  Music,
-  Archive,
-  Code,
-  ShieldCheck,
+  Lock,
+  Unlock,
   Cloud,
+  Shield,
+  Upload
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useDrive } from '../../contexts/DriveContext';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { formatBytes } from '../../services/api';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useAuth } from '../../contexts/AuthContext';
 
-export const DriveSidebar = () => {
+export const DriveSidebar = ({
+  currentNav,
+  onSelectNav,
+  onOpenNewFolder,
+}) => {
   const {
-    activeSection,
-    fileCategory,
-    setSection,
-    setNewFolderOpen,
-    enqueueUpload,
-    stats,
-  } = useDrive();
+    categories,
+    selectedCategory,
+    requestCategory,
+    lockedCategories,
+    sessionUnlockedCategories,
+    toggleCategoryLock,
+    setIsUploadOpen,
+    triggerInstall,
+  } = useVideoFeed();
 
-  const [newMenuOpen, setNewMenuOpen] = useState(false);
-  const fileInputRef = useRef(null);
-  const folderInputRef = useRef(null);
+  const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
+  const [showNewMenu, setShowNewMenu] = useState(false);
 
-  const mainNav = [
-    { id: 'my-drive', label: 'My Cloud', icon: HardDrive },
-    { id: 'starred', label: 'Starred', icon: Star },
-    { id: 'recent', label: 'Recent', icon: Clock },
-    { id: 'trash', label: 'Trash', icon: Trash2 },
-  ];
-
-  const categories = [
-    { id: 'document', label: 'Documents & PDFs', icon: FileText, color: 'text-amber-400' },
-    { id: 'image', label: 'Photos & Images', icon: ImageIcon, color: 'text-sky-400' },
-    { id: 'video', label: 'Videos & Movies', icon: Video, color: 'text-blue-400' },
-    { id: 'audio', label: 'Audio & Music', icon: Music, color: 'text-cyan-400' },
-    { id: 'archive', label: 'Archives & ZIPs', icon: Archive, color: 'text-emerald-400' },
-    { id: 'code', label: 'Code & Scripts', icon: Code, color: 'text-teal-400' },
-  ];
-
-  const handleFileUpload = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      enqueueUpload(e.target.files);
-      setNewMenuOpen(false);
+  const handleQuickLockToggle = async (e, cat) => {
+    e.stopPropagation();
+    if (!hasPin) {
+      setIsSetPinModalOpen(true);
+      return;
     }
+    await toggleCategoryLock(cat);
   };
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col border-r border-white/[0.06] bg-drive-sidebar backdrop-blur-2xl md:flex z-40">
-      {/* ─── Brand Lockup ────────────────────────────────────────── */}
-      <div className="flex items-center space-x-3 px-6 py-5 border-b border-white/[0.04]">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/30">
-          <Cloud className="h-5 w-5" />
-        </div>
-        <div>
-          <h1 className="text-base font-bold font-display tracking-tight text-white">CloudVault</h1>
-          <div className="flex items-center space-x-1 text-[11px] font-semibold text-blue-400 uppercase tracking-wider">
-            <ShieldCheck className="h-3 w-3" />
-            <span>Encrypted Cloud</span>
+    <aside className="w-64 h-screen bg-zinc-950 border-r border-white/10 flex flex-col justify-between shrink-0 select-none">
+      {/* Top Header & Logo */}
+      <div className="p-5 flex flex-col gap-4 shrink-0">
+        {/* Brand Logo */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center p-0.5 shadow-lg shadow-cyan-500/20">
+            <div className="w-full h-full bg-zinc-950 rounded-[12px] flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-cyan-400" />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-lg font-black tracking-tight text-white leading-none">
+              Stream<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-rose-500">Vault</span>
+            </h1>
+            <span className="text-[10px] font-mono text-zinc-500">CLOUD DRIVE</span>
           </div>
         </div>
-      </div>
 
-      {/* ─── "+ New" Button ─────────────────────────────────────── */}
-      <div className="relative px-4 py-4">
-        <Button
-          variant="default"
-          size="lg"
-          className="w-full rounded-xl py-5 font-bold shadow-lg shadow-blue-600/20 text-sm flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-500"
-          onClick={() => setNewMenuOpen(!newMenuOpen)}
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Upload</span>
-        </Button>
+        {/* Primary "+ New" Action Button with Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowNewMenu((prev) => !prev)}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-blue-500 text-white font-bold text-sm shadow-xl shadow-cyan-500/20 hover:opacity-95 active:scale-[0.98] transition-all cursor-pointer"
+          >
+            <Plus className="w-5 h-5 stroke-[2.5]" />
+            <span>New Action</span>
+          </button>
 
-        {/* Hidden inputs */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          multiple
-          className="hidden"
-          onChange={handleFileUpload}
-        />
-        <input
-          type="file"
-          ref={folderInputRef}
-          multiple
-          webkitdirectory=""
-          directory=""
-          className="hidden"
-          onChange={handleFileUpload}
-        />
-
-        <AnimatePresence>
-          {newMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -6, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
-              className="absolute left-4 right-4 top-20 z-50 rounded-2xl border border-white/[0.08] bg-zinc-900 p-2 shadow-2xl backdrop-blur-2xl"
-            >
+          {showNewMenu && (
+            <div className="absolute left-0 right-0 top-14 z-50 rounded-2xl bg-zinc-900 border border-white/10 p-1.5 shadow-2xl backdrop-blur-xl animate-fade-in space-y-1">
               <button
-                className="flex w-full items-center space-x-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors"
                 onClick={() => {
-                  setNewFolderOpen(true);
-                  setNewMenuOpen(false);
+                  setShowNewMenu(false);
+                  setIsUploadOpen(true);
                 }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
-                <FolderPlus className="h-4 w-4 text-blue-400" />
+                <Upload className="w-4 h-4 text-cyan-400" />
+                <span>Upload Media</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowNewMenu(false);
+                  if (onOpenNewFolder) onOpenNewFolder();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <FolderPlus className="w-4 h-4 text-blue-400" />
                 <span>New Folder</span>
               </button>
-              <button
-                className="flex w-full items-center space-x-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <UploadCloud className="h-4 w-4 text-sky-400" />
-                <span>Upload Files</span>
-              </button>
-              <button
-                className="flex w-full items-center space-x-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors"
-                onClick={() => folderInputRef.current?.click()}
-              >
-                <FolderPlus className="h-4 w-4 text-cyan-400" />
-                <span>Upload Folder</span>
-              </button>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
 
-      {/* ─── Navigation Links ────────────────────────────────────── */}
-      <div className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
+      {/* Navigation & Categories Scrollable Area */}
+      <div className="flex-1 overflow-y-auto no-scrollbar px-3 space-y-6">
+        {/* Main Nav Items */}
         <div className="space-y-1">
-          {mainNav.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold transition-all ${
-                  isActive
-                    ? 'bg-blue-600/15 text-blue-400 font-bold border border-blue-500/20'
-                    : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100'
-                }`}
-                onClick={() => setSection(item.id)}
-              >
-                <div className="flex items-center space-x-3">
-                  <Icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </div>
-              </button>
-            );
-          })}
+          <button
+            onClick={() => {
+              onSelectNav('all');
+              requestCategory('All');
+            }}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'all' && selectedCategory === 'All'
+                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Video className="w-4 h-4" />
+            <span>My Cloud Drive</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('starred')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'starred'
+                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Heart className="w-4 h-4" />
+            <span>Starred</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('recent')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'recent'
+                ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            <span>Recent</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('trash')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'trash'
+                ? 'bg-zinc-800 text-zinc-200 border border-zinc-700'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Trash</span>
+          </button>
         </div>
 
-        {/* Categories */}
-        <div className="space-y-1 pt-2 border-t border-white/[0.04]">
-          <p className="px-3 py-1.5 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
-            File Categories
-          </p>
-          {categories.map((cat) => {
-            const Icon = cat.icon;
-            const isActive = activeSection === 'type-filter' && fileCategory === cat.id;
-            return (
-              <button
-                key={cat.id}
-                className={`flex w-full items-center space-x-3 rounded-xl px-3.5 py-2 text-xs font-medium transition-all ${
-                  isActive
-                    ? 'bg-blue-600/15 text-blue-400 font-bold border border-blue-500/20'
-                    : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100'
-                }`}
-                onClick={() => setSection('type-filter', null, cat.id)}
-              >
-                <Icon className={`h-4 w-4 ${cat.color}`} />
-                <span>{cat.label}</span>
-              </button>
-            );
-          })}
+        {/* Categories / Folders Section */}
+        <div className="space-y-1 pt-2 border-t border-white/5">
+          <div className="px-3.5 py-1.5 flex items-center justify-between text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+            <span>File Categories</span>
+            <span className="text-[10px] text-zinc-600 font-mono">
+              {categories.filter((c) => c !== 'All').length}
+            </span>
+          </div>
+
+          {categories
+            .filter((cat) => cat !== 'All')
+            .map((cat) => {
+              const isSelected = selectedCategory === cat && currentNav === 'all';
+              const isLocked = (lockedCategories || []).some(
+                (lc) => lc.toLowerCase() === cat.toLowerCase()
+              );
+              const isUnlockedThisSession = sessionUnlockedCategories?.has(cat.toLowerCase());
+
+              return (
+                <div
+                  key={cat}
+                  onClick={() => {
+                    onSelectNav('all');
+                    requestCategory(cat);
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer group ${
+                    isSelected
+                      ? 'bg-white/10 text-white font-bold border border-white/15'
+                      : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <Folder className={`w-4 h-4 shrink-0 transition-colors ${isSelected ? 'text-cyan-400 fill-cyan-400/20' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    <span className="truncate">#{cat}</span>
+                  </div>
+
+                  <button
+                    onClick={(e) => handleQuickLockToggle(e, cat)}
+                    className={`p-1 rounded-md transition-all cursor-pointer ${
+                      isLocked
+                        ? isUnlockedThisSession
+                          ? 'text-cyan-400 hover:bg-cyan-500/20'
+                          : 'text-rose-400 hover:bg-rose-500/20'
+                        : 'opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white hover:bg-white/10'
+                    }`}
+                    title={isLocked ? 'Folder Locked (Click to Unlock)' : 'Lock Folder with PIN'}
+                  >
+                    {isLocked ? (
+                      isUnlockedThisSession ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />
+                    ) : (
+                      <Lock className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
         </div>
       </div>
 
-      {/* ─── Storage Card ────────────────────────────────────────── */}
-      <div className="border-t border-white/[0.06] bg-zinc-950/60 p-4">
-        <div className="rounded-xl border border-white/[0.06] bg-zinc-900/70 p-3.5 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-zinc-300">
-            <span className="flex items-center space-x-1.5">
-              <Cloud className="h-3.5 w-3.5 text-blue-400" />
-              <span>Storage</span>
-            </span>
-            <Badge variant="cyan" className="text-[10px] px-1.5 py-0">Unlimited</Badge>
+      {/* Bottom Storage & Settings Area */}
+      <div className="p-4 border-t border-white/10 bg-zinc-950/60 space-y-3 shrink-0">
+        {/* Storage Bar */}
+        <div className="p-3 rounded-2xl bg-zinc-900/60 border border-white/5 space-y-2">
+          <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center gap-1.5 text-zinc-300 font-semibold">
+              <Cloud className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Telegram Cloud Vault</span>
+            </div>
+            <span className="text-[10px] font-mono text-cyan-400 font-bold">Unlimited</span>
           </div>
-
-          <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
-            <div className="h-full w-2/5 rounded-full bg-blue-500" />
+          <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 w-3/4 rounded-full" />
           </div>
-
-          <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-            <span>{formatBytes(stats?.totalBytes || 0)} used</span>
-            <span className="text-emerald-400 font-semibold">Free Forever</span>
-          </div>
+          <p className="text-[10px] text-zinc-500">Free, encrypted cloud storage</p>
         </div>
+
+        {/* Install Desktop App Option */}
+        <button
+          onClick={triggerInstall}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 transition-all cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Download className="w-4 h-4" />
+            <span>Install App</span>
+          </div>
+          <span className="text-[10px] font-mono text-cyan-300">PWA</span>
+        </button>
+
+        {/* Privacy & Settings Button */}
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-cyan-400" />
+            <span>Passcode & Privacy</span>
+          </div>
+          <span className="text-[10px] font-mono text-zinc-500">
+            {hasPin ? 'PIN 🔒' : 'Off'}
+          </span>
+        </button>
       </div>
     </aside>
   );

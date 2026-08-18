@@ -1,0 +1,315 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus } from 'lucide-react';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../services/api';
+import { DriveSidebar } from './DriveSidebar';
+import { DriveHeader } from './DriveHeader';
+import { DriveFolderGrid } from './DriveFolderGrid';
+import { DriveFilesGrid } from './DriveFilesGrid';
+import { DriveFilesList } from './DriveFilesList';
+import { DesktopVideoModal } from './DesktopVideoModal';
+import { NewFolderModal } from './NewFolderModal';
+import { RenameModal } from './RenameModal';
+
+export const DriveLayout = () => {
+  const {
+    videos,
+    selectedCategory,
+    setSelectedCategory,
+    requestCategory,
+    categories,
+    lockedCategories,
+    sessionUnlockedCategories,
+    setCategoryLockTarget,
+    setIsUploadOpen,
+  } = useVideoFeed();
+
+  const { isAuthenticated, hasPin } = useAuth();
+
+  // Navigation & Data
+  const [currentNav, setCurrentNav] = useState('all'); // 'all', 'starred', 'recent', 'trash'
+  const [currentFolder, setCurrentFolder] = useState(null); // null = root
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+  const [selectedVideo, setSelectedVideo] = useState(null);
+
+  // Drive state
+  const [driveItems, setDriveItems] = useState([]);
+  const [loadingDrive, setLoadingDrive] = useState(false);
+
+  // Modals
+  const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
+
+  // Load drive items (folders and files)
+  const loadDriveItems = useCallback(async () => {
+    setLoadingDrive(true);
+    try {
+      if (searchQuery.trim()) {
+        const res = await api.drive.list({ limit: 100 });
+        const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
+        setDriveItems(items);
+      } else {
+        const res = await api.drive.list({
+          folderId: currentFolder?._id || null,
+          filter: currentNav,
+          limit: 100,
+        });
+        const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
+        setDriveItems(items);
+      }
+    } catch (err) {
+      console.warn('Drive items fetch error:', err.message);
+      setDriveItems(videos || []);
+    } finally {
+      setLoadingDrive(false);
+    }
+  }, [currentFolder, currentNav, searchQuery, videos]);
+
+  useEffect(() => {
+    loadDriveItems();
+  }, [loadDriveItems]);
+
+  // Separate folders and files
+  const folders = useMemo(() => {
+    if (currentFolder || currentNav !== 'all') return [];
+    return driveItems.filter((item) => item.isFolder);
+  }, [driveItems, currentFolder, currentNav]);
+
+  const files = useMemo(() => {
+    let list = driveItems.filter((item) => !item.isFolder);
+
+    // If viewing a category filter
+    if (selectedCategory !== 'All' && currentNav === 'all') {
+      list = list.filter(
+        (v) => (v.category || '').toLowerCase() === selectedCategory.toLowerCase()
+      );
+    }
+
+    // Search query filtering
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (v) =>
+          (v.title || '').toLowerCase().includes(q) ||
+          (v.category || '').toLowerCase().includes(q) ||
+          (v.description || '').toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [driveItems, selectedCategory, currentNav, searchQuery]);
+
+  // Handle opening custom folder with PIN check
+  const handleOpenFolder = (folder) => {
+    const title = folder.title || '';
+    const folderId = folder._id || folder.id;
+    const isLocked =
+      (lockedCategories || []).some((lc) => lc.toLowerCase() === title.toLowerCase()) ||
+      (lockedCategories || []).some((lc) => lc.toLowerCase() === folderId.toLowerCase());
+    const isUnlockedSession =
+      sessionUnlockedCategories?.has(title.toLowerCase()) ||
+      sessionUnlockedCategories?.has(folderId.toLowerCase());
+
+    if (isLocked && !isUnlockedSession && hasPin) {
+      setCategoryLockTarget(title);
+    } else {
+      setCurrentFolder(folder);
+    }
+  };
+
+  const handleOpenCategory = (cat) => {
+    requestCategory(cat);
+  };
+
+  const handleDeleteFolder = async (folderId) => {
+    if (window.confirm('Are you sure you want to delete this folder?')) {
+      try {
+        await api.drive.delete(folderId);
+        loadDriveItems();
+      } catch (err) {
+        alert(err.message || 'Failed to delete folder');
+      }
+    }
+  };
+
+  const handleResetToRoot = () => {
+    setCurrentNav('all');
+    setCurrentFolder(null);
+    setSelectedCategory('All');
+    setSearchQuery('');
+  };
+
+  const isAtRoot = currentNav === 'all' && !currentFolder && selectedCategory === 'All' && !searchQuery.trim();
+  const categoryFoldersList = categories.filter((c) => c !== 'All');
+
+  return (
+    <div className="flex w-screen h-screen bg-black text-white overflow-hidden select-none font-sans">
+      {/* 1. Left Sidebar */}
+      <DriveSidebar
+        currentNav={currentNav}
+        onSelectNav={(nav) => {
+          setCurrentNav(nav);
+          setCurrentFolder(null);
+          if (nav !== 'all') {
+            setSelectedCategory('All');
+          }
+        }}
+        onOpenNewFolder={() => setIsNewFolderOpen(true)}
+      />
+
+      {/* 2. Main Drive Layout Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-zinc-950/40">
+        {/* Top Header Bar */}
+        <DriveHeader
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          currentNav={currentNav}
+          onResetToRoot={handleResetToRoot}
+        />
+
+        {/* Scrollable Main Content */}
+        <main className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
+          {/* FOLDERS SECTION */}
+          {isAtRoot && (
+            <DriveFolderGrid
+              folders={folders}
+              categoryFolders={categoryFoldersList}
+              onOpenFolder={handleOpenFolder}
+              onOpenCategory={handleOpenCategory}
+              onRenameFolder={(folder) => setRenameTarget(folder)}
+              onDeleteFolder={handleDeleteFolder}
+            />
+          )}
+
+          {/* FILES SECTION */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  {currentFolder
+                    ? `Folder: ${currentFolder.title}`
+                    : currentNav === 'starred'
+                    ? 'Starred Videos'
+                    : currentNav === 'recent'
+                    ? 'Recent Uploads'
+                    : currentNav === 'trash'
+                    ? 'Trash'
+                    : selectedCategory === 'All'
+                    ? 'All Files'
+                    : `#${selectedCategory} Files`}
+                </h3>
+                <span className="text-xs font-mono text-zinc-500">
+                  ({files.length})
+                </span>
+              </div>
+
+              {currentFolder && (
+                <button
+                  onClick={handleResetToRoot}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
+                >
+                  ← Back to My Drive
+                </button>
+              )}
+            </div>
+
+            {/* Empty State */}
+            {files.length === 0 && !loadingDrive && (
+              <div className="p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
+                <div className="w-16 h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600">
+                  {currentNav === 'starred' ? (
+                    <Heart className="w-8 h-8 text-rose-500/40" />
+                  ) : currentNav === 'trash' ? (
+                    <Trash2 className="w-8 h-8 text-zinc-600" />
+                  ) : (
+                    <FolderOpen className="w-8 h-8 text-cyan-500/40" />
+                  )}
+                </div>
+
+                <div className="max-w-xs">
+                  <h4 className="text-base font-bold text-white mb-1">
+                    {currentNav === 'starred'
+                      ? 'No Starred Videos'
+                      : currentNav === 'trash'
+                      ? 'Trash is Empty'
+                      : searchQuery
+                      ? 'No Matching Videos'
+                      : 'No Files in this Folder'}
+                  </h4>
+                  <p className="text-xs text-zinc-400">
+                    {currentNav === 'starred'
+                      ? 'Click the heart icon on any file to star it.'
+                      : currentNav === 'trash'
+                      ? 'Items you delete will appear here.'
+                      : searchQuery
+                      ? `No files match "${searchQuery}".`
+                      : 'Upload your first media file or create a folder.'}
+                  </p>
+                </div>
+
+                {currentNav === 'all' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsUploadOpen(true)}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Upload Video</span>
+                    </button>
+                    <button
+                      onClick={() => setIsNewFolderOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-colors cursor-pointer"
+                    >
+                      <FolderPlus className="w-4 h-4 text-blue-400" />
+                      <span>New Folder</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Grid vs List View */}
+            {files.length > 0 && (
+              viewMode === 'grid' ? (
+                <DriveFilesGrid
+                  videos={files}
+                  onSelectVideo={(v) => setSelectedVideo(v)}
+                />
+              ) : (
+                <DriveFilesList
+                  videos={files}
+                  onSelectVideo={(v) => setSelectedVideo(v)}
+                />
+              )
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* Desktop Video Playback Modal with HTML5 Controls */}
+      <DesktopVideoModal
+        video={selectedVideo}
+        onClose={() => setSelectedVideo(null)}
+      />
+
+      {/* New Folder Modal */}
+      <NewFolderModal
+        isOpen={isNewFolderOpen}
+        onClose={() => setIsNewFolderOpen(false)}
+        currentFolderId={currentFolder?._id || null}
+        onFolderCreated={loadDriveItems}
+      />
+
+      {/* Rename Modal */}
+      <RenameModal
+        item={renameTarget}
+        onClose={() => setRenameTarget(null)}
+        onRenamed={loadDriveItems}
+      />
+    </div>
+  );
+};

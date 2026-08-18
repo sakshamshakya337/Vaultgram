@@ -1,129 +1,90 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
-import { DriveProvider, useDrive } from './contexts/DriveContext';
-import { DriveHeader } from './components/Drive/DriveHeader';
-import { DriveSidebar } from './components/Drive/DriveSidebar';
-import { Breadcrumbs } from './components/Drive/Breadcrumbs';
-import { DriveGrid } from './components/Drive/DriveGrid';
-import { DriveList } from './components/Drive/DriveList';
-import { FileInspector } from './components/Drive/FileInspector';
-import { UploadManager } from './components/Drive/UploadManager';
-import { UniversalPreviewModal } from './components/Drive/UniversalPreviewModal';
-import { NewFolderModal } from './components/Drive/NewFolderModal';
-import { RenameModal } from './components/Drive/RenameModal';
-import { MoveModal } from './components/Drive/MoveModal';
+import { VideoFeedProvider } from './contexts/VideoFeedContext';
+import { ReelsContainer } from './components/Reels/ReelsContainer';
+import { TopHeader } from './components/Navigation/TopHeader';
+import { CategoryFilterBar } from './components/Navigation/CategoryFilterBar';
+import { BottomNav } from './components/Navigation/BottomNav';
+import { UploadModal } from './components/Upload/UploadModal';
 import { AuthModal } from './components/Auth/AuthModal';
-import { UploadCloud } from 'lucide-react';
+import { InstallPromptModal } from './components/PWA/InstallPromptModal';
+import { InstallBanner } from './components/PWA/InstallBanner';
+import { OfflineIndicator } from './components/PWA/OfflineIndicator';
+import { PinLockOverlay } from './components/PIN/PinLockOverlay';
+import { CategoryPinModal } from './components/PIN/CategoryPinModal';
+import { SetPinModal } from './components/PIN/SetPinModal';
+import { SettingsModal } from './components/Settings/SettingsModal';
+import { DriveLayout } from './components/Drive/DriveLayout';
 
-const DriveMainApp = () => {
-  const { viewMode, isInspectorOpen, enqueueUpload } = useDrive();
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [isDragActive, setIsDragActive] = useState(false);
-
-  const handleGlobalDragOver = (e) => {
-    e.preventDefault();
-    setIsDragActive(true);
-  };
-
-  const handleGlobalDragLeave = (e) => {
-    if (
-      e.clientX <= 0 ||
-      e.clientY <= 0 ||
-      e.clientX >= window.innerWidth ||
-      e.clientY >= window.innerHeight
-    ) {
-      setIsDragActive(false);
+// Hook to detect viewport width >= 768px (Desktop file manager vs Mobile Reels feed)
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(min-width: 768px)').matches;
     }
-  };
+    return false;
+  });
 
-  const handleGlobalDrop = (e) => {
-    e.preventDefault();
-    setIsDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      enqueueUpload(e.dataTransfer.files);
-    }
-  };
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(min-width: 768px)');
+    const handler = (e) => setIsDesktop(e.matches);
 
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  return isDesktop;
+}
+
+const StreamVaultMobileLayout = () => {
   return (
-    <div
-      className="flex min-h-screen w-full bg-drive-bg text-zinc-100 font-sans relative selection:bg-sky-500/30 selection:text-sky-300"
-      onDragOver={handleGlobalDragOver}
-      onDragLeave={handleGlobalDragLeave}
-      onDrop={handleGlobalDrop}
-    >
-      {/* ─── Global Drag & Drop Overlay ─────────────────────────────── */}
-      <AnimatePresence>
-        {isDragActive && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-2xl border-4 border-dashed border-sky-500 pointer-events-none p-6 text-center"
-          >
-            <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-sky-500/20 text-sky-400 border border-sky-500/30 mb-6 shadow-2xl shadow-sky-500/20 animate-bounce">
-              <UploadCloud className="h-12 w-12" />
-            </div>
-            <h2 className="text-2xl font-bold font-display text-white">
-              Drop files to upload instantly
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400 max-w-md">
-              Files will be encrypted and stored directly into your private Telegram Cloud Vault.
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div className="relative w-full h-full h-[100dvh] bg-black text-white flex flex-col overflow-hidden">
+      {/* Floating Top Header */}
+      <TopHeader />
 
-      {/* ─── Left Sidebar ───────────────────────────────────────────── */}
-      <DriveSidebar />
+      {/* Floating Category Filter Pills */}
+      <CategoryFilterBar />
 
-      {/* ─── Main Content Wrapper ───────────────────────────────────── */}
-      <div className="flex flex-1 flex-col min-w-0 h-screen overflow-hidden">
-        <DriveHeader onOpenAuth={() => setAuthModalOpen(true)} />
-
-        <div className="flex flex-1 overflow-hidden">
-          {/* Main Files View */}
-          <main className="flex-1 overflow-y-auto px-6 py-4 md:px-8">
-            <Breadcrumbs />
-            <AnimatePresence mode="wait">
-              {viewMode === 'grid' ? (
-                <motion.div
-                  key="grid"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <DriveGrid />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="list"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <DriveList />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </main>
-
-          {/* Details Inspector Sidebar Drawer */}
-          {isInspectorOpen && <FileInspector />}
-        </div>
+      {/* Vertical Scroll-Snap Video Feed */}
+      <div className="flex-1 w-full h-full overflow-hidden relative">
+        <ReelsContainer />
       </div>
 
-      {/* ─── Floating Google Drive Upload Manager ───────────────────── */}
-      <UploadManager />
+      {/* Mobile Bottom Navigation */}
+      <BottomNav />
+    </div>
+  );
+};
 
-      {/* ─── Global Modals ──────────────────────────────────────────── */}
-      <UniversalPreviewModal />
-      <NewFolderModal />
-      <RenameModal />
-      <MoveModal />
-      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+const StreamVaultApp = () => {
+  const isDesktop = useIsDesktop();
+
+  return (
+    <div className="relative w-full h-full min-h-[100dvh] bg-black text-white overflow-hidden">
+      {/* Offline Status Alert */}
+      <OfflineIndicator />
+
+      {/* Responsive Layout Switch:
+          - Desktop (>= 768px): Google Drive style cloud file manager
+          - Mobile (< 768px): TikTok / Instagram-Reels vertical snap feed
+      */}
+      {isDesktop ? <DriveLayout /> : <StreamVaultMobileLayout />}
+
+      {/* Category & Custom Folder Unlock PIN Modal */}
+      <CategoryPinModal />
+
+      {/* Set / Change PIN Modal */}
+      <SetPinModal />
+
+      {/* Privacy & Settings Modal */}
+      <SettingsModal />
+
+      {/* Global Modals & Install Banner */}
+      <UploadModal />
+      <AuthModal />
+      <InstallPromptModal />
+      <InstallBanner />
     </div>
   );
 };
@@ -131,9 +92,9 @@ const DriveMainApp = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <DriveProvider>
-        <DriveMainApp />
-      </DriveProvider>
+      <VideoFeedProvider>
+        <StreamVaultApp />
+      </VideoFeedProvider>
     </AuthProvider>
   );
 }
