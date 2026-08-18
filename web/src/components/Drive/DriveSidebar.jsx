@@ -233,6 +233,18 @@ export const DriveSidebar = ({
           <p className="text-[10px] text-zinc-500">Free, encrypted cloud storage</p>
         </div>
 
+        {/* Install Desktop App Option */}
+        <button
+          onClick={triggerInstall}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 transition-all cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Download className="w-4 h-4" />
+            <span>Install App</span>
+          </div>
+          <span className="text-[10px] font-mono text-cyan-300">PWA</span>
+        </button>
+
         {/* Privacy & Settings Button */}
         <button
           onClick={() => setIsSettingsOpen(true)}

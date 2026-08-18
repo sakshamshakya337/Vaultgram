@@ -8,6 +8,7 @@ import { BottomNav } from './components/Navigation/BottomNav';
 import { UploadModal } from './components/Upload/UploadModal';
 import { AuthModal } from './components/Auth/AuthModal';
 import { InstallPromptModal } from './components/PWA/InstallPromptModal';
+import { InstallBanner } from './components/PWA/InstallBanner';
 import { OfflineIndicator } from './components/PWA/OfflineIndicator';
 import { PinLockOverlay } from './components/PIN/PinLockOverlay';
 import { CategoryPinModal } from './components/PIN/CategoryPinModal';
@@ -79,10 +80,11 @@ const StreamVaultApp = () => {
       {/* Privacy & Settings Modal */}
       <SettingsModal />
 
-      {/* Global Modals */}
+      {/* Global Modals & Install Banner */}
       <UploadModal />
       <AuthModal />
       <InstallPromptModal />
+      <InstallBanner />
     </div>
   );
 };
