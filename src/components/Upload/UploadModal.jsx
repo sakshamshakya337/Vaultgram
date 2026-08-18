@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Video, Sparkles, Plus, AlertCircle, Check } from 'lucide-react';
+import { X, Upload, Video, Sparkles, Plus, AlertCircle, Check, Zap, Cpu } from 'lucide-react';
 import { api, formatBytes } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { UploadProgressBar } from './UploadProgressBar';
@@ -19,6 +19,7 @@ export const UploadModal = () => {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
   
   const fileInputRef = useRef(null);
 
@@ -31,17 +32,25 @@ export const UploadModal = () => {
 
   if (!isUploadOpen) return null;
 
+  const isLargeVideo = file && file.size > 20 * 1024 * 1024;
+
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];
     if (!selected) return;
 
-    if (!selected.type.startsWith('video/')) {
+    if (!selected.type.startsWith('video/') && !/\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts)$/i.test(selected.name)) {
       setError('Please select a valid video file (MP4, WebM, MOV).');
+      return;
+    }
+
+    if (selected.size > 200 * 1024 * 1024) {
+      setError(`Video exceeds 200MB limit (${(selected.size / (1024 * 1024)).toFixed(1)} MB). Please select a file under 200MB.`);
       return;
     }
 
     setFile(selected);
     setError('');
+    setUploadResult(null);
     const baseName = selected.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
     setTitle(baseName);
 
@@ -81,6 +90,7 @@ export const UploadModal = () => {
     setIsUploading(true);
     setProgress(0);
     setError('');
+    setUploadResult(null);
 
     const formData = new FormData();
     formData.append('video', file);
@@ -91,16 +101,17 @@ export const UploadModal = () => {
     }
 
     try {
-      await api.videos.upload(formData, (percent) => {
+      const res = await api.videos.upload(formData, (percent) => {
         setProgress(percent);
       });
 
+      setUploadResult(res);
       setIsSuccess(true);
       setTimeout(async () => {
         await fetchCategories();
         await fetchVideos(finalCategory);
         handleClose();
-      }, 1200);
+      }, 1500);
     } catch (err) {
       console.error('Upload failed:', err);
       setError(err.message || 'Upload failed. Please check your network and try again.');
@@ -123,11 +134,12 @@ export const UploadModal = () => {
     setProgress(0);
     setIsUploading(false);
     setIsSuccess(false);
+    setUploadResult(null);
     setError('');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-fade-in select-none">
       <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 border border-white/10 shadow-2xl p-6 overflow-hidden flex flex-col max-h-[90dvh]">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0">
@@ -137,7 +149,7 @@ export const UploadModal = () => {
             </div>
             <div>
               <h3 className="text-base font-bold text-white leading-tight">Upload New Reel</h3>
-              <p className="text-xs text-zinc-400">Stream directly to Telegram Cloud Vault</p>
+              <p className="text-xs text-zinc-400">Auto-compressed ≤ 20MB & Streamed to Cloud</p>
             </div>
           </div>
           <button
@@ -165,31 +177,43 @@ export const UploadModal = () => {
             <input
               ref={fileInputRef}
               type="file"
-              accept="video/*"
+              accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.3gp,.m4v"
               onChange={handleFileChange}
               className="hidden"
               disabled={isUploading}
             />
 
             {previewUrl ? (
-              <div className="relative rounded-2xl bg-black border border-white/15 overflow-hidden flex items-center justify-center max-h-48 group">
-                <video
-                  src={previewUrl}
-                  className="max-h-48 object-contain"
-                  controls
-                  playsInline
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-black/70 hover:bg-black text-white text-[11px] font-medium border border-white/20 backdrop-blur-sm cursor-pointer"
-                >
-                  Change
-                </button>
-                <div className="absolute bottom-2 left-2 text-[10px] text-zinc-300 bg-black/60 px-2 py-0.5 rounded backdrop-blur-sm">
-                  {file?.name} ({formatBytes(file?.size || 0)})
+              <div className="space-y-2">
+                <div className="relative rounded-2xl bg-black border border-white/15 overflow-hidden flex items-center justify-center max-h-48 group">
+                  <video
+                    src={previewUrl}
+                    className="max-h-48 object-contain"
+                    controls
+                    playsInline
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-black/70 hover:bg-black text-white text-[11px] font-medium border border-white/20 backdrop-blur-sm cursor-pointer"
+                  >
+                    Change
+                  </button>
+                  <div className="absolute bottom-2 left-2 text-[10px] text-zinc-300 bg-black/60 px-2 py-0.5 rounded backdrop-blur-sm">
+                    {file?.name} ({formatBytes(file?.size || 0)})
+                  </div>
                 </div>
+
+                {/* Compression Notice Badge */}
+                {isLargeVideo && (
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs animate-fade-in">
+                    <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>
+                      <strong>Smart Compression Active:</strong> Exceeds 20MB ({formatBytes(file.size)}). Will be automatically optimized to ≤ 20MB.
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <div
@@ -200,7 +224,9 @@ export const UploadModal = () => {
                   <Video className="w-6 h-6" />
                 </div>
                 <p className="text-sm font-semibold text-white">Click to select video</p>
-                <p className="text-xs text-zinc-400 mt-1">MP4, WebM, MOV up to 100MB</p>
+                <p className="text-xs text-zinc-400 mt-1">
+                  MP4, MOV, WebM up to 200MB • Auto-optimized to ≤ 20MB
+                </p>
               </div>
             )}
           </div>
@@ -274,17 +300,22 @@ export const UploadModal = () => {
             />
           </div>
 
-          {/* Upload Progress Display */}
+          {/* Upload & Compression Progress Display */}
           {isUploading && (
             <UploadProgressBar
               progress={progress}
               isComplete={isSuccess}
+              isCompressing={progress === 100 && !isSuccess && isLargeVideo}
               statusText={
                 isSuccess
-                  ? 'Video uploaded successfully!'
+                  ? uploadResult?.compressed
+                    ? `Uploaded! Compressed ${formatBytes(uploadResult.originalSize)} → ${formatBytes(uploadResult.finalSize)} (${uploadResult.compressionPercentage}% saved)`
+                    : 'Video uploaded successfully!'
+                  : progress === 100 && isLargeVideo
+                  ? 'Optimizing and compressing video to ≤ 20MB...'
                   : progress === 100
                   ? 'Finalizing and encrypting in Telegram Vault...'
-                  : `Uploading: ${progress}%`
+                  : `Uploading video... ${progress}%`
               }
             />
           )}
@@ -318,7 +349,7 @@ export const UploadModal = () => {
             ) : isUploading ? (
               <>
                 <div className="w-3.5 h-3.5 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                <span>Uploading...</span>
+                <span>{progress === 100 && isLargeVideo ? 'Optimizing...' : 'Uploading...'}</span>
               </>
             ) : (
               <>

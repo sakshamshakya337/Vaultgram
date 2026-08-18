@@ -16,13 +16,17 @@ const {
   detectFileType,
   resolveFileUrl,
 } = require('../services/telegramService');
+const {
+  compressVideoIfNeeded,
+  MAX_VIDEO_UPLOAD_SIZE_MB,
+} = require('../services/videoCompressionService');
 
 // Multer memory storage (zero local disk usage)
 const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+  limits: { fileSize: (MAX_VIDEO_UPLOAD_SIZE_MB || 200) * 1024 * 1024 }, // Configurable upload limit (default 200MB)
   fileFilter: (_req, _file, cb) => {
     // Accept ALL file mimetypes (videos, documents, images, audio, etc.)
     cb(null, true);
@@ -229,23 +233,48 @@ exports.uploadMedia = async (req, res) => {
       return res.status(400).json({ message: 'No file provided for upload' });
     }
 
-    // Telegram Bot API standard download limit is 20MB
-    const MAX_HOSTED_TELEGRAM_SIZE = 20 * 1024 * 1024;
-    if (uploadedFile.size > MAX_HOSTED_TELEGRAM_SIZE) {
-      const sizeMb = (uploadedFile.size / (1024 * 1024)).toFixed(1);
-      return res.status(413).json({
-        error: 'FILE_TOO_LARGE_FOR_HOSTED_API',
-        message: `Videos and files over 20MB (${sizeMb} MB) are not supported yet on Telegram hosted Bot API. Please upload files under 20MB.`,
-      });
+    const autoFileType = detectFileType(uploadedFile.originalname, uploadedFile.mimetype);
+    const autoCategory = detectFileCategory(uploadedFile.originalname, uploadedFile.mimetype);
+
+    let finalBuffer = uploadedFile.buffer;
+    let finalSize = uploadedFile.size;
+    let isCompressed = false;
+    let compressionRatio = 0;
+    let compressedMeta = {};
+
+    // ─── Automatic Video Compression to <= 20MB ──────────────────────────────────
+    if (autoFileType === 'video' || uploadedFile.mimetype.startsWith('video/')) {
+      const compressionResult = await compressVideoIfNeeded(
+        uploadedFile.buffer,
+        uploadedFile.originalname,
+        uploadedFile.mimetype
+      );
+
+      finalBuffer = compressionResult.buffer;
+      finalSize = compressionResult.size;
+      isCompressed = compressionResult.compressed;
+      compressionRatio = compressionResult.compressionPercentage;
+      compressedMeta = {
+        duration: compressionResult.duration,
+        width: compressionResult.width,
+        height: compressionResult.height,
+      };
+    } else {
+      // For non-video files (images, documents), enforce Telegram standard 20MB limit
+      const MAX_HOSTED_TELEGRAM_SIZE = 20 * 1024 * 1024;
+      if (uploadedFile.size > MAX_HOSTED_TELEGRAM_SIZE) {
+        const sizeMb = (uploadedFile.size / (1024 * 1024)).toFixed(1);
+        return res.status(413).json({
+          error: 'FILE_TOO_LARGE_FOR_HOSTED_API',
+          message: `Non-video files over 20MB (${sizeMb} MB) are not supported on Telegram hosted Bot API. Please upload files under 20MB.`,
+        });
+      }
     }
 
     const { title, description, category, folderId, parentFolderId } = req.body;
     const finalTitle = title?.trim() || uploadedFile.originalname || 'Untitled File';
     const targetParent = folderId || parentFolderId;
     const parentId = targetParent && targetParent !== 'root' && targetParent !== 'null' ? targetParent : null;
-
-    const autoFileType = detectFileType(uploadedFile.originalname, uploadedFile.mimetype);
-    const autoCategory = detectFileCategory(uploadedFile.originalname, uploadedFile.mimetype);
 
     let finalThumbnail = req.body.thumbnail || '';
     if (thumbFile) {
@@ -265,7 +294,7 @@ exports.uploadMedia = async (req, res) => {
       fileCategory,
       extension,
     } = await uploadMediaToTelegram(
-      uploadedFile.buffer,
+      finalBuffer,
       uploadedFile.originalname,
       uploadedFile.mimetype,
       thumbFile?.buffer
@@ -286,18 +315,24 @@ exports.uploadMedia = async (req, res) => {
       thumbnail: finalThumbnail,
       telegramFileId: fileId,
       telegramMessageId: messageId,
-      duration: duration || 0,
-      width: width || 0,
-      height: height || 0,
-      fileSizeBytes: fileSizeBytes || uploadedFile.size || 0,
+      duration: duration || compressedMeta.duration || 0,
+      width: width || compressedMeta.width || 0,
+      height: height || compressedMeta.height || 0,
+      fileSizeBytes: fileSizeBytes || finalSize || 0,
       uploadedBy: req.user?.id || req.user?._id,
     });
 
-    res.status(201).json(ensureFileType(doc.toObject()));
+    const resultDoc = ensureFileType(doc.toObject());
+    resultDoc.originalSize = uploadedFile.size;
+    resultDoc.finalSize = finalSize;
+    resultDoc.compressed = isCompressed;
+    resultDoc.compressionPercentage = compressionRatio;
+
+    res.status(201).json(resultDoc);
   } catch (err) {
     console.error('[uploadMedia error]:', err.message);
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ message: 'File exceeds maximum 100MB Telegram limit' });
+      return res.status(400).json({ message: `File exceeds maximum ${MAX_VIDEO_UPLOAD_SIZE_MB || 200}MB upload limit` });
     }
     res.status(500).json({ message: err.message || 'File upload failed' });
   }
