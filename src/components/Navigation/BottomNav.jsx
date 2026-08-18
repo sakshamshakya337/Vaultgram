@@ -1,68 +1,90 @@
 import React from 'react';
-import { Home, Compass, Plus, Heart, Shield } from 'lucide-react';
+import { Folder, Film, Heart, Clock, User, Shield, Plus } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
 
-export const BottomNav = () => {
+export const BottomNav = ({ currentNav = 'all', onSelectNav }) => {
   const {
-    selectedCategory,
-    setSelectedCategory,
     setIsUploadOpen,
+    sessionUnlockedReels,
+    setCategoryLockTarget,
+    setSelectedCategory,
   } = useVideoFeed();
 
-  const { setIsSettingsOpen, setIsAuthOpen, isAuthenticated } = useAuth();
+  const { setIsSettingsOpen, setIsAuthOpen, isAuthenticated, hasPin } = useAuth();
+
+  const handleNavClick = (nav) => {
+    if (onSelectNav) {
+      if (nav === 'reels') {
+        onSelectNav('reels');
+        if (hasPin && !sessionUnlockedReels) {
+          setCategoryLockTarget('Reels');
+        }
+      } else {
+        onSelectNav(nav);
+        if (nav === 'all') {
+          setSelectedCategory('All');
+        }
+      }
+    }
+  };
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 flex items-center justify-around px-2 pb-safe pt-2 bg-gradient-to-t from-black via-black/90 to-transparent border-t border-white/5 pointer-events-auto">
-      {/* Home / Feed */}
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-center justify-around px-2 pb-safe pt-2 bg-zinc-950/90 backdrop-blur-xl border-t border-white/10 pointer-events-auto shadow-2xl">
+      {/* 1. Drive Tab (Default) */}
       <button
-        onClick={() => setSelectedCategory('All')}
-        className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
-          selectedCategory === 'All' ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'
+        onClick={() => handleNavClick('all')}
+        className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors cursor-pointer ${
+          currentNav === 'all' ? 'text-cyan-400 font-bold' : 'text-zinc-400 hover:text-zinc-200'
         }`}
       >
-        <Home className="w-5 h-5" />
-        <span className="text-[10px] font-semibold">Feed</span>
+        <Folder className={`w-5 h-5 ${currentNav === 'all' ? 'fill-cyan-400/20' : ''}`} />
+        <span className="text-[10px] font-semibold">Drive</span>
       </button>
 
-      {/* Explore / Categories */}
+      {/* 2. Reels Tab */}
       <button
-        onClick={() => setSelectedCategory('Trending')}
-        className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
-          selectedCategory === 'Trending' ? 'text-cyan-400' : 'text-zinc-400 hover:text-zinc-200'
+        onClick={() => handleNavClick('reels')}
+        className={`relative flex flex-col items-center gap-1 py-1 px-3 transition-colors cursor-pointer ${
+          currentNav === 'reels' ? 'text-rose-400 font-bold' : 'text-zinc-400 hover:text-zinc-200'
         }`}
       >
-        <Compass className="w-5 h-5" />
-        <span className="text-[10px] font-semibold">Explore</span>
+        <div className="relative">
+          <Film className="w-5 h-5" />
+          <span className="absolute -top-1 -right-2 text-[7px] font-black px-1 py-0.2 rounded-full bg-rose-500 text-white font-mono leading-tight">
+            NEW
+          </span>
+        </div>
+        <span className="text-[10px] font-semibold">Reels</span>
       </button>
 
-      {/* Center Action: Plus / Upload */}
+      {/* 3. Center Quick Upload Button */}
       <button
         onClick={() => setIsUploadOpen(true)}
-        className="flex items-center justify-center -translate-y-2 w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 via-blue-500 to-rose-500 text-white shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform cursor-pointer"
-        aria-label="Upload reel"
+        className="flex items-center justify-center -translate-y-3 w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 via-blue-500 to-rose-500 text-white shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform cursor-pointer border-2 border-zinc-950"
+        aria-label="Upload File"
       >
         <Plus className="w-6 h-6 stroke-[2.5]" />
       </button>
 
-      {/* Liked / Saved */}
+      {/* 4. Starred Tab */}
       <button
-        onClick={() => setSelectedCategory('Starred')}
-        className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
-          selectedCategory === 'Starred' ? 'text-rose-500' : 'text-zinc-400 hover:text-zinc-200'
+        onClick={() => handleNavClick('starred')}
+        className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors cursor-pointer ${
+          currentNav === 'starred' ? 'text-rose-400 font-bold' : 'text-zinc-400 hover:text-zinc-200'
         }`}
       >
-        <Heart className="w-5 h-5" />
-        <span className="text-[10px] font-semibold">Liked</span>
+        <Heart className={`w-5 h-5 ${currentNav === 'starred' ? 'fill-rose-400' : ''}`} />
+        <span className="text-[10px] font-semibold">Starred</span>
       </button>
 
-      {/* Settings & PIN */}
+      {/* 5. Settings / Profile Tab */}
       <button
         onClick={() => (isAuthenticated ? setIsSettingsOpen(true) : setIsAuthOpen(true))}
-        className="flex flex-col items-center gap-1 py-1 px-3 text-zinc-400 hover:text-white cursor-pointer"
+        className="flex flex-col items-center gap-1 py-1 px-3 text-zinc-400 hover:text-white cursor-pointer transition-colors"
       >
         <Shield className="w-5 h-5" />
-        <span className="text-[10px] font-semibold">Privacy</span>
+        <span className="text-[10px] font-semibold">Settings</span>
       </button>
     </nav>
   );

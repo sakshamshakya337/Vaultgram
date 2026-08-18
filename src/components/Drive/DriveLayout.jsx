@@ -12,6 +12,7 @@ import { DesktopVideoModal } from './DesktopVideoModal';
 import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
 import { ReelsContainer } from '../Reels/ReelsContainer';
+import { BottomNav } from '../Navigation/BottomNav';
 
 export const DriveLayout = () => {
   const {
@@ -146,41 +147,56 @@ export const DriveLayout = () => {
   const categoryFoldersList = categories.filter((c) => c !== 'All');
 
   return (
-    <div className="flex w-screen h-screen bg-black text-white overflow-hidden select-none font-sans">
-      {/* 1. Left Sidebar */}
-      <DriveSidebar
-        currentNav={currentNav}
-        onSelectNav={(nav) => {
-          setCurrentNav(nav);
-          setCurrentFolder(null);
-          if (nav !== 'all') {
-            setSelectedCategory('All');
-          }
-        }}
-        onOpenNewFolder={() => setIsNewFolderOpen(true)}
-      />
+    <div className="flex w-screen h-screen bg-black text-white overflow-hidden select-none font-sans relative">
+      {/* 1. Left Sidebar (Desktop Only) */}
+      <div className="hidden md:flex shrink-0 h-full">
+        <DriveSidebar
+          currentNav={currentNav}
+          onSelectNav={(nav) => {
+            setCurrentNav(nav);
+            setCurrentFolder(null);
+            if (nav !== 'all') {
+              setSelectedCategory('All');
+            }
+          }}
+          onOpenNewFolder={() => setIsNewFolderOpen(true)}
+        />
+      </div>
 
       {/* 2. Main Drive Layout Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-zinc-950/40">
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-zinc-950/40 relative">
         {/* Top Header Bar */}
-        <DriveHeader
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          currentNav={currentNav}
-          onResetToRoot={handleResetToRoot}
-        />
+        {currentNav !== 'reels' ? (
+          <DriveHeader
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            currentNav={currentNav}
+            onResetToRoot={handleResetToRoot}
+          />
+        ) : (
+          <div className="hidden md:block">
+            <DriveHeader
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              currentNav={currentNav}
+              onResetToRoot={handleResetToRoot}
+            />
+          </div>
+        )}
 
-        {/* Scrollable Main Content / Centered Desktop Reels */}
+        {/* Main Content Area: Responsive Reels vs Drive Browser */}
         {currentNav === 'reels' ? (
-          <div className="flex-1 flex items-center justify-center p-6 bg-zinc-950/60 overflow-hidden">
-            <div className="w-full max-w-[420px] h-[calc(100vh-6rem)] rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-black relative">
+          <div className="flex-1 w-full h-full flex items-center justify-center overflow-hidden pb-16 md:pb-0 bg-black md:bg-zinc-950/60 md:p-6">
+            <div className="w-full h-full md:max-w-[420px] md:h-[calc(100vh-6rem)] md:rounded-3xl overflow-hidden md:border md:border-white/10 md:shadow-2xl bg-black relative">
               <ReelsContainer />
             </div>
           </div>
         ) : (
-          <main className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar">
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-8 pb-28 md:pb-8 no-scrollbar">
             {/* FOLDERS SECTION */}
             {isAtRoot && (
               <DriveFolderGrid
@@ -227,7 +243,7 @@ export const DriveLayout = () => {
 
               {/* Empty State */}
               {files.length === 0 && !loadingDrive && (
-                <div className="p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
+                <div className="p-8 md:p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
                   <div className="w-16 h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600">
                     {currentNav === 'starred' ? (
                       <Heart className="w-8 h-8 text-rose-500/40" />
@@ -297,6 +313,18 @@ export const DriveLayout = () => {
             </div>
           </main>
         )}
+
+        {/* Mobile Bottom Navigation Bar (hidden on desktop) */}
+        <BottomNav
+          currentNav={currentNav}
+          onSelectNav={(nav) => {
+            setCurrentNav(nav);
+            setCurrentFolder(null);
+            if (nav !== 'all') {
+              setSelectedCategory('All');
+            }
+          }}
+        />
       </div>
 
       {/* Desktop Video Playback Modal with HTML5 Controls */}

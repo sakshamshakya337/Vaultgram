@@ -1,5 +1,19 @@
-import React from 'react';
-import { Search, LayoutGrid, List, User, LogOut, Shield, ChevronRight, X, Lock, Unlock } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Search,
+  LayoutGrid,
+  List,
+  User,
+  LogOut,
+  Shield,
+  ChevronRight,
+  X,
+  Lock,
+  Unlock,
+  Sparkles,
+  Plus,
+  ArrowLeft
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 
@@ -15,17 +29,19 @@ export const DriveHeader = ({
   const {
     selectedCategory,
     lockedCategories,
-    sessionUnlockedCategories,
     toggleCategoryLock,
     setIsAuthOpen,
+    setIsUploadOpen,
   } = useVideoFeed();
+
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   const getNavTitle = () => {
     if (currentNav === 'reels') return 'Reels Feed';
-    if (currentNav === 'starred') return 'Starred Videos';
-    if (currentNav === 'recent') return 'Recent Uploads';
+    if (currentNav === 'starred') return 'Starred';
+    if (currentNav === 'recent') return 'Recent';
     if (currentNav === 'trash') return 'Trash';
-    return selectedCategory === 'All' ? 'My Drive' : selectedCategory;
+    return selectedCategory === 'All' ? 'Vaultgram' : selectedCategory;
   };
 
   const isCurrentCategoryLocked =
@@ -43,127 +59,183 @@ export const DriveHeader = ({
   };
 
   return (
-    <header className="h-16 px-6 border-b border-white/10 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between gap-4 shrink-0 select-none">
-      {/* Left: Breadcrumbs / Title + Quick Lock Option */}
-      <div className="flex items-center gap-2.5 min-w-0">
-        <button
-          onClick={onResetToRoot}
-          className="text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-        >
-          My Drive
-        </button>
-
-        {selectedCategory !== 'All' && currentNav === 'all' && (
-          <>
-            <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-            <span className="text-xs font-bold text-cyan-400 truncate">#{selectedCategory}</span>
-
-            {/* Folder Lock / Unlock Quick Button */}
-            <button
-              onClick={handleHeaderLockToggle}
-              className={`ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
-                isCurrentCategoryLocked
-                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25'
-                  : 'bg-zinc-900 text-zinc-400 border border-white/10 hover:text-white hover:bg-zinc-800'
-              }`}
-              title={isCurrentCategoryLocked ? 'Click to Unlock this Folder' : 'Click to Lock this Folder with PIN'}
-            >
-              {isCurrentCategoryLocked ? (
-                <>
-                  <Lock className="w-3 h-3 text-rose-400" />
-                  <span>Folder Locked</span>
-                </>
-              ) : (
-                <>
-                  <Unlock className="w-3 h-3 text-zinc-500" />
-                  <span>Lock Folder</span>
-                </>
-              )}
-            </button>
-          </>
-        )}
-
-        {currentNav !== 'all' && (
-          <>
-            <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-            <span className="text-xs font-bold text-white truncate">{getNavTitle()}</span>
-          </>
-        )}
-      </div>
-
-      {/* Center: Search Bar */}
-      <div className="flex-1 max-w-md relative">
-        <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search videos by title or tags..."
-          className="w-full pl-9 pr-8 py-2 rounded-2xl bg-zinc-900/80 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
-        />
-        {searchQuery && (
+    <header className="h-16 px-4 md:px-6 border-b border-white/10 bg-zinc-950/90 backdrop-blur-md flex items-center justify-between gap-3 shrink-0 select-none z-30">
+      {/* Mobile Search Overlay Bar */}
+      {isMobileSearchOpen ? (
+        <div className="flex items-center gap-2 w-full animate-fade-in md:hidden">
           <button
-            onClick={() => onSearchChange('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+            onClick={() => {
+              setIsMobileSearchOpen(false);
+              onSearchChange('');
+            }}
+            className="p-2 text-zinc-400 hover:text-white"
           >
-            <X className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
-        )}
-      </div>
-
-      {/* Right: View Toggle & User Profile */}
-      <div className="flex items-center gap-3 shrink-0">
-        {/* Grid / List View Toggle */}
-        <div className="flex items-center p-1 rounded-xl bg-zinc-900 border border-white/5">
-          <button
-            onClick={() => onViewModeChange('grid')}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              viewMode === 'grid'
-                ? 'bg-cyan-500/20 text-cyan-300 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-            title="Grid View"
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onViewModeChange('list')}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-              viewMode === 'list'
-                ? 'bg-cyan-500/20 text-cyan-300 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-            title="List View"
-          >
-            <List className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* User Avatar & Settings */}
-        {isAuthenticated ? (
-          <div className="flex items-center gap-2 pl-2 border-l border-white/10">
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-2 py-1.5 px-2.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-white/5 transition-colors cursor-pointer"
-            >
-              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white">
-                {user?.username?.[0]?.toUpperCase() || 'U'}
-              </div>
-              <span className="text-xs font-semibold text-zinc-300 max-w-[100px] truncate">
-                {user?.username || 'Account'}
-              </span>
-            </button>
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search files and tags..."
+              className="w-full pl-9 pr-8 py-2 rounded-2xl bg-zinc-900 border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500/50"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => onSearchChange('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-        ) : (
-          <button
-            onClick={() => setIsAuthOpen(true)}
-            className="flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-bold text-white transition-colors cursor-pointer"
-          >
-            <User className="w-3.5 h-3.5" />
-            <span>Sign In</span>
-          </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          {/* Left: App Brand & Navigation Title / Breadcrumbs */}
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Mobile Logo Brand */}
+            <div className="flex items-center gap-2 md:hidden">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
+                <Sparkles className="w-4 h-4" />
+              </div>
+            </div>
+
+            <button
+              onClick={onResetToRoot}
+              className="text-xs md:text-sm font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer truncate"
+            >
+              {selectedCategory === 'All' && currentNav === 'all' ? 'Vaultgram Drive' : 'My Drive'}
+            </button>
+
+            {selectedCategory !== 'All' && currentNav === 'all' && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                <span className="text-xs font-bold text-cyan-400 truncate">#{selectedCategory}</span>
+
+                {/* Folder Lock / Unlock Quick Button */}
+                <button
+                  onClick={handleHeaderLockToggle}
+                  className={`ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                    isCurrentCategoryLocked
+                      ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                      : 'bg-zinc-900 text-zinc-400 border border-white/10 hover:text-white'
+                  }`}
+                  title={isCurrentCategoryLocked ? 'Folder Locked' : 'Lock Folder (PIN)'}
+                >
+                  {isCurrentCategoryLocked ? (
+                    <Lock className="w-3 h-3 text-rose-400" />
+                  ) : (
+                    <Unlock className="w-3 h-3 text-zinc-500" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isCurrentCategoryLocked ? 'Locked' : 'Lock'}
+                  </span>
+                </button>
+              </>
+            )}
+
+            {currentNav !== 'all' && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                <span className="text-xs font-bold text-white truncate">{getNavTitle()}</span>
+              </>
+            )}
+          </div>
+
+          {/* Desktop Center: Permanent Search Bar */}
+          <div className="hidden md:block flex-1 max-w-md relative mx-2">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search files by title or tags..."
+              className="w-full pl-9 pr-8 py-2 rounded-2xl bg-zinc-900/80 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => onSearchChange('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Right Controls */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Mobile Search Toggle Icon */}
+            <button
+              onClick={() => setIsMobileSearchOpen(true)}
+              className="md:hidden p-2 rounded-xl bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white cursor-pointer"
+              aria-label="Search"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+
+            {/* Mobile Quick + Upload Button */}
+            <button
+              onClick={() => setIsUploadOpen(true)}
+              className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Upload</span>
+            </button>
+
+            {/* Desktop Grid / List View Toggle */}
+            <div className="hidden md:flex items-center p-1 rounded-xl bg-zinc-900 border border-white/5">
+              <button
+                onClick={() => onViewModeChange('grid')}
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-cyan-500/20 text-cyan-300 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="Grid View"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onViewModeChange('list')}
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'list'
+                    ? 'bg-cyan-500/20 text-cyan-300 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="List View"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* User Avatar & Settings */}
+            {isAuthenticated ? (
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="hidden md:flex items-center gap-2 py-1.5 px-2.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-white/5 transition-colors cursor-pointer"
+              >
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white">
+                  {user?.username?.[0]?.toUpperCase() || 'U'}
+                </div>
+                <span className="text-xs font-semibold text-zinc-300 max-w-[100px] truncate">
+                  {user?.username || 'Account'}
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsAuthOpen(true)}
+                className="hidden md:flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-bold text-white transition-colors cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </header>
   );
 };
