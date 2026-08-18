@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { X, Play, Heart, Share2, Download, Sparkles, Clock, HardDrive, Eye } from 'lucide-react';
 import { api, formatBytes, formatDuration, formatViews, formatRelativeTime } from '../../services/api';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const DesktopVideoModal = ({ video, onClose }) => {
   const videoRef = useRef(null);

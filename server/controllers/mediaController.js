@@ -2,14 +2,19 @@
 const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
+const axios = require('axios');
 const Media = require('../models/Media');
 const WatchHistory = require('../models/WatchHistory');
 const Like = require('../models/Like');
 const Playlist = require('../models/Playlist');
 const {
   uploadMediaToTelegram,
+  uploadVideoToTelegram,
+  uploadDocumentToTelegram,
   deleteMediaFromTelegram,
   detectFileCategory,
+  detectFileType,
+  resolveFileUrl,
 } = require('../services/telegramService');
 
 // Multer memory storage (zero local disk usage)
@@ -19,7 +24,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
   fileFilter: (_req, _file, cb) => {
-    // Accept ALL files
+    // Accept ALL file mimetypes (videos, documents, images, audio, etc.)
     cb(null, true);
   },
 });
@@ -31,9 +36,22 @@ exports.uploadMiddleware = upload.fields([
   { name: 'thumbnail', maxCount: 1 },
 ]);
 
+const ensureFileType = (item) => {
+  if (!item) return item;
+  const copy = { ...item };
+  if (!copy.fileType) {
+    if (copy.fileCategory === 'video' || copy.mediaType === 'video') copy.fileType = 'video';
+    else if (copy.fileCategory === 'image' || copy.mediaType === 'image') copy.fileType = 'image';
+    else if (copy.fileCategory === 'audio' || copy.mediaType === 'audio') copy.fileType = 'audio';
+    else if (copy.fileCategory === 'document' || copy.fileCategory === 'pdf' || copy.mediaType === 'document') copy.fileType = 'document';
+    else copy.fileType = 'other';
+  }
+  return copy;
+};
+
 /**
- * GET /api/v1/media
- * Google Drive listing: supports folder navigation, filter (my-drive, starred, recent, trash), fileCategory, sort.
+ * GET /api/v1/media or /api/v1/videos
+ * Drive listing: supports folders, categories, filters, search.
  */
 exports.listMedia = async (req, res) => {
   try {
@@ -44,6 +62,7 @@ exports.listMedia = async (req, res) => {
     const filterType = req.query.filter || 'my-drive'; // my-drive, starred, recent, trash
     const folderId = req.query.folderId; // null, 'root', or folder ObjectId
     const fileCategory = req.query.fileCategory; // image, video, audio, pdf, document, code, archive
+    const fileType = req.query.fileType; // video, document, image, audio, other
     const category = req.query.category;
 
     const query = {};
@@ -69,6 +88,10 @@ exports.listMedia = async (req, res) => {
 
     if (fileCategory && fileCategory !== 'all') {
       query.fileCategory = fileCategory;
+    }
+
+    if (fileType && fileType !== 'all') {
+      query.fileType = fileType;
     }
 
     if (category && category !== 'All') {
@@ -102,9 +125,11 @@ exports.listMedia = async (req, res) => {
       breadcrumbs = [{ id: 'root', title: 'My Drive' }, ...trail];
     }
 
+    const formattedItems = items.map(ensureFileType);
+
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.json({
-      items,
+      items: formattedItems,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
@@ -119,27 +144,28 @@ exports.listMedia = async (req, res) => {
 
 /**
  * POST /api/v1/media/folder
- * Creates a new folder in Google Drive
  */
 exports.createFolder = async (req, res) => {
   try {
-    const { title, folderId } = req.body;
+    const { title, folderId, parentFolderId } = req.body;
     if (!title || !title.trim()) {
       return res.status(400).json({ message: 'Folder title is required' });
     }
 
-    const parentId = folderId && folderId !== 'root' && folderId !== 'null' ? folderId : null;
+    const targetParent = folderId || parentFolderId;
+    const parentId = targetParent && targetParent !== 'root' && targetParent !== 'null' ? targetParent : null;
 
     const folder = await Media.create({
       title: title.trim(),
       isFolder: true,
+      fileType: 'other',
       mediaType: 'folder',
       fileCategory: 'folder',
       folderId: parentId,
       uploadedBy: req.user?.id || req.user?._id,
     });
 
-    res.status(201).json(folder);
+    res.status(201).json(ensureFileType(folder.toObject()));
   } catch (err) {
     console.error('[createFolder error]:', err.message);
     res.status(500).json({ message: 'Failed to create folder' });
@@ -147,7 +173,7 @@ exports.createFolder = async (req, res) => {
 };
 
 /**
- * POST /api/v1/media/upload
+ * POST /api/v1/media/upload or /api/v1/videos/upload or /api/v1/files/upload
  */
 exports.uploadMedia = async (req, res) => {
   try {
@@ -163,10 +189,13 @@ exports.uploadMedia = async (req, res) => {
       return res.status(400).json({ message: 'No file provided for upload' });
     }
 
-    const { title, description, category, folderId } = req.body;
+    const { title, description, category, folderId, parentFolderId } = req.body;
     const finalTitle = title?.trim() || uploadedFile.originalname || 'Untitled File';
-    const parentId = folderId && folderId !== 'root' && folderId !== 'null' ? folderId : null;
-    const detectedCategory = detectFileCategory(uploadedFile.originalname, uploadedFile.mimetype);
+    const targetParent = folderId || parentFolderId;
+    const parentId = targetParent && targetParent !== 'root' && targetParent !== 'null' ? targetParent : null;
+
+    const autoFileType = detectFileType(uploadedFile.originalname, uploadedFile.mimetype);
+    const autoCategory = detectFileCategory(uploadedFile.originalname, uploadedFile.mimetype);
 
     let finalThumbnail = req.body.thumbnail || '';
     if (thumbFile) {
@@ -181,6 +210,7 @@ exports.uploadMedia = async (req, res) => {
       width,
       height,
       fileSizeBytes,
+      fileType,
       mediaType,
       fileCategory,
       extension,
@@ -198,8 +228,9 @@ exports.uploadMedia = async (req, res) => {
       category: category?.trim() || 'General',
       isFolder: false,
       folderId: parentId,
-      mediaType: mediaType || detectedCategory,
-      fileCategory: fileCategory || detectedCategory,
+      fileType: fileType || autoFileType,
+      mediaType: mediaType || autoCategory,
+      fileCategory: fileCategory || autoCategory,
       extension: extension || path.extname(uploadedFile.originalname).replace('.', ''),
       mimeType: uploadedFile.mimetype || '',
       thumbnail: finalThumbnail,
@@ -212,7 +243,7 @@ exports.uploadMedia = async (req, res) => {
       uploadedBy: req.user?.id || req.user?._id,
     });
 
-    res.status(201).json(doc);
+    res.status(201).json(ensureFileType(doc.toObject()));
   } catch (err) {
     console.error('[uploadMedia error]:', err.message);
     if (err.code === 'LIMIT_FILE_SIZE') {
@@ -239,7 +270,7 @@ exports.renameItem = async (req, res) => {
     );
 
     if (!item) return res.status(404).json({ message: 'Item not found' });
-    res.json(item);
+    res.json(ensureFileType(item.toObject()));
   } catch (err) {
     console.error('[renameItem error]:', err.message);
     res.status(500).json({ message: 'Failed to rename item' });
@@ -261,7 +292,7 @@ exports.moveItem = async (req, res) => {
     );
 
     if (!item) return res.status(404).json({ message: 'Item not found' });
-    res.json(item);
+    res.json(ensureFileType(item.toObject()));
   } catch (err) {
     console.error('[moveItem error]:', err.message);
     res.status(500).json({ message: 'Failed to move item' });
@@ -294,27 +325,19 @@ exports.trashOrDelete = async (req, res) => {
     const item = await Media.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
-    if (!item.isTrashed) {
-      // Move to Trash
-      item.isTrashed = true;
-      item.trashedAt = new Date();
-      await item.save();
-      return res.json({ message: 'Moved to Trash', isTrashed: true });
+    if (item.isTrashed) {
+      if (item.telegramMessageId) {
+        await deleteMediaFromTelegram(item.telegramMessageId);
+      }
+      await Media.findByIdAndDelete(req.params.id);
+      return res.json({ message: 'Item permanently deleted' });
     }
 
-    // Already in trash: Permanently Purge!
-    if (item.telegramMessageId) {
-      await deleteMediaFromTelegram(item.telegramMessageId);
-    }
+    item.isTrashed = true;
+    item.trashedAt = new Date();
+    await item.save();
 
-    await Promise.all([
-      Media.findByIdAndDelete(req.params.id),
-      WatchHistory.deleteMany({ $or: [{ mediaId: req.params.id }, { videoId: req.params.id }] }),
-      Like.deleteMany({ $or: [{ mediaId: req.params.id }, { videoId: req.params.id }] }),
-      Playlist.updateMany({}, { $pull: { mediaIds: req.params.id, videoIds: req.params.id } }),
-    ]);
-
-    res.json({ message: 'Permanently deleted', deleted: true });
+    res.json({ message: 'Item moved to trash', item: ensureFileType(item.toObject()) });
   } catch (err) {
     console.error('[trashOrDelete error]:', err.message);
     res.status(500).json({ message: 'Failed to delete item' });
@@ -326,13 +349,14 @@ exports.trashOrDelete = async (req, res) => {
  */
 exports.restoreTrash = async (req, res) => {
   try {
-    const item = await Media.findByIdAndUpdate(
-      req.params.id,
-      { isTrashed: false, trashedAt: null },
-      { new: true }
-    );
+    const item = await Media.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Item not found' });
-    res.json({ message: 'Restored from Trash', item });
+
+    item.isTrashed = false;
+    item.trashedAt = null;
+    await item.save();
+
+    res.json({ message: 'Item restored', item: ensureFileType(item.toObject()) });
   } catch (err) {
     console.error('[restoreTrash error]:', err.message);
     res.status(500).json({ message: 'Failed to restore item' });
@@ -351,7 +375,7 @@ exports.emptyTrash = async (req, res) => {
       }
     }
     await Media.deleteMany({ isTrashed: true });
-    res.json({ message: 'Trash emptied completely' });
+    res.json({ message: 'Trash emptied permanently' });
   } catch (err) {
     console.error('[emptyTrash error]:', err.message);
     res.status(500).json({ message: 'Failed to empty trash' });
@@ -363,29 +387,10 @@ exports.emptyTrash = async (req, res) => {
  */
 exports.listFolders = async (req, res) => {
   try {
-    const folders = await Media.find({ isFolder: true, isTrashed: { $ne: true } })
-      .select('_id title folderId')
-      .sort({ title: 1 })
-      .lean();
-    res.json({ folders });
+    const folders = await Media.find({ isFolder: true, isTrashed: { $ne: true } }).sort({ title: 1 }).lean();
+    res.json({ folders: folders.map(ensureFileType) });
   } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch folders' });
-  }
-};
-
-/**
- * GET /api/v1/media/:id
- */
-exports.getMedia = async (req, res) => {
-  try {
-    const item = await Media.findById(req.params.id).populate('uploadedBy', 'username avatar').lean();
-    if (!item) return res.status(404).json({ message: 'Item not found' });
-
-    Media.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } }).exec();
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.json(item);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch item' });
+    res.status(500).json({ message: 'Failed to list folders' });
   }
 };
 
@@ -394,29 +399,77 @@ exports.getMedia = async (req, res) => {
  */
 exports.searchMedia = async (req, res) => {
   try {
-    const { q, fileCategory, category } = req.query;
-    const filter = { isTrashed: { $ne: true } };
+    const { q, fileCategory, fileType } = req.query;
+    if (!q || !q.trim()) {
+      return res.json({ items: [] });
+    }
 
-    if (q && q.trim()) {
-      filter.$or = [
+    const filter = {
+      isTrashed: { $ne: true },
+      $or: [
         { title: { $regex: q.trim(), $options: 'i' } },
         { description: { $regex: q.trim(), $options: 'i' } },
-        { extension: { $regex: q.trim(), $options: 'i' } },
-      ];
-    }
+        { category: { $regex: q.trim(), $options: 'i' } },
+      ],
+    };
 
     if (fileCategory && fileCategory !== 'all') {
       filter.fileCategory = fileCategory;
     }
-
-    if (category && category !== 'All') {
-      filter.category = category;
+    if (fileType && fileType !== 'all') {
+      filter.fileType = fileType;
     }
 
-    const items = await Media.find(filter).sort({ isFolder: -1, createdAt: -1 }).limit(50).lean();
-    res.json({ items, total: items.length });
+    const items = await Media.find(filter).sort({ isFolder: -1, createdAt: -1 }).limit(100).lean();
+    res.json({ items: items.map(ensureFileType) });
   } catch (err) {
+    console.error('[searchMedia error]:', err.message);
     res.status(500).json({ message: 'Search failed' });
+  }
+};
+
+/**
+ * GET /api/v1/media/:id or /api/v1/videos/:id or /api/v1/files/:id
+ */
+exports.getMedia = async (req, res) => {
+  try {
+    const item = await Media.findById(req.params.id).lean();
+    if (!item) return res.status(404).json({ message: 'File not found' });
+    res.json(ensureFileType(item));
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch item details' });
+  }
+};
+
+/**
+ * GET /api/v1/files/:id/download or /api/v1/videos/:id/download
+ */
+exports.downloadFile = async (req, res) => {
+  try {
+    const item = await Media.findById(req.params.id);
+    if (!item || !item.telegramFileId) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    const fileUrl = await resolveFileUrl(item.telegramFileId);
+    
+    // Proxy download stream
+    const response = await axios({
+      method: 'GET',
+      url: fileUrl,
+      responseType: 'stream',
+      timeout: 180000,
+    });
+
+    const safeName = encodeURIComponent(item.title || 'file');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    if (item.mimeType) res.setHeader('Content-Type', item.mimeType);
+    if (item.fileSizeBytes) res.setHeader('Content-Length', item.fileSizeBytes);
+
+    response.data.pipe(res);
+  } catch (err) {
+    console.error('[downloadFile error]:', err.message);
+    res.status(500).json({ message: 'Failed to download file' });
   }
 };
 
@@ -425,17 +478,16 @@ exports.searchMedia = async (req, res) => {
  */
 exports.getUserLibrary = async (req, res) => {
   try {
-    const allFiles = await Media.find({ isFolder: false, isTrashed: { $ne: true } }).lean();
-
+    const allFiles = await Media.find({ isTrashed: { $ne: true }, isFolder: { $ne: true } }).lean();
     const totalBytes = allFiles.reduce((acc, curr) => acc + (curr.fileSizeBytes || 0), 0);
     const categoryStats = {
-      image: allFiles.filter((i) => i.fileCategory === 'image').length,
-      video: allFiles.filter((i) => i.fileCategory === 'video').length,
-      audio: allFiles.filter((i) => i.fileCategory === 'audio').length,
-      document: allFiles.filter((i) => i.fileCategory === 'document' || i.fileCategory === 'pdf').length,
+      image: allFiles.filter((i) => (i.fileType === 'image' || i.fileCategory === 'image')).length,
+      video: allFiles.filter((i) => (i.fileType === 'video' || i.fileCategory === 'video')).length,
+      audio: allFiles.filter((i) => (i.fileType === 'audio' || i.fileCategory === 'audio')).length,
+      document: allFiles.filter((i) => (i.fileType === 'document' || i.fileCategory === 'document' || i.fileCategory === 'pdf')).length,
       archive: allFiles.filter((i) => i.fileCategory === 'archive').length,
       code: allFiles.filter((i) => i.fileCategory === 'code').length,
-      other: allFiles.filter((i) => i.fileCategory === 'other').length,
+      other: allFiles.filter((i) => (i.fileType === 'other' || i.fileCategory === 'other')).length,
     };
 
     const starredCount = await Media.countDocuments({ isStarred: true, isTrashed: { $ne: true } });
@@ -457,11 +509,6 @@ exports.getUserLibrary = async (req, res) => {
 
 /**
  * GET /api/v1/videos/feed
- * Cursor-based infinite scroll feed for TikTok / Reels vertical playback.
- * Query params:
- *  - category: optional category filter ('All' or specific category name)
- *  - cursor: optional last seen item _id (returns items created before this cursor)
- *  - limit: number of items (default 10)
  */
 exports.getFeed = async (req, res) => {
   try {
@@ -472,6 +519,7 @@ exports.getFeed = async (req, res) => {
       isTrashed: { $ne: true },
       isFolder: { $ne: true },
       $or: [
+        { fileType: 'video' },
         { fileCategory: 'video' },
         { mediaType: 'video' },
       ],
@@ -481,62 +529,58 @@ exports.getFeed = async (req, res) => {
       query.category = category;
     }
 
-    if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
+    if (cursor) {
       query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
     }
 
-    const items = await Media.find(query)
+    const videos = await Media.find(query)
       .sort({ _id: -1 })
       .limit(limit + 1)
       .lean();
 
-    const hasMore = items.length > limit;
-    const feed = hasMore ? items.slice(0, limit) : items;
-    const nextCursor = feed.length > 0 ? feed[feed.length - 1]._id : null;
+    const hasMore = videos.length > limit;
+    const items = hasMore ? videos.slice(0, limit) : videos;
+    const nextCursor = items.length > 0 ? items[items.length - 1]._id.toString() : null;
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.json({
-      items: feed,
+      items: items.map(ensureFileType),
       nextCursor: hasMore ? nextCursor : null,
       hasMore,
-      count: feed.length,
+      count: items.length,
     });
   } catch (err) {
-    console.error('[getFeed error]:', err);
-    res.status(500).json({ message: 'Failed to load video feed' });
+    console.error('[getFeed error]:', err.message);
+    res.status(500).json({ message: 'Failed to fetch video feed' });
   }
 };
 
 /**
  * GET /api/v1/videos/categories
- * Returns distinct category list from active video collection.
  */
-exports.getCategories = async (_req, res) => {
+exports.getCategories = async (req, res) => {
   try {
     const distinct = await Media.distinct('category', {
       isTrashed: { $ne: true },
       isFolder: { $ne: true },
-      $or: [{ fileCategory: 'video' }, { mediaType: 'video' }],
     });
 
-    // Clean up empty, null, or undefined values
-    const categories = distinct
-      .filter((c) => c && typeof c === 'string' && c.trim().length > 0)
-      .map((c) => c.trim());
+    const standardCategories = ['Trending', 'Music', 'Gaming', 'Tech', 'Comedy', 'Entertainment', 'Tutorials'];
+    const set = new Set([...standardCategories]);
 
-    // Ensure default common categories are present if collection is small
-    const defaultCategories = ['Trending', 'Music', 'Gaming', 'Tech', 'Comedy', 'Entertainment', 'Tutorials'];
-    const set = new Set([...categories, ...defaultCategories]);
-
-    res.json({
-      categories: Array.from(set),
+    distinct.forEach((c) => {
+      if (c && typeof c === 'string' && c.trim()) {
+        set.add(c.trim());
+      }
     });
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.json({ categories: Array.from(set) });
   } catch (err) {
-    console.error('[getCategories error]:', err);
-    res.status(500).json({ message: 'Failed to retrieve categories' });
+    console.error('[getCategories error]:', err.message);
+    res.status(500).json({ message: 'Failed to fetch categories' });
   }
 };
 
 // Aliases
 exports.deleteMedia = exports.trashOrDelete;
-exports.toggleLike = exports.toggleStar;
-

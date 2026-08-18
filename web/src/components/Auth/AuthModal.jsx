@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Lock, Mail, User, AlertCircle, Sparkles, LogIn } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const AuthModal = () => {
   const { isAuthOpen, setIsAuthOpen } = useVideoFeed();

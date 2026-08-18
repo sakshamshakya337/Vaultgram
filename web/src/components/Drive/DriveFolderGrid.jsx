@@ -9,7 +9,7 @@ import {
   Trash2,
   Shield
 } from 'lucide-react';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const DriveFolderGrid = ({

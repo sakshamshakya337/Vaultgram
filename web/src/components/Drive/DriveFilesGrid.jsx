@@ -1,7 +1,7 @@
 import React from 'react';
 import { Play, Heart, Download, Clock, HardDrive, Video } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const DriveFilesGrid = ({ videos, onSelectVideo }) => {
   const { toggleLike } = useVideoFeed();

@@ -5,51 +5,58 @@ const path = require('path');
 const { TELEGRAM_API_BASE, TELEGRAM_FILE_BASE } = require('../config/telegram');
 
 /**
- * Detects file category based on extension and MIME type
+ * Detects general fileType from filename and MIME type
  */
-function detectFileCategory(filename = '', mimetype = '') {
+function detectFileType(filename = '', mimetype = '') {
   const ext = path.extname(filename).toLowerCase().replace('.', '');
 
-  if (mimetype.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'avif', 'ico', 'tiff'].includes(ext)) {
-    return 'image';
-  }
   if (mimetype.startsWith('video/') || ['mp4', 'mkv', 'mov', 'webm', 'avi', '3gp', 'flv', 'wmv', 'm4v', 'ts'].includes(ext)) {
     return 'video';
+  }
+  if (mimetype.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'avif', 'ico', 'tiff'].includes(ext)) {
+    return 'image';
   }
   if (mimetype.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma', 'opus'].includes(ext)) {
     return 'audio';
   }
-  if (mimetype === 'application/pdf' || ext === 'pdf') {
-    return 'pdf';
-  }
   if (
-    ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp', 'csv'].includes(ext) ||
+    mimetype === 'application/pdf' ||
     mimetype.includes('word') ||
     mimetype.includes('sheet') ||
-    mimetype.includes('presentation')
+    mimetype.includes('presentation') ||
+    mimetype.startsWith('text/') ||
+    ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp', 'csv', 'md'].includes(ext)
   ) {
     return 'document';
-  }
-  if (
-    ['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'cs', 'go', 'rs', 'php', 'rb', 'sql', 'sh', 'yaml', 'yml', 'xml', 'md'].includes(ext)
-  ) {
-    return 'code';
-  }
-  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso', 'dmg'].includes(ext)) {
-    return 'archive';
   }
   return 'other';
 }
 
 /**
- * Uploads any file directly into Telegram Channel cloud storage (0 disk used).
+ * Detects detailed file category
  */
-async function uploadMediaToTelegram(fileBuffer, filename, mimetype = '', thumbBuffer = null) {
+function detectFileCategory(filename = '', mimetype = '') {
+  const ext = path.extname(filename).toLowerCase().replace('.', '');
+  const type = detectFileType(filename, mimetype);
+
+  if (type === 'video') return 'video';
+  if (type === 'image') return 'image';
+  if (type === 'audio') return 'audio';
+  if (mimetype === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (type === 'document') return 'document';
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso', 'dmg'].includes(ext)) return 'archive';
+  if (['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'cs', 'go', 'rs', 'php', 'rb', 'sql', 'sh', 'yaml', 'yml', 'xml'].includes(ext)) return 'code';
+  return 'other';
+}
+
+/**
+ * Uploads video to Telegram with streaming support
+ */
+async function uploadVideoToTelegram(fileBuffer, filename, mimetype = 'video/mp4', thumbBuffer = null) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const safeFilename = filename || 'file';
+  const safeFilename = filename || 'video.mp4';
   const ext = path.extname(safeFilename).toLowerCase().replace('.', '');
-  const fileCategory = detectFileCategory(safeFilename, mimetype);
 
   if (!chatId || !botToken) {
     throw new Error('TELEGRAM_CHAT_ID or TELEGRAM_BOT_TOKEN is not configured in .env');
@@ -57,38 +64,15 @@ async function uploadMediaToTelegram(fileBuffer, filename, mimetype = '', thumbB
 
   const form = new FormData();
   form.append('chat_id', chatId);
-
-  let endpoint = 'sendDocument';
-  let mediaType = fileCategory;
-
-  if (fileCategory === 'video') {
-    endpoint = 'sendVideo';
-    form.append('video', fileBuffer, { filename: safeFilename, contentType: mimetype || 'video/mp4' });
-    if (thumbBuffer) {
-      form.append('thumbnail', thumbBuffer, { filename: 'thumbnail.jpg', contentType: 'image/jpeg' });
-    }
-    form.append('caption', `🎬 Google Drive Video: ${safeFilename}`);
-    form.append('supports_streaming', 'true');
-  } else if (fileCategory === 'audio') {
-    endpoint = 'sendAudio';
-    form.append('audio', fileBuffer, { filename: safeFilename, contentType: mimetype || 'audio/mpeg' });
-    form.append('caption', `🎵 Google Drive Audio: ${safeFilename}`);
-  } else if (fileCategory === 'image' && fileBuffer.length <= 10 * 1024 * 1024) {
-    endpoint = 'sendPhoto';
-    form.append('photo', fileBuffer, { filename: safeFilename, contentType: mimetype || 'image/jpeg' });
-    form.append('caption', `🖼️ Google Drive Image: ${safeFilename}`);
-  } else {
-    // Documents, PDFs, Archives, Code, Large Images, Executables
-    endpoint = 'sendDocument';
-    form.append('document', fileBuffer, { filename: safeFilename, contentType: mimetype || 'application/octet-stream' });
-    if (thumbBuffer) {
-      form.append('thumbnail', thumbBuffer, { filename: 'thumbnail.jpg', contentType: 'image/jpeg' });
-    }
-    form.append('caption', `📁 Google Drive File: ${safeFilename}`);
+  form.append('video', fileBuffer, { filename: safeFilename, contentType: mimetype || 'video/mp4' });
+  if (thumbBuffer) {
+    form.append('thumbnail', thumbBuffer, { filename: 'thumbnail.jpg', contentType: 'image/jpeg' });
   }
+  form.append('caption', `🎬 StreamVault Video: ${safeFilename}`);
+  form.append('supports_streaming', 'true');
 
   const { data } = await axios.post(
-    `${TELEGRAM_API_BASE()}/${endpoint}`,
+    `${TELEGRAM_API_BASE()}/sendVideo`,
     form,
     {
       headers: form.getHeaders(),
@@ -99,48 +83,97 @@ async function uploadMediaToTelegram(fileBuffer, filename, mimetype = '', thumbB
   );
 
   if (!data.ok || !data.result) {
-    throw new Error(`Telegram upload failed: ${data.description || 'Unknown error'}`);
+    throw new Error(`Telegram video upload failed: ${data.description || 'Unknown error'}`);
   }
 
-  let fileId = '';
-  let duration = 0;
-  let width = 0;
-  let height = 0;
-
-  if (data.result.video) {
-    fileId = data.result.video.file_id;
-    duration = data.result.video.duration || 0;
-    width = data.result.video.width || 0;
-    height = data.result.video.height || 0;
-  } else if (data.result.audio) {
-    fileId = data.result.audio.file_id;
-    duration = data.result.audio.duration || 0;
-  } else if (data.result.photo && Array.isArray(data.result.photo)) {
-    const largestPhoto = data.result.photo[data.result.photo.length - 1];
-    fileId = largestPhoto.file_id;
-    width = largestPhoto.width || 0;
-    height = largestPhoto.height || 0;
-  } else if (data.result.document) {
-    fileId = data.result.document.file_id;
-  }
-
-  console.log(`✅ [Telegram Drive Cloud] ${fileCategory} (${safeFilename}) uploaded (Msg ID: ${data.result.message_id})`);
+  const videoMeta = data.result.video || {};
 
   return {
-    fileId,
+    fileId: videoMeta.file_id || data.result.document?.file_id || '',
     messageId: data.result.message_id,
-    duration,
-    width,
-    height,
+    duration: videoMeta.duration || 0,
+    width: videoMeta.width || 0,
+    height: videoMeta.height || 0,
     fileSizeBytes: fileBuffer.length,
-    mediaType,
+    fileType: 'video',
+    mediaType: 'video',
+    fileCategory: 'video',
+    extension: ext || 'mp4',
+  };
+}
+
+/**
+ * Uploads any document/file (PDF, DOCX, image, zip, etc.) to Telegram cloud
+ */
+async function uploadDocumentToTelegram(fileBuffer, filename, mimetype = 'application/octet-stream', thumbBuffer = null) {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const safeFilename = filename || 'file';
+  const ext = path.extname(safeFilename).toLowerCase().replace('.', '');
+  const fileType = detectFileType(safeFilename, mimetype);
+  const fileCategory = detectFileCategory(safeFilename, mimetype);
+
+  if (!chatId || !botToken) {
+    throw new Error('TELEGRAM_CHAT_ID or TELEGRAM_BOT_TOKEN is not configured in .env');
+  }
+
+  const form = new FormData();
+  form.append('chat_id', chatId);
+  form.append('document', fileBuffer, { filename: safeFilename, contentType: mimetype || 'application/octet-stream' });
+  if (thumbBuffer) {
+    form.append('thumbnail', thumbBuffer, { filename: 'thumbnail.jpg', contentType: 'image/jpeg' });
+  }
+  form.append('caption', `📁 StreamVault File: ${safeFilename}`);
+
+  const { data } = await axios.post(
+    `${TELEGRAM_API_BASE()}/sendDocument`,
+    form,
+    {
+      headers: form.getHeaders(),
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+      timeout: 180000,
+    }
+  );
+
+  if (!data.ok || !data.result) {
+    throw new Error(`Telegram document upload failed: ${data.description || 'Unknown error'}`);
+  }
+
+  const docMeta = data.result.document || {};
+
+  return {
+    fileId: docMeta.file_id || '',
+    messageId: data.result.message_id,
+    duration: 0,
+    width: 0,
+    height: 0,
+    fileSizeBytes: fileBuffer.length,
+    fileType,
+    mediaType: fileCategory,
     fileCategory,
     extension: ext,
   };
 }
 
 /**
- * Resolves a Telegram file_id into a direct streaming Telegram CDN URL.
+ * Uploads media according to auto-detected type
+ */
+async function uploadMediaToTelegram(fileBuffer, filename, mimetype = '', thumbBuffer = null) {
+  const fileType = detectFileType(filename, mimetype);
+  if (fileType === 'video') {
+    try {
+      return await uploadVideoToTelegram(fileBuffer, filename, mimetype, thumbBuffer);
+    } catch (err) {
+      console.warn('sendVideo fallback to sendDocument:', err.message);
+      return await uploadDocumentToTelegram(fileBuffer, filename, mimetype, thumbBuffer);
+    }
+  }
+  return await uploadDocumentToTelegram(fileBuffer, filename, mimetype, thumbBuffer);
+}
+
+/**
+ * Resolves Telegram file_id into direct CDN URL
  */
 async function resolveFileUrl(fileId) {
   if (!fileId) throw new Error('fileId is missing');
@@ -157,7 +190,7 @@ async function resolveFileUrl(fileId) {
 }
 
 /**
- * Deletes a file message from Telegram.
+ * Deletes message from Telegram channel
  */
 async function deleteMediaFromTelegram(messageId) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -173,9 +206,11 @@ async function deleteMediaFromTelegram(messageId) {
 
 module.exports = {
   uploadMediaToTelegram,
-  uploadVideoToTelegram: uploadMediaToTelegram,
+  uploadVideoToTelegram,
+  uploadDocumentToTelegram,
   resolveFileUrl,
   deleteMediaFromTelegram,
   deleteVideoFromTelegram: deleteMediaFromTelegram,
   detectFileCategory,
+  detectFileType,
 };

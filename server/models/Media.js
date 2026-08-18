@@ -22,14 +22,18 @@ const mediaSchema = new mongoose.Schema(
       ref: 'Media',
       default: null, // null means root "My Drive"
     },
+    fileType: {
+      type: String,
+      enum: ['video', 'document', 'image', 'audio', 'other'],
+      default: 'video',
+    },
     mediaType: {
       type: String,
-      enum: ['video', 'image', 'audio', 'pdf', 'document', 'code', 'archive', 'other', 'folder'],
-      default: 'other',
+      default: 'video',
     },
     fileCategory: {
       type: String,
-      default: 'other', // image, video, audio, pdf, document, code, archive, other, folder
+      default: 'video',
     },
     extension: {
       type: String,
@@ -95,10 +99,23 @@ const mediaSchema = new mongoose.Schema(
   { timestamps: true, collection: 'videos' }
 );
 
+// Pre-save hook: Ensure fileType is set
+mediaSchema.pre('save', function (next) {
+  if (!this.fileType) {
+    if (this.mediaType === 'video' || this.fileCategory === 'video') this.fileType = 'video';
+    else if (this.mediaType === 'image' || this.fileCategory === 'image') this.fileType = 'image';
+    else if (this.mediaType === 'audio' || this.fileCategory === 'audio') this.fileType = 'audio';
+    else if (this.mediaType === 'document' || this.mediaType === 'pdf' || this.fileCategory === 'document' || this.fileCategory === 'pdf') this.fileType = 'document';
+    else this.fileType = 'other';
+  }
+  next();
+});
+
 // Indexes
 mediaSchema.index({ title: 'text', description: 'text', category: 'text' });
 mediaSchema.index({ folderId: 1, isTrashed: 1 });
 mediaSchema.index({ isStarred: 1 });
+mediaSchema.index({ fileType: 1 });
 mediaSchema.index({ fileCategory: 1 });
 mediaSchema.index({ createdAt: -1 });
 

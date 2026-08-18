@@ -18,6 +18,7 @@ const {
   trashOrDelete,
   restoreTrash,
   emptyTrash,
+  downloadFile,
 } = require('../controllers/mediaController');
 const { protect, optionalAuth } = require('../middleware/auth');
 const {
@@ -50,6 +51,7 @@ router.delete('/trash/empty', optionalAuth, emptyTrash);
 // ─── Listing, Search, Upload & Direct Delete ─────────────────────────────────
 router.get('/', optionalAuth, listMedia);
 router.get('/search', optionalAuth, searchMedia);
+router.get('/:id/download', optionalAuth, downloadFile);
 router.get('/:id', optionalAuth, getMedia);
 router.post('/upload', optionalAuth, uploadMiddleware, uploadMedia);
 router.delete('/:id', optionalAuth, trashOrDelete);

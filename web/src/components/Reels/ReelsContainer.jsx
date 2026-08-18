@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { ReelCard } from './ReelCard';
 import { TapToUnmuteHint } from './TapToUnmuteHint';
 import { Video, Sparkles, Plus, RefreshCw } from 'lucide-react';

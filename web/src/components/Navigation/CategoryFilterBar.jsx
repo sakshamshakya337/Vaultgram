@@ -1,6 +1,6 @@
 import React from 'react';
 import { Lock, Unlock } from 'lucide-react';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const CategoryFilterBar = () => {
   const {

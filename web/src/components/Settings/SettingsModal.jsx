@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Lock, Unlock, Shield, KeyRound, LogOut, User, Sparkles, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { api } from '../../services/api';
 
 export const SettingsModal = () => {

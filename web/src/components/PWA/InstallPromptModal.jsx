@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Download, Share, PlusSquare, Sparkles, Smartphone } from 'lucide-react';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const InstallPromptModal = () => {
   const { isInstallModalOpen, setIsInstallModalOpen, isIOS, deferredInstallPrompt } = useVideoFeed();

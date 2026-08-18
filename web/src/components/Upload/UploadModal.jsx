@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Video, Sparkles, Plus, AlertCircle, Check } from 'lucide-react';
 import { api, formatBytes } from '../../services/api';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { UploadProgressBar } from './UploadProgressBar';
 
 export const UploadModal = () => {

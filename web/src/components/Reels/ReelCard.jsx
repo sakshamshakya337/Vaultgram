@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Play, Pause, Heart, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../services/api';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { ReelOverlay } from './ReelOverlay';
 
 export const ReelCard = ({ video, isActive, index }) => {

@@ -67,6 +67,7 @@ app.get('/api/v1/health', (_req, res) => {
 app.use('/api/v1/auth', dbMiddleware, authRoutes);
 app.use('/api/v1/media', dbMiddleware, mediaRoutes);
 app.use('/api/v1/videos', dbMiddleware, mediaRoutes);
+app.use('/api/v1/files', dbMiddleware, mediaRoutes);
 app.use('/api/v1/stream', dbMiddleware, streamRoutes);
 
 // Global error handler

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search, LayoutGrid, List, User, LogOut, Shield, ChevronRight, X, Lock, Unlock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const DriveHeader = ({
   searchQuery,

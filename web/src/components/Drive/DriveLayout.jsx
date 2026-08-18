@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus } from 'lucide-react';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { DriveSidebar } from './DriveSidebar';

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Heart, Volume2, VolumeX, Share2, Eye, Sparkles, Music, Check } from 'lucide-react';
-import { useVideoFeed } from '../../contexts/VideoFeedContext';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { formatViews, formatDuration, formatBytes } from '../../services/api';
 
 export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
