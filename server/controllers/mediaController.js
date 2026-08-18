@@ -95,7 +95,16 @@ exports.listMedia = async (req, res) => {
     }
 
     // ─── Locked Categories Security Protection ──────────────────────────────────
-    const userLocked = Array.isArray(req.user?.lockedCategories) ? req.user.lockedCategories : [];
+    let userLocked = Array.isArray(req.user?.lockedCategories) ? req.user.lockedCategories : [];
+    if (userLocked.length === 0) {
+      try {
+        const dbUser = await User.findOne({ 'lockedCategories.0': { $exists: true } }).lean();
+        if (dbUser?.lockedCategories) {
+          userLocked = dbUser.lockedCategories;
+        }
+      } catch {}
+    }
+
     const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
       ? req.query.unlockedCategories
       : Array.isArray(req.query?.unlockedCategories)
@@ -570,10 +579,16 @@ exports.getFeed = async (req, res) => {
 
     if (category && category !== 'All') {
       query.category = category;
-    } else if (req.user) {
+    } else {
       try {
-        // Exclude user's locked categories UNLESS separately unlocked this session
-        const userLocked = Array.isArray(req.user.lockedCategories) ? req.user.lockedCategories : [];
+        let userLocked = Array.isArray(req.user?.lockedCategories) ? req.user.lockedCategories : [];
+        if (userLocked.length === 0) {
+          const dbUser = await User.findOne({ 'lockedCategories.0': { $exists: true } }).lean();
+          if (dbUser?.lockedCategories) {
+            userLocked = dbUser.lockedCategories;
+          }
+        }
+
         const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
           ? req.query.unlockedCategories
           : Array.isArray(req.query?.unlockedCategories)
@@ -596,11 +611,6 @@ exports.getFeed = async (req, res) => {
         }
       } catch (catFilterErr) {
         console.warn('[getFeed category filter fallback warning]:', catFilterErr.message);
-        if (Array.isArray(req.user.lockedCategories) && req.user.lockedCategories.length > 0) {
-          query.category = {
-            $nin: req.user.lockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
-          };
-        }
       }
     }
 

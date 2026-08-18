@@ -85,6 +85,19 @@ export const DriveLayout = () => {
   const files = useMemo(() => {
     let list = driveItems.filter((item) => !item.isFolder);
 
+    // ─── Strict Privacy Protection: Exclude Locked Categories ────────────────
+    if (Array.isArray(lockedCategories) && lockedCategories.length > 0) {
+      list = list.filter((v) => {
+        const cat = (v.category || '').toLowerCase().trim();
+        const isCatLocked = lockedCategories.some(
+          (lc) => lc.toLowerCase().trim() === cat
+        );
+        const isCatUnlocked = sessionUnlockedCategories?.has(cat);
+        // If category is locked and not unlocked in this session, strictly omit it from the UI
+        return !isCatLocked || isCatUnlocked;
+      });
+    }
+
     // If viewing a category filter
     if (selectedCategory !== 'All' && currentNav === 'all') {
       list = list.filter(
@@ -104,7 +117,7 @@ export const DriveLayout = () => {
     }
 
     return list;
-  }, [driveItems, selectedCategory, currentNav, searchQuery]);
+  }, [driveItems, lockedCategories, sessionUnlockedCategories, selectedCategory, currentNav, searchQuery]);
 
   // Handle opening custom folder with PIN check
   const handleOpenFolder = (folder) => {
