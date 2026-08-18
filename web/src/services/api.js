@@ -172,6 +172,20 @@ export const api = {
   },
 
   videos: {
+    getFeed: async (params = {}) => {
+      const queryParams = new URLSearchParams();
+      if (params.category && params.category !== 'All') {
+        queryParams.set('category', params.category);
+      }
+      if (params.cursor) {
+        queryParams.set('cursor', params.cursor);
+      }
+      if (params.limit) {
+        queryParams.set('limit', params.limit);
+      }
+      return request(`/videos/feed?${queryParams.toString()}`);
+    },
+
     list: async (params = {}) => {
       const queryParams = new URLSearchParams();
       queryParams.set('fileCategory', 'video');
@@ -187,9 +201,13 @@ export const api = {
 
     getCategories: async () => {
       try {
-        // Fetch videos to extract distinct categories
-        const res = await request('/videos?fileCategory=video&limit=100');
-        const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
+        const res = await request('/videos/categories');
+        if (res?.categories && Array.isArray(res.categories)) {
+          return res.categories;
+        }
+        // Fallback
+        const listRes = await request('/videos?fileCategory=video&limit=100');
+        const items = listRes?.items || listRes?.videos || (Array.isArray(listRes) ? listRes : []);
         const categories = new Set();
         items.forEach((item) => {
           if (item.category && typeof item.category === 'string' && item.category.trim()) {
@@ -198,8 +216,8 @@ export const api = {
         });
         return Array.from(categories);
       } catch (err) {
-        console.warn('Failed to load categories dynamically:', err.message);
-        return ['Trending', 'Music', 'Gaming', 'Tech', 'Comedy', 'Entertainment', 'Tutorials', 'Shorts'];
+        console.warn('Failed to load categories:', err.message);
+        return ['Trending', 'Music', 'Gaming', 'Tech', 'Comedy', 'Entertainment', 'Tutorials'];
       }
     },
 

@@ -1,61 +1,122 @@
-# ─── Credentials & Secrets ───────────────────────────────────────────────────
+# ─── Environment & Secrets (All Directories) ──────────────────────────────
 .env
 .env*
 *.env
 *.env.*
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 **/.env
 **/.env.*
 **/.env.local
+**/.env.*.local
+**/*.env
+**/*.env.*
+
+# Allow example files
 !**/.env.example
+!**/.env*.example
 !.env.example
-backend/.env
-backend/.env.*
-mobile/.env
-mobile/.env.*
+!.env*.example
+
+# ─── Keys, Certificates & Credentials ────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.cer
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+*.token
+*.secret
+*.secrets
+*serviceAccount*.json
+*service-account*.json
+*credentials*.json
+*google-services*.json
+GoogleService-Info.plist
+id_rsa*
+id_ed25519*
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
-backend/node_modules/
-mobile/node_modules/
+**/node_modules/
+.pnp
+.pnp.js
 
-# ─── Build outputs ────────────────────────────────────────────────────────────
+# ─── Build & Bundler Outputs ──────────────────────────────────────────────────
 dist/
+**/dist/
 build/
+**/build/
 .next/
+**/.next/
 out/
+**/out/
 .vercel/
-
-# ─── Expo / React Native ──────────────────────────────────────────────────────
-mobile/.expo/
-mobile/.expo-shared/
-mobile/android/
-mobile/ios/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
+**/.vercel/
+.vite/
+**/.vite/
 web-build/
+**/web-build/
 
-# ─── Logs ─────────────────────────────────────────────────────────────────────
+# ─── Logs & Debugging ─────────────────────────────────────────────────────────
+logs
+*.log
+**/*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-*.log
+pnpm-debug.log*
+lerna-debug.log*
 
-# ─── OS / Editor ──────────────────────────────────────────────────────────────
+# ─── Mobile / Expo Legacy ─────────────────────────────────────────────────────
+.expo/
+**/.expo/
+.expo-shared/
+**/.expo-shared/
+*.orig.*
+
+# ─── OS & IDE Configuration ───────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-.vscode/settings.json
+[Dd]esktop.ini
 .idea/
+**/.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 *.swp
 *.swo
 *.exe
-cloudflared*
 
-# ─── Misc ─────────────────────────────────────────────────────────────────────
-.cache/
+# ─── Testing & Coverage ───────────────────────────────────────────────────────
 coverage/
+**/coverage/
+.nyc_output/
+*.lcov
+
+# ─── Temporary & Scratch Files ────────────────────────────────────────────────
+.cache/
+**/.cache/
+.temp/
+**/.temp/
+tmp/
+**/tmp/
+*.tmp
+cloudflared*

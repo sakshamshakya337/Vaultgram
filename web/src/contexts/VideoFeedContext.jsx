@@ -6,7 +6,10 @@ const VideoFeedContext = createContext(null);
 export const VideoFeedProvider = ({ children }) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
   
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [categories, setCategories] = useState(['All']);
@@ -56,30 +59,61 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, []);
 
-  // Fetch videos for current category
+  // Fetch initial videos for current category
   const fetchVideos = useCallback(async (cat = selectedCategory) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.videos.list({
+      const res = await api.videos.getFeed({
         category: cat,
-        limit: 50,
+        limit: 10,
       });
-      const rawList = res?.items || res?.videos || (Array.isArray(res) ? res : []);
-      
-      // If no videos exist in backend yet, provide high quality demo reels so the feed works out-of-the-box
-      if (!rawList || rawList.length === 0) {
-        setVideos([]);
-      } else {
-        setVideos(rawList);
-      }
+      const rawList = res?.items || (Array.isArray(res) ? res : []);
+      setVideos(rawList);
+      setNextCursor(res?.nextCursor || null);
+      setHasMore(!!res?.hasMore);
+      setActiveVideoIndex(0);
     } catch (err) {
-      console.warn('API fetch warning:', err.message);
+      console.warn('API fetch feed warning:', err.message);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }, [selectedCategory]);
+
+  // Infinite scroll load more with cursor
+  const loadMoreVideos = useCallback(async () => {
+    if (loadingMore || !hasMore || !nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const res = await api.videos.getFeed({
+        category: selectedCategory,
+        cursor: nextCursor,
+        limit: 10,
+      });
+      const newItems = res?.items || [];
+      if (newItems.length > 0) {
+        setVideos((prev) => {
+          const existingIds = new Set(prev.map((v) => v._id || v.id));
+          const filtered = newItems.filter((v) => !existingIds.has(v._id || v.id));
+          return [...prev, ...filtered];
+        });
+      }
+      setNextCursor(res?.nextCursor || null);
+      setHasMore(!!res?.hasMore);
+    } catch (err) {
+      console.warn('Load more reels error:', err.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, nextCursor, selectedCategory]);
+
+  // Automatically trigger loadMore when scrolling close to bottom
+  useEffect(() => {
+    if (videos.length > 0 && activeVideoIndex >= videos.length - 3 && hasMore && !loadingMore) {
+      loadMoreVideos();
+    }
+  }, [activeVideoIndex, videos.length, hasMore, loadingMore, loadMoreVideos]);
 
   useEffect(() => {
     fetchCategories();
@@ -140,12 +174,15 @@ export const VideoFeedProvider = ({ children }) => {
         videos,
         setVideos,
         loading,
+        loadingMore,
+        hasMore,
         error,
         selectedCategory,
         setSelectedCategory,
         categories,
         fetchCategories,
         fetchVideos,
+        loadMoreVideos,
         isAudioUnlocked,
         setIsAudioUnlocked,
         unlockAudio,
