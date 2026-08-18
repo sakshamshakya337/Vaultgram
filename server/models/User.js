@@ -41,6 +41,20 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    biometricCredentials: [
+      {
+        credentialID: { type: String, required: true },
+        publicKey: { type: String, required: true },
+        counter: { type: Number, default: 0 },
+        deviceLabel: { type: String, default: 'Biometric Authenticator' },
+        transports: { type: [String], default: [] },
+      },
+    ],
+    currentChallenge: {
+      type: String,
+      default: null,
+      select: false,
+    },
   },
   { timestamps: true }
 );

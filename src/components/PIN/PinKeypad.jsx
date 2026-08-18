@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Delete, Lock, Check } from 'lucide-react';
+import { Delete, Lock, Check, Fingerprint } from 'lucide-react';
 
 export const PinKeypad = ({
   title = 'Enter PIN',
@@ -10,6 +10,8 @@ export const PinKeypad = ({
   isShaking,
   loading = false,
   rateLimitCountdown = null,
+  hasBiometrics = false,
+  onBiometricClick,
 }) => {
   const [pin, setPin] = useState('');
 
@@ -18,9 +20,6 @@ export const PinKeypad = ({
     if (pin.length < 6) {
       const nextPin = pin + digit;
       setPin(nextPin);
-      if (nextPin.length >= 4) {
-        // Auto-attempt when reaching 4 or user presses submit
-      }
     }
   };
 
@@ -40,18 +39,31 @@ export const PinKeypad = ({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 w-full max-w-xs mx-auto text-center select-none">
+    <div className="flex flex-col items-center justify-center p-4 w-full max-w-xs mx-auto text-center select-none">
       {/* Icon */}
-      <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-cyan-500/20 to-rose-500/20 border border-white/10 flex items-center justify-center text-cyan-400 mb-4 shadow-xl">
-        <Lock className="w-7 h-7" />
+      <div className="w-14 h-14 rounded-3xl bg-gradient-to-tr from-cyan-500/20 to-rose-500/20 border border-white/10 flex items-center justify-center text-cyan-400 mb-3 shadow-xl">
+        {hasBiometrics ? <Fingerprint className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
       </div>
 
-      <h2 className="text-xl font-black text-white tracking-tight mb-1">{title}</h2>
-      <p className="text-xs text-zinc-400 mb-6">{subtitle}</p>
+      <h2 className="text-lg font-black text-white tracking-tight mb-1">{title}</h2>
+      <p className="text-xs text-zinc-400 mb-5">{subtitle}</p>
+
+      {/* Biometric Quick Button (if enabled) */}
+      {hasBiometrics && onBiometricClick && (
+        <button
+          type="button"
+          onClick={onBiometricClick}
+          disabled={loading}
+          className="mb-4 flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+        >
+          <Fingerprint className="w-4 h-4 text-cyan-400 animate-pulse" />
+          <span>Tap to use Face ID / Touch ID</span>
+        </button>
+      )}
 
       {/* PIN Dots Indicator */}
       <div
-        className={`flex items-center justify-center gap-3 mb-6 ${
+        className={`flex items-center justify-center gap-3 mb-5 ${
           isShaking ? 'animate-shake' : ''
         }`}
       >
@@ -84,7 +96,7 @@ export const PinKeypad = ({
       )}
 
       {/* Keypad Grid */}
-      <div className="grid grid-cols-3 gap-3.5 w-full my-2">
+      <div className="grid grid-cols-3 gap-3 w-full my-1">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
           <button
             key={num}
@@ -97,8 +109,18 @@ export const PinKeypad = ({
           </button>
         ))}
 
-        {/* Bottom Row */}
-        {onCancel ? (
+        {/* Bottom Row: Biometric Shortcut or Cancel */}
+        {hasBiometrics && onBiometricClick ? (
+          <button
+            type="button"
+            onClick={onBiometricClick}
+            disabled={loading}
+            className="w-16 h-16 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 flex items-center justify-center transition-all cursor-pointer active:scale-95"
+            title="Authenticate with Biometrics"
+          >
+            <Fingerprint className="w-6 h-6" />
+          </button>
+        ) : onCancel ? (
           <button
             type="button"
             onClick={onCancel}
@@ -137,7 +159,7 @@ export const PinKeypad = ({
           type="button"
           onClick={handleVerify}
           disabled={loading || !!rateLimitCountdown}
-          className="mt-4 w-full py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer animate-fade-in"
+          className="mt-3.5 w-full py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm shadow-lg shadow-cyan-500/25 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer animate-fade-in"
         >
           {loading ? (
             <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />
@@ -147,6 +169,17 @@ export const PinKeypad = ({
               <span>Unlock</span>
             </>
           )}
+        </button>
+      )}
+
+      {/* Cancel button if biometric button took bottom left spot */}
+      {hasBiometrics && onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-2 text-xs text-zinc-500 hover:text-zinc-300 font-semibold cursor-pointer py-1"
+        >
+          Cancel
         </button>
       )}
     </div>

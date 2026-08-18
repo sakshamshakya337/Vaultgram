@@ -25,10 +25,28 @@ app.get('*', (req, res, next) => {
 });
 
 if (process.env.VERCEL !== '1') {
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Personal Storage server running on http://localhost:${PORT}`);
     console.log(`   API Endpoint:    http://localhost:${PORT}/api/v1/health`);
   });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use. Retrying in 1s or terminate the conflicting process.`);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+
+  const shutdown = () => {
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.once('SIGUSR2', shutdown);
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 module.exports = app;

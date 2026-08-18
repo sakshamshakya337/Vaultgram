@@ -1,17 +1,32 @@
-import React, { useState } from 'react';
-import { X, Lock, Unlock, Shield, KeyRound, LogOut, User, Sparkles, Check, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Lock,
+  Unlock,
+  Shield,
+  KeyRound,
+  LogOut,
+  User,
+  Sparkles,
+  Check,
+  AlertCircle,
+  Fingerprint,
+  Smartphone
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { api } from '../../services/api';
 
 export const SettingsModal = () => {
   const {
     user,
     isAuthenticated,
     hasPin,
+    hasBiometrics,
     logout,
     setIsSetPinModalOpen,
     removePin,
+    enableBiometrics,
+    disableBiometrics,
     isSettingsOpen,
     setIsSettingsOpen,
   } = useAuth();
@@ -26,6 +41,23 @@ export const SettingsModal = () => {
   const [removePinInput, setRemovePinInput] = useState('');
   const [removeError, setRemoveError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricError, setBiometricError] = useState('');
+
+  // Feature detection for WebAuthn
+  const [supportsBiometrics, setSupportsBiometrics] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+      if (typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+        window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+          .then((available) => setSupportsBiometrics(!!available))
+          .catch(() => setSupportsBiometrics(true));
+      } else {
+        setSupportsBiometrics(true);
+      }
+    }
+  }, []);
 
   if (!isSettingsOpen) return null;
 
@@ -56,6 +88,41 @@ export const SettingsModal = () => {
     }
   };
 
+  const handleEnableBiometrics = async () => {
+    setBiometricError('');
+    setBiometricLoading(true);
+    try {
+      const res = await enableBiometrics('Vaultgram Device');
+      if (res?.verified) {
+        showSuccess('Biometric authentication enabled successfully!');
+      } else {
+        setBiometricError(res?.message || 'Biometric registration was cancelled or failed.');
+      }
+    } catch (err) {
+      console.warn('Biometric registration error:', err.message);
+      if (err.name === 'NotAllowedError') {
+        setBiometricError('Biometric prompt was cancelled.');
+      } else {
+        setBiometricError(err.message || 'Failed to setup biometrics');
+      }
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
+
+  const handleDisableBiometrics = async () => {
+    setBiometricError('');
+    setBiometricLoading(true);
+    try {
+      await disableBiometrics();
+      showSuccess('Biometrics disabled. PIN remains active.');
+    } catch (err) {
+      setBiometricError(err.message || 'Failed to disable biometrics');
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
+
   const showSuccess = (msg) => {
     setActionSuccess(msg);
     setTimeout(() => setActionSuccess(''), 2500);
@@ -71,8 +138,8 @@ export const SettingsModal = () => {
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white leading-tight">Privacy & Settings</h3>
-              <p className="text-xs text-zinc-400">App passcode & category protection</p>
+              <h3 className="text-base font-bold text-white leading-tight">Privacy & Security</h3>
+              <p className="text-xs text-zinc-400">Passcode, Face ID & folder locks</p>
             </div>
           </div>
           <button
@@ -123,10 +190,10 @@ export const SettingsModal = () => {
               <div>
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <KeyRound className="w-4 h-4 text-cyan-400" />
-                  <span>App Passcode (PIN)</span>
+                  <span>Passcode (PIN)</span>
                 </h4>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Protects StreamVault on startup and app switching
+                  Protects locked folders and Reels feed
                 </p>
               </div>
               <span
@@ -202,6 +269,75 @@ export const SettingsModal = () => {
             )}
           </div>
 
+          {/* Biometric WebAuthn Section (Fingerprint / Face ID) */}
+          {supportsBiometrics && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Fingerprint className="w-4 h-4 text-cyan-400" />
+                    <span>Biometric Unlock</span>
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Unlock folders & Reels instantly with Face ID or Fingerprint
+                  </p>
+                </div>
+                <span
+                  className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
+                    hasBiometrics
+                      ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                      : 'bg-zinc-800 text-zinc-400'
+                  }`}
+                >
+                  {hasBiometrics ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+
+              {biometricError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs animate-fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{biometricError}</span>
+                </div>
+              )}
+
+              <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-bold text-white">
+                      {hasBiometrics ? 'Face ID / Fingerprint Registered' : 'Hardware Biometrics'}
+                    </h5>
+                    <p className="text-[11px] text-zinc-400">
+                      {hasBiometrics
+                        ? 'Auto-prompts on lock screens with PIN fallback'
+                        : 'Use device biometric sensor for faster access'}
+                    </p>
+                  </div>
+                </div>
+
+                {hasBiometrics ? (
+                  <button
+                    disabled={biometricLoading}
+                    onClick={handleDisableBiometrics}
+                    className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {biometricLoading ? 'Updating...' : 'Disable'}
+                  </button>
+                ) : (
+                  <button
+                    disabled={biometricLoading}
+                    onClick={handleEnableBiometrics}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-bold shadow-md shadow-cyan-500/20 hover:opacity-90 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {biometricLoading ? 'Setting up...' : 'Enable'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Category-Level Folder Locks */}
           <div className="space-y-3">
             <div>
@@ -210,7 +346,7 @@ export const SettingsModal = () => {
                 <span>Category Locks</span>
               </h4>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Lock specific categories so only you can view them with your PIN
+                Lock specific categories so only you can view them with your PIN / Biometrics
               </p>
             </div>
 

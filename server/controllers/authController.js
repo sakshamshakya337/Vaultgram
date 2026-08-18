@@ -5,6 +5,27 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const RefreshToken = require('../models/RefreshToken');
 
+const {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} = require('@simplewebauthn/server');
+
+const getRpId = (req) => {
+  if (process.env.RP_ID) return process.env.RP_ID;
+  const host = req.get('host') || req.hostname || 'localhost';
+  return host.split(':')[0]; // strip port
+};
+
+const getExpectedOrigin = (req) => {
+  const origin = req.get('origin');
+  if (origin) return origin.replace(/\/+$/, '');
+  const host = req.get('host') || 'localhost:3000';
+  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  return `${protocol}://${host}`;
+};
+
 const generateAccessToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'fallback_secret', {
     expiresIn: process.env.JWT_ACCESS_EXPIRY || process.env.JWT_EXPIRY || '30d',
@@ -29,6 +50,7 @@ const formatUser = (user) => ({
   role: user.role,
   avatar: user.avatar,
   hasPin: !!user.pinHash,
+  hasBiometrics: Array.isArray(user.biometricCredentials) && user.biometricCredentials.length > 0,
   lockedCategories: user.lockedCategories || [],
 });
 
@@ -372,9 +394,236 @@ exports.getLockedStatus = async (req, res) => {
     res.json({
       lockedCategories: user?.lockedCategories || [],
       hasPin: !!user?.pinHash,
+      hasBiometrics: Array.isArray(user?.biometricCredentials) && user.biometricCredentials.length > 0,
     });
   } catch (err) {
     console.error('[getLockedStatus error]:', err.message);
     res.status(500).json({ message: 'Failed to retrieve locked status' });
+  }
+};
+
+// ─── Biometric WebAuthn Controllers ─────────────────────────────────────────
+
+/**
+ * POST /api/v1/auth/biometric/register-options
+ */
+exports.getBiometricRegisterOptions = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const rpID = getRpId(req);
+    const excludeCredentials = (user.biometricCredentials || []).map((c) => ({
+      id: c.credentialID,
+      type: 'public-key',
+      transports: c.transports || [],
+    }));
+
+    const options = await generateRegistrationOptions({
+      rpName: 'Vaultgram',
+      rpID,
+      userID: new Uint8Array(Buffer.from(user._id.toString())),
+      userName: user.email,
+      userDisplayName: user.username,
+      attestationType: 'none',
+      excludeCredentials,
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        userVerification: 'preferred',
+      },
+    });
+
+    user.currentChallenge = options.challenge;
+    await user.save();
+
+    res.json(options);
+  } catch (err) {
+    console.error('[getBiometricRegisterOptions error]:', err.message);
+    res.status(500).json({ message: 'Failed to generate biometric registration options' });
+  }
+};
+
+/**
+ * POST /api/v1/auth/biometric/register-verify
+ */
+exports.verifyBiometricRegistration = async (req, res) => {
+  try {
+    const { response, deviceLabel } = req.body;
+    if (!response) {
+      return res.status(400).json({ message: 'Biometric response is required' });
+    }
+
+    const user = await User.findById(req.user._id).select('+currentChallenge');
+    if (!user || !user.currentChallenge) {
+      return res.status(400).json({ message: 'Challenge expired. Please retry.' });
+    }
+
+    const rpID = getRpId(req);
+    const expectedOrigin = getExpectedOrigin(req);
+
+    const allowedOrigins = [
+      expectedOrigin,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'https://vaultgram-two.vercel.app',
+    ];
+
+    const verification = await verifyRegistrationResponse({
+      response,
+      expectedChallenge: user.currentChallenge,
+      expectedOrigin: allowedOrigins,
+      expectedRPID: rpID,
+    });
+
+    if (!verification.verified || !verification.registrationInfo) {
+      return res.status(400).json({ verified: false, message: 'Biometric verification failed' });
+    }
+
+    const { credential } = verification.registrationInfo;
+    const credentialID = typeof credential.id === 'string'
+      ? credential.id
+      : Buffer.from(credential.id).toString('base64url');
+    const publicKey = Buffer.from(credential.publicKey).toString('base64url');
+
+    // Store in user's biometricCredentials
+    user.biometricCredentials = user.biometricCredentials || [];
+    user.biometricCredentials.push({
+      credentialID,
+      publicKey,
+      counter: credential.counter || 0,
+      deviceLabel: deviceLabel || 'Biometric Authenticator',
+      transports: response?.response?.transports || [],
+    });
+
+    user.currentChallenge = null;
+    await user.save();
+
+    res.json({
+      verified: true,
+      hasBiometrics: true,
+      message: 'Biometric registered successfully',
+    });
+  } catch (err) {
+    console.error('[verifyBiometricRegistration error]:', err.message);
+    res.status(500).json({ verified: false, message: err.message || 'Failed to verify biometric registration' });
+  }
+};
+
+/**
+ * POST /api/v1/auth/biometric/auth-options
+ */
+exports.getBiometricAuthOptions = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user || !user.biometricCredentials || user.biometricCredentials.length === 0) {
+      return res.status(400).json({ message: 'No biometric credentials registered on this account' });
+    }
+
+    const rpID = getRpId(req);
+    const allowCredentials = user.biometricCredentials.map((c) => ({
+      id: c.credentialID,
+      type: 'public-key',
+      transports: c.transports || [],
+    }));
+
+    const options = await generateAuthenticationOptions({
+      rpID,
+      allowCredentials,
+      userVerification: 'preferred',
+    });
+
+    user.currentChallenge = options.challenge;
+    await user.save();
+
+    res.json(options);
+  } catch (err) {
+    console.error('[getBiometricAuthOptions error]:', err.message);
+    res.status(500).json({ message: 'Failed to generate biometric authentication options' });
+  }
+};
+
+/**
+ * POST /api/v1/auth/biometric/auth-verify
+ */
+exports.verifyBiometricAuth = async (req, res) => {
+  try {
+    const { response } = req.body;
+    if (!response || !response.id) {
+      return res.status(400).json({ valid: false, message: 'Invalid biometric response' });
+    }
+
+    const user = await User.findById(req.user._id).select('+currentChallenge');
+    if (!user || !user.currentChallenge) {
+      return res.status(400).json({ valid: false, message: 'Session expired. Please retry.' });
+    }
+
+    const dbCred = (user.biometricCredentials || []).find((c) => c.credentialID === response.id);
+    if (!dbCred) {
+      return res.status(400).json({ valid: false, message: 'Unrecognized biometric authenticator' });
+    }
+
+    const rpID = getRpId(req);
+    const expectedOrigin = getExpectedOrigin(req);
+
+    const allowedOrigins = [
+      expectedOrigin,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'https://vaultgram-two.vercel.app',
+    ];
+
+    const verification = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge: user.currentChallenge,
+      expectedOrigin: allowedOrigins,
+      expectedRPID: rpID,
+      credential: {
+        id: dbCred.credentialID,
+        publicKey: Buffer.from(dbCred.publicKey, 'base64url'),
+        counter: dbCred.counter || 0,
+        transports: dbCred.transports || [],
+      },
+    });
+
+    if (!verification.verified) {
+      return res.status(401).json({ valid: false, message: 'Biometric verification failed' });
+    }
+
+    dbCred.counter = verification.authenticationInfo.newCounter;
+    user.currentChallenge = null;
+    await user.save();
+
+    res.json({
+      valid: true,
+      message: 'Biometrics verified successfully',
+    });
+  } catch (err) {
+    console.error('[verifyBiometricAuth error]:', err.message);
+    res.status(500).json({ valid: false, message: err.message || 'Biometric authentication error' });
+  }
+};
+
+/**
+ * POST /api/v1/auth/biometric/remove
+ */
+exports.removeBiometrics = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    user.biometricCredentials = [];
+    await user.save();
+
+    res.json({
+      message: 'Biometrics disabled successfully',
+      hasBiometrics: false,
+    });
+  } catch (err) {
+    console.error('[removeBiometrics error]:', err.message);
+    res.status(500).json({ message: 'Failed to disable biometrics' });
   }
 };

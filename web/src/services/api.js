@@ -315,6 +315,23 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ pin }),
       }),
+
+    // Biometric WebAuthn APIs
+    biometric: {
+      getRegisterOptions: () => request('/auth/biometric/register-options', { method: 'POST' }),
+      verifyRegistration: (response, deviceLabel) =>
+        request('/auth/biometric/register-verify', {
+          method: 'POST',
+          body: JSON.stringify({ response, deviceLabel }),
+        }),
+      getAuthOptions: () => request('/auth/biometric/auth-options', { method: 'POST' }),
+      verifyAuth: (response) =>
+        request('/auth/biometric/auth-verify', {
+          method: 'POST',
+          body: JSON.stringify({ response }),
+        }),
+      remove: () => request('/auth/biometric/remove', { method: 'POST' }),
+    },
   },
 
   videos: {

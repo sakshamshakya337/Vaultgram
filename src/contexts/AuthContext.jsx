@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   api,
+  getAccessToken,
   getStoredRefreshToken,
   getStoredUser,
   setStoredUser,
   removeStoredUser,
-  setAccessToken,
   clearAccessToken,
 } from '../services/api';
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 const AuthContext = createContext(null);
 
@@ -74,7 +75,6 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const res = await api.auth.login(email, password);
     setUser(res.user);
-    // If newly logged in user has no PIN set, prompt them optionally
     if (res.user && !res.user.hasPin) {
       setTimeout(() => setIsSetPinModalOpen(true), 600);
     }
@@ -108,6 +108,34 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
+  // WebAuthn Biometrics: Register fingerprint / Face ID
+  const enableBiometrics = async (deviceLabel = 'My Device') => {
+    const options = await api.auth.biometric.getRegisterOptions();
+    const regResponse = await startRegistration({ optionsJSON: options });
+    const verifyRes = await api.auth.biometric.verifyRegistration(regResponse, deviceLabel);
+    if (verifyRes?.verified) {
+      setUser((prev) => (prev ? { ...prev, hasBiometrics: true } : prev));
+      const meRes = await api.auth.me().catch(() => null);
+      if (meRes?.user) setUser(meRes.user);
+    }
+    return verifyRes;
+  };
+
+  // WebAuthn Biometrics: Disable fingerprint / Face ID
+  const disableBiometrics = async () => {
+    const res = await api.auth.biometric.remove();
+    setUser((prev) => (prev ? { ...prev, hasBiometrics: false } : prev));
+    return res;
+  };
+
+  // WebAuthn Biometrics: Verify assertion
+  const verifyBiometrics = async () => {
+    const options = await api.auth.biometric.getAuthOptions();
+    const authResponse = await startAuthentication({ optionsJSON: options });
+    const verifyRes = await api.auth.biometric.verifyAuth(authResponse);
+    return verifyRes;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -115,6 +143,7 @@ export const AuthProvider = ({ children }) => {
         setUser,
         isAuthenticated: !!user,
         hasPin: !!user?.hasPin,
+        hasBiometrics: !!user?.hasBiometrics,
         loading,
         login,
         register,
@@ -122,6 +151,9 @@ export const AuthProvider = ({ children }) => {
         setPin: handleSetPin,
         verifyPin: api.auth.verifyPin,
         removePin: handleRemovePin,
+        enableBiometrics,
+        disableBiometrics,
+        verifyBiometrics,
         isSetPinModalOpen,
         setIsSetPinModalOpen,
         isSettingsOpen,

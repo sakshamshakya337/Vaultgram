@@ -23,6 +23,7 @@
     "preview": "npm --prefix web run preview"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.3.2",
     "autoprefixer": "^10.5.4",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
