@@ -13,17 +13,45 @@ const {
 } = require('@simplewebauthn/server');
 
 const getRpId = (req) => {
-  if (process.env.RP_ID) return process.env.RP_ID;
-  const host = req.get('host') || req.hostname || 'localhost';
-  return host.split(':')[0]; // strip port
+  // 1. Explicit environment variable overrides
+  const envRpId = (process.env.WEBAUTHN_RP_ID || process.env.RP_ID || '').trim();
+  if (envRpId) return envRpId;
+
+  // 2. Client origin / referer inspection
+  const origin = req.get('origin') || req.get('referer') || '';
+  if (origin) {
+    try {
+      const parsed = new URL(origin);
+      if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+        return 'localhost';
+      }
+      // Never use Render backend domain as WebAuthn RP ID
+      if (parsed.hostname && !parsed.hostname.includes('onrender.com')) {
+        return parsed.hostname;
+      }
+    } catch {}
+  }
+
+  // 3. Localhost development fallback
+  const host = (req.get('host') || req.hostname || '').split(':')[0];
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return 'localhost';
+  }
+
+  // 4. Default production frontend WebAuthn RP ID
+  return 'vaultgram-two.vercel.app';
 };
 
 const getExpectedOrigin = (req) => {
-  const origin = req.get('origin');
-  if (origin) return origin.replace(/\/+$/, '');
-  const host = req.get('host') || 'localhost:3000';
-  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  return `${protocol}://${host}`;
+  const origin = req.get('origin') || req.get('referer');
+  if (origin) {
+    try {
+      const parsed = new URL(origin);
+      return `${parsed.protocol}//${parsed.host}`.replace(/\/+$/, '');
+    } catch {}
+    return origin.replace(/\/+$/, '');
+  }
+  return 'https://vaultgram-two.vercel.app';
 };
 
 const generateAccessToken = (id) => {
