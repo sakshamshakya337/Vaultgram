@@ -600,14 +600,19 @@ exports.getFeed = async (req, res) => {
           .map((c) => c.trim().toLowerCase())
           .filter(Boolean);
 
-        const activeLockedCategories = userLocked.filter(
-          (c) => !unlockedList.includes(c.toLowerCase())
-        );
+        // If client authenticated with PIN/Biometrics for Reels feed ('all' or 'reels'), include all videos
+        if (rawUnlocked.toLowerCase() === 'all' || unlockedList.includes('all') || unlockedList.includes('reels')) {
+          // Authenticated Reels session: all categories permitted
+        } else {
+          const activeLockedCategories = userLocked.filter(
+            (c) => !unlockedList.includes(c.toLowerCase())
+          );
 
-        if (activeLockedCategories.length > 0) {
-          query.category = {
-            $nin: activeLockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
-          };
+          if (activeLockedCategories.length > 0) {
+            query.category = {
+              $nin: activeLockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
+            };
+          }
         }
       } catch (catFilterErr) {
         console.warn('[getFeed category filter fallback warning]:', catFilterErr.message);

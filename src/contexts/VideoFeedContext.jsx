@@ -178,7 +178,10 @@ export const VideoFeedProvider = ({ children }) => {
       setActiveVideoIndex(0);
 
       try {
-        const unlockedCats = Array.from(sessionUnlockedCategories).join(',');
+        const isReelsUnlocked = sessionUnlockedReels || forceUnlock;
+        const unlockedCats = isReelsUnlocked
+          ? 'all'
+          : Array.from(sessionUnlockedCategories).join(',');
         const res = await api.videos.getFeed({
           category: cat,
           limit: 10,
@@ -218,7 +221,9 @@ export const VideoFeedProvider = ({ children }) => {
 
     setLoadingMore(true);
     try {
-      const unlockedCats = Array.from(sessionUnlockedCategories).join(',');
+      const unlockedCats = sessionUnlockedReels
+        ? 'all'
+        : Array.from(sessionUnlockedCategories).join(',');
       const res = await api.videos.getFeed({
         category: targetCategory,
         cursor: targetCursor,
