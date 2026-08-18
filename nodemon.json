@@ -1,0 +1,17 @@
+{
+  "watch": [
+    "server/",
+    "server.js"
+  ],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    "web/",
+    "src/",
+    "dist/",
+    "public/",
+    "node_modules/",
+    ".git/",
+    "*.log"
+  ],
+  "delay": "1000"
+}
