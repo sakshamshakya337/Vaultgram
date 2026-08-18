@@ -53,10 +53,10 @@ html, body {
 
 /* Custom Backdrop Blur */
 .glass-panel {
-  background: rgba(18, 18, 22, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 18, 22, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .glass-pill {
@@ -66,6 +66,11 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+/* Keypad Button */
+.keypad-btn {
+  @apply w-16 h-16 rounded-full bg-zinc-900/90 border border-white/10 hover:bg-zinc-800 active:bg-zinc-700 active:scale-95 text-white font-bold text-xl flex items-center justify-center transition-all shadow-lg;
+}
+
 /* Safe area insets */
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
@@ -73,6 +78,17 @@ html, body {
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Shake Animation for Wrong PIN */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-12px); }
+  40%, 80% { transform: translateX(12px); }
+}
+
+.animate-shake {
+  animation: shake 0.45s ease-in-out;
 }
 
 /* Range input styling for video seek */

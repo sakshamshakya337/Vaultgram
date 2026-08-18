@@ -1,65 +1,111 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api, getStoredToken, getStoredUser } from '../services/api';
+import {
+  api,
+  getStoredRefreshToken,
+  getStoredUser,
+  setStoredUser,
+  removeStoredUser,
+  setAccessToken,
+  clearAccessToken,
+} from '../services/api';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(getStoredUser());
-  const [token, setToken] = useState(getStoredToken());
   const [loading, setLoading] = useState(true);
+  const [isSetPinModalOpen, setIsSetPinModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => {
-      const savedToken = getStoredToken();
-      if (savedToken) {
+      const savedRefreshToken = getStoredRefreshToken();
+      if (savedRefreshToken) {
         try {
-          const res = await api.auth.me();
-          if (res?.user) {
-            setUser(res.user);
+          // Silent refresh on app load
+          const refreshRes = await api.auth.refresh();
+          if (refreshRes?.accessToken) {
+            const meRes = await api.auth.me();
+            if (meRes?.user) {
+              setUser(meRes.user);
+              setStoredUser(meRes.user);
+            }
           }
-        } catch {
-          // Token expired or invalid
-          api.auth.logout();
+        } catch (err) {
+          console.warn('Initial session restore note:', err.message);
+          clearAccessToken();
           setUser(null);
-          setToken('');
+          removeStoredUser();
         }
       }
       setLoading(false);
     };
 
     initAuth();
+
+    // Listen for unauthorized events from API interceptor
+    const handleUnauthorized = () => {
+      setUser(null);
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
   const login = async (email, password) => {
     const res = await api.auth.login(email, password);
     setUser(res.user);
-    setToken(res.token);
+    // If newly logged in user has no PIN set, prompt them optionally
+    if (res.user && !res.user.hasPin) {
+      setTimeout(() => setIsSetPinModalOpen(true), 600);
+    }
     return res;
   };
 
   const register = async (username, email, password) => {
     const res = await api.auth.register(username, email, password);
     setUser(res.user);
-    setToken(res.token);
+    if (res.user && !res.user.hasPin) {
+      setTimeout(() => setIsSetPinModalOpen(true), 600);
+    }
     return res;
   };
 
-  const logout = () => {
-    api.auth.logout();
+  const logout = async () => {
+    await api.auth.logout();
     setUser(null);
-    setToken('');
+  };
+
+  const handleSetPin = async (pin) => {
+    const res = await api.auth.setPin(pin);
+    setUser((prev) => (prev ? { ...prev, hasPin: true } : prev));
+    setIsSetPinModalOpen(false);
+    return res;
+  };
+
+  const handleRemovePin = async (pin) => {
+    const res = await api.auth.removePin(pin);
+    setUser((prev) => (prev ? { ...prev, hasPin: false, lockedCategories: [] } : prev));
+    return res;
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
-        isAuthenticated: !!token,
+        setUser,
+        isAuthenticated: !!user,
+        hasPin: !!user?.hasPin,
         loading,
         login,
         register,
         logout,
+        setPin: handleSetPin,
+        verifyPin: api.auth.verifyPin,
+        removePin: handleRemovePin,
+        isSetPinModalOpen,
+        setIsSetPinModalOpen,
+        isSettingsOpen,
+        setIsSettingsOpen,
       }}
     >
       {children}

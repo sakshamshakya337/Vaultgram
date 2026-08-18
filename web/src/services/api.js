@@ -7,29 +7,24 @@ const RAW_API_URL = import.meta.env.VITE_API_BASE_URL || '';
 export const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 
-const TOKEN_KEY = 'streamvault_token';
 const REFRESH_TOKEN_KEY = 'streamvault_refresh_token';
 const USER_KEY = 'streamvault_user';
 
-export const getStoredToken = () => {
-  try {
-    return localStorage.getItem(TOKEN_KEY) || '';
-  } catch {
-    return '';
-  }
+// In-Memory Access Token (never stored in localStorage for security)
+let inMemoryAccessToken = '';
+
+export const getAccessToken = () => inMemoryAccessToken;
+export const setAccessToken = (token) => {
+  inMemoryAccessToken = token || '';
+};
+export const clearAccessToken = () => {
+  inMemoryAccessToken = '';
 };
 
-export const setStoredToken = (token) => {
-  try {
-    localStorage.setItem(TOKEN_KEY, token);
-  } catch {}
-};
-
-export const removeStoredToken = () => {
-  try {
-    localStorage.removeItem(TOKEN_KEY);
-  } catch {}
-};
+// Backward compatibility helper
+export const getStoredToken = () => inMemoryAccessToken;
+export const setStoredToken = (token) => setAccessToken(token);
+export const removeStoredToken = () => clearAccessToken();
 
 export const getStoredRefreshToken = () => {
   try {
@@ -75,7 +70,7 @@ export const removeStoredUser = () => {
 let refreshPromise = null;
 
 async function request(path, options = {}) {
-  const token = getStoredToken();
+  const token = getAccessToken();
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers = {
@@ -91,8 +86,8 @@ async function request(path, options = {}) {
     headers,
   });
 
-  // If token expired (401) and not already on a refresh/login route, attempt refresh
-  if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/refresh')) {
+  // Interceptor: If 401 Unauthorized, perform silent refresh and retry request
+  if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/register') && !path.startsWith('/auth/refresh')) {
     const refreshToken = getStoredRefreshToken();
     if (refreshToken) {
       try {
@@ -102,7 +97,13 @@ async function request(path, options = {}) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refreshToken }),
           })
-            .then((r) => r.json())
+            .then(async (r) => {
+              if (!r.ok) {
+                const errJson = await r.json().catch(() => null);
+                throw new Error(errJson?.message || 'Refresh failed');
+              }
+              return r.json();
+            })
             .finally(() => {
               refreshPromise = null;
             });
@@ -110,12 +111,12 @@ async function request(path, options = {}) {
 
         const refreshData = await refreshPromise;
         if (refreshData?.accessToken) {
-          setStoredToken(refreshData.accessToken);
+          setAccessToken(refreshData.accessToken);
           if (refreshData.refreshToken) {
             setStoredRefreshToken(refreshData.refreshToken);
           }
 
-          // Retry original request with new token
+          // Retry the original failed request with the new access token
           const retryHeaders = {
             ...headers,
             Authorization: `Bearer ${refreshData.accessToken}`,
@@ -126,7 +127,11 @@ async function request(path, options = {}) {
           });
         }
       } catch (err) {
-        console.warn('Auto token refresh failed:', err);
+        console.warn('Silent token refresh failed:', err.message);
+        clearAccessToken();
+        removeStoredRefreshToken();
+        removeStoredUser();
+        window.dispatchEvent(new Event('auth:unauthorized'));
       }
     }
   }
@@ -135,7 +140,10 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const message = data?.message || `HTTP error ${response.status}`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -144,7 +152,7 @@ async function request(path, options = {}) {
 export function uploadWithProgress(formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const token = getStoredToken();
+    const token = getAccessToken();
 
     const endpoint = `${BASE_URL}/videos/upload`;
     const url = token
@@ -206,12 +214,13 @@ export const api = {
       });
       const token = data?.accessToken || data?.token;
       if (token) {
-        setStoredToken(token);
+        setAccessToken(token);
         if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
         if (data.user) setStoredUser(data.user);
       }
       return data;
     },
+
     register: async (username, email, password) => {
       const data = await request('/auth/register', {
         method: 'POST',
@@ -219,12 +228,13 @@ export const api = {
       });
       const token = data?.accessToken || data?.token;
       if (token) {
-        setStoredToken(token);
+        setAccessToken(token);
         if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
         if (data.user) setStoredUser(data.user);
       }
       return data;
     },
+
     refresh: async () => {
       const refreshToken = getStoredRefreshToken();
       if (!refreshToken) return null;
@@ -233,11 +243,12 @@ export const api = {
         body: JSON.stringify({ refreshToken }),
       });
       if (data?.accessToken) {
-        setStoredToken(data.accessToken);
+        setAccessToken(data.accessToken);
         if (data.refreshToken) setStoredRefreshToken(data.refreshToken);
       }
       return data;
     },
+
     me: async () => {
       const data = await request('/auth/me');
       if (data?.user) {
@@ -245,6 +256,7 @@ export const api = {
       }
       return data;
     },
+
     logout: async () => {
       const refreshToken = getStoredRefreshToken();
       try {
@@ -255,7 +267,7 @@ export const api = {
           });
         }
       } catch {}
-      removeStoredToken();
+      clearAccessToken();
       removeStoredRefreshToken();
       removeStoredUser();
     },
@@ -266,11 +278,13 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ pin }),
       }),
+
     verifyPin: (pin) =>
       request('/auth/pin/verify', {
         method: 'POST',
         body: JSON.stringify({ pin }),
       }),
+
     removePin: (pin) =>
       request('/auth/pin/remove', {
         method: 'POST',
@@ -350,7 +364,7 @@ export const api = {
 
   stream: {
     getUrl: (id, download = false) => {
-      const token = getStoredToken();
+      const token = getAccessToken();
       const base = `${BASE_URL}/stream/${id}`;
       const params = [];
       if (token) params.push(`token=${encodeURIComponent(token)}`);

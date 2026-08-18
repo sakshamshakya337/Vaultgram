@@ -9,6 +9,10 @@ import { UploadModal } from './components/Upload/UploadModal';
 import { AuthModal } from './components/Auth/AuthModal';
 import { InstallPromptModal } from './components/PWA/InstallPromptModal';
 import { OfflineIndicator } from './components/PWA/OfflineIndicator';
+import { PinLockOverlay } from './components/PIN/PinLockOverlay';
+import { CategoryPinModal } from './components/PIN/CategoryPinModal';
+import { SetPinModal } from './components/PIN/SetPinModal';
+import { SettingsModal } from './components/Settings/SettingsModal';
 
 const StreamVaultApp = () => {
   return (
@@ -38,6 +42,18 @@ const StreamVaultApp = () => {
         {/* Mobile Bottom Navigation */}
         <BottomNav />
       </div>
+
+      {/* Fullscreen PIN Lock Overlay (Protects entire app on startup / tab resume) */}
+      <PinLockOverlay />
+
+      {/* Category Folder Unlock PIN Modal */}
+      <CategoryPinModal />
+
+      {/* Set / Change PIN Modal */}
+      <SetPinModal />
+
+      {/* Privacy & Settings Modal */}
+      <SettingsModal />
 
       {/* Global Modals */}
       <UploadModal />

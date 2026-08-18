@@ -1,11 +1,11 @@
 import React from 'react';
-import { Sparkles, Download, Plus, User, LogOut } from 'lucide-react';
+import { Sparkles, Download, Plus, User, Shield } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/VideoFeedContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const TopHeader = () => {
   const { isInstallable, isIOS, triggerInstall, setIsUploadOpen, setIsAuthOpen } = useVideoFeed();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, setIsSettingsOpen } = useAuth();
 
   return (
     <header className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-4 pt-safe h-14 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -44,14 +44,14 @@ export const TopHeader = () => {
           <span>Upload</span>
         </button>
 
-        {/* Auth / Profile Button */}
+        {/* Privacy & Settings Button */}
         {isAuthenticated ? (
           <button
-            onClick={logout}
+            onClick={() => setIsSettingsOpen(true)}
             className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 flex items-center justify-center text-zinc-300 hover:text-white transition-all cursor-pointer"
-            title={`Logged in as ${user?.username || user?.email || 'User'}. Click to logout.`}
+            title="Settings & PIN Lock"
           >
-            <LogOut className="w-4 h-4" />
+            <Shield className="w-4 h-4 text-cyan-400" />
           </button>
         ) : (
           <button
