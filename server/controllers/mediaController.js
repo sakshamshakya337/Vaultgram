@@ -512,8 +512,8 @@ exports.getUserLibrary = async (req, res) => {
  */
 exports.getFeed = async (req, res) => {
   try {
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
-    const { category, cursor } = req.query;
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
+    const { category, cursor, unlockedCategories } = req.query;
 
     const query = {
       isTrashed: { $ne: true },
@@ -522,6 +522,8 @@ exports.getFeed = async (req, res) => {
         { fileType: 'video' },
         { fileCategory: 'video' },
         { mediaType: 'video' },
+        { mimeType: /^video\//i },
+        { extension: { $in: ['mp4', 'mov', 'webm', 'mkv', 'avi', '3gp', 'm4v', 'ts', 'flv'] } },
       ],
     };
 
@@ -551,7 +553,7 @@ exports.getFeed = async (req, res) => {
     }
 
     const videos = await Media.find(query)
-      .sort({ _id: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(limit + 1)
       .lean();
 
