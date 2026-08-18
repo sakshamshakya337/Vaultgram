@@ -31,6 +31,15 @@ export const VideoFeedProvider = ({ children }) => {
   // Detect iOS Safari for custom install banner
   const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
+  // Generation & category tracking to prevent race conditions during category switches
+  const requestGenRef = React.useRef(0);
+  const currentCategoryRef = React.useRef(selectedCategory);
+
+  // Keep ref in sync
+  useEffect(() => {
+    currentCategoryRef.current = selectedCategory;
+  }, [selectedCategory]);
+
   // Listen for PWA install prompt
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
@@ -59,38 +68,64 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, []);
 
-  // Fetch initial videos for current category
+  // Fetch initial videos for category with generation tracking
   const fetchVideos = useCallback(async (cat = selectedCategory) => {
+    const gen = ++requestGenRef.current;
+    currentCategoryRef.current = cat;
+    
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
+    setNextCursor(null);
+    setHasMore(false);
+    setActiveVideoIndex(0);
+
     try {
       const res = await api.videos.getFeed({
         category: cat,
         limit: 10,
       });
+
+      // Ignore response if category changed while request was in-flight
+      if (gen !== requestGenRef.current) return;
+
       const rawList = res?.items || (Array.isArray(res) ? res : []);
       setVideos(rawList);
       setNextCursor(res?.nextCursor || null);
       setHasMore(!!res?.hasMore);
       setActiveVideoIndex(0);
     } catch (err) {
+      if (gen !== requestGenRef.current) return;
       console.warn('API fetch feed warning:', err.message);
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (gen === requestGenRef.current) {
+        setLoading(false);
+      }
     }
   }, [selectedCategory]);
 
-  // Infinite scroll load more with cursor
+  // Infinite scroll load more with cursor bound to current category generation
   const loadMoreVideos = useCallback(async () => {
-    if (loadingMore || !hasMore || !nextCursor) return;
+    const gen = requestGenRef.current;
+    const targetCategory = currentCategoryRef.current;
+    const targetCursor = nextCursor;
+
+    if (loading || loadingMore || !hasMore || !targetCursor) return;
+
     setLoadingMore(true);
     try {
       const res = await api.videos.getFeed({
-        category: selectedCategory,
-        cursor: nextCursor,
+        category: targetCategory,
+        cursor: targetCursor,
         limit: 10,
       });
+
+      // Discard stale responses from older generations or switched categories
+      if (gen !== requestGenRef.current || targetCategory !== currentCategoryRef.current) {
+        return;
+      }
+
       const newItems = res?.items || [];
       if (newItems.length > 0) {
         setVideos((prev) => {
@@ -102,18 +137,21 @@ export const VideoFeedProvider = ({ children }) => {
       setNextCursor(res?.nextCursor || null);
       setHasMore(!!res?.hasMore);
     } catch (err) {
+      if (gen !== requestGenRef.current) return;
       console.warn('Load more reels error:', err.message);
     } finally {
-      setLoadingMore(false);
+      if (gen === requestGenRef.current) {
+        setLoadingMore(false);
+      }
     }
-  }, [loadingMore, hasMore, nextCursor, selectedCategory]);
+  }, [loading, loadingMore, hasMore, nextCursor]);
 
-  // Automatically trigger loadMore when scrolling close to bottom
+  // Automatically trigger loadMore when scrolling close to bottom of current valid feed
   useEffect(() => {
-    if (videos.length > 0 && activeVideoIndex >= videos.length - 3 && hasMore && !loadingMore) {
+    if (!loading && !loadingMore && hasMore && videos.length > 0 && activeVideoIndex >= videos.length - 3) {
       loadMoreVideos();
     }
-  }, [activeVideoIndex, videos.length, hasMore, loadingMore, loadMoreVideos]);
+  }, [activeVideoIndex, videos.length, hasMore, loading, loadingMore, loadMoreVideos]);
 
   useEffect(() => {
     fetchCategories();
