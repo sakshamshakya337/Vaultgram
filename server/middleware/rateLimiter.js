@@ -9,6 +9,7 @@ const generalLimiter = rateLimit({
   max: isDev ? 2000 : 300,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: false },
   message: { message: 'Too many requests, please try again later.' },
 });
 
@@ -18,6 +19,7 @@ const authLimiter = rateLimit({
   max: isDev ? 500 : 30,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: false },
   message: { message: 'Too many login attempts, please try again after a minute.' },
 });
 
@@ -27,6 +29,7 @@ const streamLimiter = rateLimit({
   max: isDev ? 10000 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: false },
   message: { message: 'Stream request rate limit exceeded.' },
 });
 
@@ -36,6 +39,7 @@ const pinVerifyLimiter = rateLimit({
   max: isDev ? 100 : 5,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: false },
   message: { message: 'Too many incorrect PIN attempts. Please try again after 10 minutes.' },
 });
 

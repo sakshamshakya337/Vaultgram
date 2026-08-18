@@ -14,6 +14,9 @@ const streamRoutes = require('./routes/streamRoutes');
 
 const app = express();
 
+// Trust reverse proxy headers on Render/Vercel/Heroku
+app.set('trust proxy', 1);
+
 // Initialize DB connection in background
 connectDB().catch((err) => {
   console.warn('Initial MongoDB connection note:', err.message);
