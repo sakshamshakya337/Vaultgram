@@ -109,7 +109,12 @@ export const DriveSidebar = ({
         {/* Main Nav Items */}
         <div className="space-y-1">
           <button
-            onClick={() => onSelectNav('reels')}
+            onClick={() => {
+              onSelectNav('reels');
+              if (hasPin && !sessionUnlockedReels) {
+                setCategoryLockTarget('Reels');
+              }
+            }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'reels'
                 ? 'bg-gradient-to-r from-rose-500/20 to-purple-500/20 text-rose-300 border border-rose-500/40 shadow-lg shadow-rose-500/10'

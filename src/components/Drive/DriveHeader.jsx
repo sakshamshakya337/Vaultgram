@@ -21,6 +21,7 @@ export const DriveHeader = ({
   } = useVideoFeed();
 
   const getNavTitle = () => {
+    if (currentNav === 'reels') return 'Reels Feed';
     if (currentNav === 'starred') return 'Starred Videos';
     if (currentNav === 'recent') return 'Recent Uploads';
     if (currentNav === 'trash') return 'Trash';
