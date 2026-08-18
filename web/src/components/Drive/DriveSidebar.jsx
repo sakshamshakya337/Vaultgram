@@ -12,7 +12,8 @@ import {
   Unlock,
   Cloud,
   Shield,
-  Upload
+  Upload,
+  Download
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
