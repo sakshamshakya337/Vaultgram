@@ -10,10 +10,48 @@ const { resolveFileUrl } = require('../services/telegramService');
 exports.streamMedia = async (req, res) => {
   try {
     const item = await Media.findById(req.params.id).lean();
-    if (!item) return res.status(404).json({ message: 'File not found' });
+    if (!item) {
+      console.error(`[streamMedia] File not found: ${req.params.id}`);
+      return res.status(404).json({
+        error: 'FILE_NOT_FOUND',
+        message: 'File record not found in database',
+      });
+    }
 
     if (item.isFolder) {
-      return res.status(400).json({ message: 'Cannot stream a folder' });
+      return res.status(400).json({
+        error: 'CANNOT_STREAM_FOLDER',
+        message: 'Cannot stream a folder',
+      });
+    }
+
+    if (!item.telegramFileId) {
+      console.error(`[streamMedia] Missing telegramFileId for item: ${item._id}`);
+      return res.status(404).json({
+        error: 'MISSING_FILE_ID',
+        message: 'File record is missing a Telegram file ID',
+      });
+    }
+
+    // Check environment configuration
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      console.error('[streamMedia] TELEGRAM_BOT_TOKEN environment variable is not defined!');
+      return res.status(500).json({
+        error: 'MISSING_ENV_CONFIG',
+        message: 'TELEGRAM_BOT_TOKEN is not configured on the backend server',
+      });
+    }
+
+    // Check Telegram 20MB download ceiling on standard hosted bot API
+    const MAX_TELEGRAM_HOSTED_BYTES = 20 * 1024 * 1024;
+    if (item.fileSizeBytes && item.fileSizeBytes > MAX_TELEGRAM_HOSTED_BYTES) {
+      const sizeMb = (item.fileSizeBytes / (1024 * 1024)).toFixed(1);
+      console.error(`[streamMedia] File exceeds 20MB Telegram limit: ${sizeMb} MB (ID: ${item._id})`);
+      return res.status(413).json({
+        error: 'FILE_TOO_LARGE_FOR_HOSTED_API',
+        message: `Video size (${sizeMb} MB) exceeds Telegram's 20MB download limit for standard bot servers`,
+        fileSizeBytes: item.fileSizeBytes,
+      });
     }
 
     // 1. Resolve direct Telegram CDN URL
@@ -21,15 +59,24 @@ exports.streamMedia = async (req, res) => {
     try {
       telegramUrl = await resolveFileUrl(item.telegramFileId);
     } catch (err) {
-      console.warn('[streamMedia] resolveFileUrl note:', err.message);
+      console.error(`[streamMedia] Telegram getFile failed for file_id "${item.telegramFileId}":`, err.response?.data || err.message);
+      const tgErrorDesc = err.response?.data?.description || err.message;
+      return res.status(502).json({
+        error: 'TELEGRAM_UPSTREAM_FAILED',
+        message: `Telegram upstream error: ${tgErrorDesc}`,
+      });
     }
 
     if (!telegramUrl || !telegramUrl.startsWith('http')) {
-      return res.status(404).json({ message: 'File source not reachable in Telegram cloud channel' });
+      console.error(`[streamMedia] Unreachable telegramUrl: ${telegramUrl}`);
+      return res.status(502).json({
+        error: 'INVALID_STREAM_URL',
+        message: 'File source not reachable in Telegram cloud CDN',
+      });
     }
 
-    const isVideo = item.fileCategory === 'video' || item.mediaType === 'video';
-    const isAudio = item.fileCategory === 'audio' || item.mediaType === 'audio';
+    const isVideo = item.fileCategory === 'video' || item.mediaType === 'video' || item.fileType === 'video';
+    const isAudio = item.fileCategory === 'audio' || item.mediaType === 'audio' || item.fileType === 'audio';
     const isStreamable = isVideo || isAudio;
 
     const range = req.headers.range;
@@ -49,16 +96,27 @@ exports.streamMedia = async (req, res) => {
       timeout: 60000,
     });
 
+    if (tgResponse.status >= 400) {
+      console.error(`[streamMedia] Telegram CDN responded with HTTP ${tgResponse.status}`);
+      return res.status(502).json({
+        error: 'TELEGRAM_CDN_ERROR',
+        message: `Telegram CDN returned status ${tgResponse.status}`,
+      });
+    }
+
     const isDownload = req.query.download === '1';
     const safeFilename = encodeURIComponent(item.title || 'file');
 
     // Dynamic origin matching for streaming media
     const reqOrigin = req.headers.origin;
     const allowedOriginEnv = process.env.ALLOWED_ORIGIN || '*';
-    const allowedOrigins = allowedOriginEnv.split(',').map((o) => o.trim());
+    const allowedOrigins = allowedOriginEnv.split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean);
     let allowOrigin = '*';
-    if (reqOrigin && (allowedOriginEnv === '*' || allowedOrigins.includes('*') || allowedOrigins.includes(reqOrigin))) {
-      allowOrigin = reqOrigin;
+    if (reqOrigin) {
+      const cleanOrigin = reqOrigin.replace(/\/+$/, '');
+      if (allowedOriginEnv === '*' || allowedOrigins.includes('*') || allowedOrigins.includes(cleanOrigin) || cleanOrigin.endsWith('.vercel.app')) {
+        allowOrigin = reqOrigin;
+      }
     }
 
     const corsHeaders = {
@@ -114,7 +172,10 @@ exports.streamMedia = async (req, res) => {
   } catch (err) {
     console.error('[streamMedia proxy error]:', err.message);
     if (!res.headersSent) {
-      res.status(500).json({ message: 'Streaming failed' });
+      res.status(500).json({
+        error: 'STREAM_INTERNAL_ERROR',
+        message: err.message || 'Streaming failed',
+      });
     }
   }
 };

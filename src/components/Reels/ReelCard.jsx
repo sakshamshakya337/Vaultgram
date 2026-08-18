@@ -156,16 +156,38 @@ export const ReelCard = ({ video, isActive, index }) => {
     setProgress((current / total) * 100);
   };
 
+  const [errorMessage, setErrorMessage] = useState('');
+  const [errorCode, setErrorCode] = useState('');
+
+  const handleVideoError = async () => {
+    setIsBuffering(false);
+    setHasError(true);
+    try {
+      const resp = await fetch(streamUrl);
+      if (!resp.ok) {
+        const errJson = await resp.json().catch(() => null);
+        if (errJson) {
+          setErrorCode(errJson.error || `HTTP ${resp.status}`);
+          setErrorMessage(errJson.message || 'Streaming failed');
+          return;
+        }
+      }
+    } catch {}
+    setErrorMessage('Network error or video source unreachable');
+  };
+
   const retryStream = (e) => {
     e.stopPropagation();
     setHasError(false);
+    setErrorMessage('');
+    setErrorCode('');
     setIsBuffering(true);
     const vid = videoRef.current;
     if (vid) {
       vid.load();
       vid.play()
         .then(() => setIsPlaying(true))
-        .catch(() => setHasError(true));
+        .catch(() => handleVideoError());
     }
   };
 
@@ -205,10 +227,7 @@ export const ReelCard = ({ video, isActive, index }) => {
           setIsPlaying(true);
         }}
         onCanPlay={() => setIsBuffering(false)}
-        onError={() => {
-          setIsBuffering(false);
-          setHasError(true);
-        }}
+        onError={handleVideoError}
         className="w-full h-full object-contain md:object-cover relative z-10"
       />
 
@@ -221,20 +240,22 @@ export const ReelCard = ({ video, isActive, index }) => {
 
       {/* Error Fallback */}
       {hasError && isActive && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 p-6 text-center">
-          <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-3">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/90 p-6 text-center select-none">
+          <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-3 shadow-xl">
             <AlertCircle className="w-8 h-8" />
           </div>
-          <h3 className="text-white font-bold text-base mb-1">Stream Error</h3>
-          <p className="text-zinc-400 text-xs max-w-xs mb-4">
-            Unable to stream this video. It may still be processing on the server.
+          <h3 className="text-white font-bold text-base mb-1">
+            {errorCode || 'Stream Error'}
+          </h3>
+          <p className="text-zinc-300 text-xs max-w-xs mb-4 leading-relaxed font-mono">
+            {errorMessage || 'Unable to stream this video. It may still be processing on the server.'}
           </p>
           <button
             onClick={retryStream}
-            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full text-xs font-semibold border border-white/15 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full text-xs font-semibold border border-white/15 transition-all cursor-pointer active:scale-95"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Retry</span>
+            <span>Retry Stream</span>
           </button>
         </div>
       )}

@@ -189,6 +189,16 @@ exports.uploadMedia = async (req, res) => {
       return res.status(400).json({ message: 'No file provided for upload' });
     }
 
+    // Telegram Bot API standard download limit is 20MB
+    const MAX_HOSTED_TELEGRAM_SIZE = 20 * 1024 * 1024;
+    if (uploadedFile.size > MAX_HOSTED_TELEGRAM_SIZE) {
+      const sizeMb = (uploadedFile.size / (1024 * 1024)).toFixed(1);
+      return res.status(413).json({
+        error: 'FILE_TOO_LARGE_FOR_HOSTED_API',
+        message: `Videos and files over 20MB (${sizeMb} MB) are not supported yet on Telegram hosted Bot API. Please upload files under 20MB.`,
+      });
+    }
+
     const { title, description, category, folderId, parentFolderId } = req.body;
     const finalTitle = title?.trim() || uploadedFile.originalname || 'Untitled File';
     const targetParent = folderId || parentFolderId;
