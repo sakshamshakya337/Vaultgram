@@ -23,10 +23,20 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
     requestCategory,
     lockedCategories,
     sessionUnlockedCategories,
+    toggleCategoryLock,
     setIsUploadOpen,
   } = useVideoFeed();
 
-  const { setIsSettingsOpen, hasPin } = useAuth();
+  const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
+
+  const handleQuickLockToggle = async (e, cat) => {
+    e.stopPropagation();
+    if (!hasPin) {
+      setIsSetPinModalOpen(true);
+      return;
+    }
+    await toggleCategoryLock(cat);
+  };
 
   return (
     <aside className="w-64 h-screen bg-zinc-950 border-r border-white/10 flex flex-col justify-between shrink-0 select-none">
@@ -132,7 +142,7 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
               const isUnlockedThisSession = sessionUnlockedCategories?.has(cat.toLowerCase());
 
               return (
-                <button
+                <div
                   key={cat}
                   onClick={() => {
                     onSelectNav('all');
@@ -144,18 +154,34 @@ export const DriveSidebar = ({ currentNav, onSelectNav }) => {
                       : 'text-zinc-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <Folder className={`w-4 h-4 shrink-0 transition-colors ${isSelected ? 'text-cyan-400 fill-cyan-400/20' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                    <span className="truncate">{cat}</span>
+                    <span className="truncate">#{cat}</span>
                   </div>
 
-                  {isLocked && !isUnlockedThisSession && (
-                    <Lock className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                  )}
-                  {isLocked && isUnlockedThisSession && (
-                    <Unlock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                  )}
-                </button>
+                  {/* Lock Toggle Action Button */}
+                  <button
+                    onClick={(e) => handleQuickLockToggle(e, cat)}
+                    className={`p-1 rounded-md transition-all cursor-pointer ${
+                      isLocked
+                        ? isUnlockedThisSession
+                          ? 'text-cyan-400 hover:bg-cyan-500/20'
+                          : 'text-rose-400 hover:bg-rose-500/20'
+                        : 'opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-white hover:bg-white/10'
+                    }`}
+                    title={isLocked ? 'Folder Locked (Click to Unlock)' : 'Lock Folder with PIN'}
+                  >
+                    {isLocked ? (
+                      isUnlockedThisSession ? (
+                        <Unlock className="w-3.5 h-3.5" />
+                      ) : (
+                        <Lock className="w-3.5 h-3.5" />
+                      )
+                    ) : (
+                      <Lock className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               );
             })}
         </div>

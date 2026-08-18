@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, LayoutGrid, List, User, LogOut, Shield, ChevronRight, X } from 'lucide-react';
+import { Search, LayoutGrid, List, User, LogOut, Shield, ChevronRight, X, Lock, Unlock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVideoFeed } from '../../contexts/VideoFeedContext';
 
@@ -11,8 +11,14 @@ export const DriveHeader = ({
   currentNav,
   onResetToRoot,
 }) => {
-  const { user, isAuthenticated, logout, setIsSettingsOpen } = useAuth();
-  const { selectedCategory, setIsAuthOpen } = useVideoFeed();
+  const { user, isAuthenticated, hasPin, setIsSetPinModalOpen, setIsSettingsOpen } = useAuth();
+  const {
+    selectedCategory,
+    lockedCategories,
+    sessionUnlockedCategories,
+    toggleCategoryLock,
+    setIsAuthOpen,
+  } = useVideoFeed();
 
   const getNavTitle = () => {
     if (currentNav === 'starred') return 'Starred Videos';
@@ -21,10 +27,24 @@ export const DriveHeader = ({
     return selectedCategory === 'All' ? 'My Drive' : selectedCategory;
   };
 
+  const isCurrentCategoryLocked =
+    selectedCategory !== 'All' &&
+    (lockedCategories || []).some(
+      (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
+    );
+
+  const handleHeaderLockToggle = async () => {
+    if (!hasPin) {
+      setIsSetPinModalOpen(true);
+      return;
+    }
+    await toggleCategoryLock(selectedCategory);
+  };
+
   return (
     <header className="h-16 px-6 border-b border-white/10 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between gap-4 shrink-0 select-none">
-      {/* Left: Breadcrumbs / Title */}
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Left: Breadcrumbs / Title + Quick Lock Option */}
+      <div className="flex items-center gap-2.5 min-w-0">
         <button
           onClick={onResetToRoot}
           className="text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer"
@@ -36,6 +56,29 @@ export const DriveHeader = ({
           <>
             <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
             <span className="text-xs font-bold text-cyan-400 truncate">#{selectedCategory}</span>
+
+            {/* Folder Lock / Unlock Quick Button */}
+            <button
+              onClick={handleHeaderLockToggle}
+              className={`ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                isCurrentCategoryLocked
+                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25'
+                  : 'bg-zinc-900 text-zinc-400 border border-white/10 hover:text-white hover:bg-zinc-800'
+              }`}
+              title={isCurrentCategoryLocked ? 'Click to Unlock this Folder' : 'Click to Lock this Folder with PIN'}
+            >
+              {isCurrentCategoryLocked ? (
+                <>
+                  <Lock className="w-3 h-3 text-rose-400" />
+                  <span>Folder Locked</span>
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-3 h-3 text-zinc-500" />
+                  <span>Lock Folder</span>
+                </>
+              )}
+            </button>
           </>
         )}
 
