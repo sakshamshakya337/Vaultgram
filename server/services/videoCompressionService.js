@@ -312,6 +312,8 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
       }
     }
   }
+}
+
 /**
  * Automatically extracts a representative JPEG thumbnail frame from a video buffer
  * 
