@@ -2,7 +2,7 @@ import React from 'react';
 import { Folder, Film, Heart, Clock, User, Shield, Plus } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
-import { useUploadQueue } from '../../contexts/UploadContext';
+import { useUploadQueue } from '../../contexts/useUploadQueue';
 
 export const BottomNav = ({ currentNav = 'all', currentFolder = null, onSelectNav }) => {
   const {

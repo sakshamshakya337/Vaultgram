@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Folder, Sparkles, X, Upload } from 'lucide-react';
-import { useUploadQueue } from '../../contexts/UploadContext';
+import { useUploadQueue } from '../../contexts/useUploadQueue';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const UploadCategoryPromptModal = () => {

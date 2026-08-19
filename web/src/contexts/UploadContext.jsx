@@ -10,7 +10,7 @@ export const MAX_NON_VIDEO_UPLOAD_SIZE_MB = parseInt(import.meta.env.VITE_MAX_NO
 const MAX_VIDEO_BYTES = MAX_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024;
 const MAX_NON_VIDEO_BYTES = MAX_NON_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024;
 
-const UploadContext = createContext(null);
+export const UploadContext = createContext(null);
 
 export const UploadProvider = ({ children }) => {
   const [uploadQueue, setUploadQueue] = useState([]);
@@ -458,12 +458,3 @@ export const UploadProvider = ({ children }) => {
   );
 };
 
-export const useUploadQueue = () => {
-  const context = useContext(UploadContext);
-  if (!context) {
-    throw new Error('useUploadQueue must be used within an UploadProvider');
-  }
-  return context;
-};
-
-export default UploadContext;

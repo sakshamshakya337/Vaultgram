@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useUploadQueue } from '../../contexts/UploadContext';
+import { useUploadQueue } from '../../contexts/useUploadQueue';
 
 export const DriveHeader = ({
   searchQuery,

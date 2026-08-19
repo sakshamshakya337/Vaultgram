@@ -15,7 +15,7 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
-import { useUploadQueue } from '../../contexts/UploadContext';
+import { useUploadQueue } from '../../contexts/useUploadQueue';
 import { formatBytes } from '../../services/api';
 
 export const UploadTray = () => {

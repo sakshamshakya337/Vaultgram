@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Folder, Sparkles, Cloud } from 'lucide-react';
-import { useUploadQueue } from '../../contexts/UploadContext';
+import { useUploadQueue } from '../../contexts/useUploadQueue';
 
 export const UploadDropzoneOverlay = ({ currentFolder, selectedCategory }) => {
   const { addToQueue, promptCategoryForFiles } = useUploadQueue();

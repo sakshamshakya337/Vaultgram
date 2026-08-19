@@ -2,7 +2,7 @@ import React from 'react';
 import { Sparkles, Download, Plus, User, Shield } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
-import { useUploadQueue } from '../../contexts/UploadContext';
+import { useUploadQueue } from '../../contexts/useUploadQueue';
 
 export const TopHeader = () => {
   const { isInstallable, isIOS, triggerInstall, setIsAuthOpen, selectedCategory } = useVideoFeed();
