@@ -180,9 +180,7 @@ export function uploadWithProgress(formData, onProgress) {
     const token = getAccessToken();
 
     const endpoint = `${BASE_URL}/videos/upload`;
-    const url = token
-      ? `${endpoint}?token=${encodeURIComponent(token)}`
-      : endpoint;
+    const url = endpoint;
 
     xhr.open('POST', url);
     xhr.setRequestHeader('bypass-tunnel-reminder', 'true');
@@ -203,23 +201,28 @@ export function uploadWithProgress(formData, onProgress) {
       if (xhr.status >= 200 && xhr.status < 300) {
         if (onProgress) onProgress(100);
         try {
-          const json = JSON.parse(xhr.responseText);
-          resolve(json);
+          const res = JSON.parse(xhr.responseText);
+          resolve(res);
         } catch {
-          resolve(xhr.responseText);
+          resolve({ message: 'Upload succeeded' });
         }
       } else {
+        let errMessage = `Upload failed (${xhr.status})`;
         try {
           const json = JSON.parse(xhr.responseText);
-          reject(new Error(json.message || `Upload failed (${xhr.status})`));
-        } catch {
-          reject(new Error(`Upload failed with status ${xhr.status}`));
+          if (json.message) errMessage = json.message;
+        } catch {}
+        if (xhr.status === 413) {
+          errMessage = 'File exceeds maximum upload limit.';
+        } else if (xhr.status === 0 || xhr.status === 502 || xhr.status === 503 || xhr.status === 504) {
+          errMessage = "Can't reach the server — check your connection or try again shortly";
         }
+        reject(new Error(errMessage));
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error('Network connection error during upload.'));
+      reject(new Error("Can't reach the server — check your connection or try again shortly"));
     };
 
     xhr.ontimeout = () => {

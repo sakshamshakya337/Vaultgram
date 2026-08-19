@@ -277,7 +277,7 @@ export const UploadProvider = ({ children }) => {
 
       const token = getAccessToken();
       const endpoint = `${BASE_URL}/videos/upload`;
-      const url = token ? `${endpoint}?token=${encodeURIComponent(token)}` : endpoint;
+      const url = endpoint;
 
       xhr.open('POST', url);
       xhr.setRequestHeader('bypass-tunnel-reminder', 'true');
@@ -339,6 +339,8 @@ export const UploadProvider = ({ children }) => {
 
           if (xhr.status === 413) {
             errMessage = 'File too large for upload server.';
+          } else if (xhr.status === 0 || xhr.status === 502 || xhr.status === 503 || xhr.status === 504) {
+            errMessage = "Can't reach the server — check your connection or try again shortly";
           }
 
           setUploadQueue((prev) =>
@@ -355,7 +357,7 @@ export const UploadProvider = ({ children }) => {
       xhr.onerror = () => {
         activeXhrRef.current = null;
         currentProcessingIdRef.current = null;
-        const errMessage = 'Network error during upload.';
+        const errMessage = "Can't reach the server — check your connection or try again shortly";
         setUploadQueue((prev) =>
           prev.map((q) =>
             q.id === item.id
