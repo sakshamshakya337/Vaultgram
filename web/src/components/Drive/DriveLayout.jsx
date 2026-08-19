@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus } from 'lucide-react';
+import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUploadQueue } from '../../contexts/UploadContext';
 import { api } from '../../services/api';
 import { DriveSidebar } from './DriveSidebar';
 import { DriveHeader } from './DriveHeader';
@@ -13,6 +14,7 @@ import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
 import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
+import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
 
 export const DriveLayout = () => {
   const {
@@ -28,6 +30,7 @@ export const DriveLayout = () => {
   } = useVideoFeed();
 
   const { isAuthenticated, hasPin } = useAuth();
+  const { registerOnUploadSuccess, openFilePicker } = useUploadQueue();
 
   // Navigation & Data
   const [currentNav, setCurrentNav] = useState('all'); // 'all', 'starred', 'recent', 'trash'
@@ -75,6 +78,14 @@ export const DriveLayout = () => {
   useEffect(() => {
     loadDriveItems();
   }, [loadDriveItems]);
+
+  // Real-time automatic refresh when any queued upload completes
+  useEffect(() => {
+    const unregister = registerOnUploadSuccess(() => {
+      loadDriveItems();
+    });
+    return unregister;
+  }, [registerOnUploadSuccess, loadDriveItems]);
 
   // Separate folders and files
   const folders = useMemo(() => {
@@ -174,10 +185,14 @@ export const DriveLayout = () => {
 
   return (
     <div className="flex w-screen h-screen bg-black text-white overflow-hidden select-none font-sans relative">
+      {/* Full-window Drag-and-Drop Dropzone Overlay */}
+      <UploadDropzoneOverlay currentFolder={currentFolder} selectedCategory={selectedCategory} />
+
       {/* 1. Left Sidebar (Desktop Only) */}
       <div className="hidden md:flex shrink-0 h-full">
         <DriveSidebar
           currentNav={currentNav}
+          currentFolder={currentFolder}
           onSelectNav={(nav) => {
             setCurrentNav(nav);
             setCurrentFolder(null);
@@ -199,6 +214,7 @@ export const DriveLayout = () => {
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             currentNav={currentNav}
+            currentFolder={currentFolder}
             onResetToRoot={handleResetToRoot}
           />
         ) : (
@@ -209,6 +225,7 @@ export const DriveLayout = () => {
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               currentNav={currentNav}
+              currentFolder={currentFolder}
               onResetToRoot={handleResetToRoot}
             />
           </div>
@@ -303,11 +320,15 @@ export const DriveLayout = () => {
                   {currentNav === 'all' && (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setIsUploadOpen(true)}
+                        onClick={() => openFilePicker({
+                          folderId: currentFolder?._id || null,
+                          folderTitle: currentFolder?.title || '',
+                          category: selectedCategory,
+                        })}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
                       >
-                        <Plus className="w-4 h-4" />
-                        <span>Upload Video</span>
+                        <Upload className="w-4 h-4" />
+                        <span>Upload Files</span>
                       </button>
                       <button
                         onClick={() => setIsNewFolderOpen(true)}
@@ -344,6 +365,7 @@ export const DriveLayout = () => {
         {/* Mobile Bottom Navigation Bar (hidden on desktop) */}
         <BottomNav
           currentNav={currentNav}
+          currentFolder={currentFolder}
           onSelectNav={(nav) => {
             setCurrentNav(nav);
             setCurrentFolder(null);

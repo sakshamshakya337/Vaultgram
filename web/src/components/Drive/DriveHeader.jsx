@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useUploadQueue } from '../../contexts/UploadContext';
 
 export const DriveHeader = ({
   searchQuery,
@@ -23,6 +24,7 @@ export const DriveHeader = ({
   viewMode,
   onViewModeChange,
   currentNav,
+  currentFolder,
   onResetToRoot,
 }) => {
   const { user, isAuthenticated, hasPin, setIsSetPinModalOpen, setIsSettingsOpen } = useAuth();
@@ -33,8 +35,10 @@ export const DriveHeader = ({
     setIsAuthOpen,
     setIsUploadOpen,
   } = useVideoFeed();
+  const { openFilePicker } = useUploadQueue();
 
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+
 
   const getNavTitle = () => {
     if (currentNav === 'reels') return 'Reels Feed';
@@ -178,7 +182,11 @@ export const DriveHeader = ({
 
             {/* Mobile Quick + Upload Button */}
             <button
-              onClick={() => setIsUploadOpen(true)}
+              onClick={() => openFilePicker({
+                folderId: currentFolder?._id || null,
+                folderTitle: currentFolder?.title || '',
+                category: selectedCategory,
+              })}
               className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />

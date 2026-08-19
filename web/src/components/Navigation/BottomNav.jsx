@@ -2,16 +2,20 @@ import React from 'react';
 import { Folder, Film, Heart, Clock, User, Shield, Plus } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUploadQueue } from '../../contexts/UploadContext';
 
-export const BottomNav = ({ currentNav = 'all', onSelectNav }) => {
+export const BottomNav = ({ currentNav = 'all', currentFolder = null, onSelectNav }) => {
   const {
     setIsUploadOpen,
     sessionUnlockedReels,
     setCategoryLockTarget,
     setSelectedCategory,
+    selectedCategory,
   } = useVideoFeed();
 
   const { setIsSettingsOpen, setIsAuthOpen, isAuthenticated, hasPin } = useAuth();
+  const { openFilePicker } = useUploadQueue();
+
 
   const handleNavClick = (nav) => {
     if (onSelectNav) {
@@ -60,7 +64,11 @@ export const BottomNav = ({ currentNav = 'all', onSelectNav }) => {
 
       {/* 3. Center Quick Upload Button */}
       <button
-        onClick={() => setIsUploadOpen(true)}
+        onClick={() => openFilePicker({
+          folderId: currentFolder?._id || null,
+          folderTitle: currentFolder?.title || '',
+          category: selectedCategory,
+        })}
         className="flex items-center justify-center -translate-y-3 w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 via-blue-500 to-rose-500 text-white shadow-lg shadow-cyan-500/30 active:scale-95 transition-transform cursor-pointer border-2 border-zinc-950"
         aria-label="Upload File"
       >

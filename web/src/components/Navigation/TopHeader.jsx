@@ -2,10 +2,12 @@ import React from 'react';
 import { Sparkles, Download, Plus, User, Shield } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUploadQueue } from '../../contexts/UploadContext';
 
 export const TopHeader = () => {
-  const { isInstallable, isIOS, triggerInstall, setIsUploadOpen, setIsAuthOpen } = useVideoFeed();
+  const { isInstallable, isIOS, triggerInstall, setIsAuthOpen, selectedCategory } = useVideoFeed();
   const { isAuthenticated, setIsSettingsOpen } = useAuth();
+  const { openFilePicker } = useUploadQueue();
 
   return (
     <header className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-4 pt-safe h-14 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -37,7 +39,7 @@ export const TopHeader = () => {
 
         {/* Upload Button */}
         <button
-          onClick={() => setIsUploadOpen(true)}
+          onClick={() => openFilePicker({ category: selectedCategory })}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-bold shadow-md shadow-cyan-500/20 hover:opacity-90 active:scale-95 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />

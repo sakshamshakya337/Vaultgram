@@ -21,6 +21,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 export const DriveSidebar = ({
   currentNav,
+  currentFolder,
   onSelectNav,
   onOpenNewFolder,
 }) => {
@@ -36,6 +37,7 @@ export const DriveSidebar = ({
   } = useVideoFeed();
 
   const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
+  const { openFilePicker } = useUploadQueue();
   const [showNewMenu, setShowNewMenu] = useState(false);
 
   const handleQuickLockToggle = async (e, cat) => {
@@ -81,12 +83,16 @@ export const DriveSidebar = ({
               <button
                 onClick={() => {
                   setShowNewMenu(false);
-                  setIsUploadOpen(true);
+                  openFilePicker({
+                    folderId: currentFolder?._id || null,
+                    folderTitle: currentFolder?.title || '',
+                    category: selectedCategory,
+                  });
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <Upload className="w-4 h-4 text-cyan-400" />
-                <span>Upload Media</span>
+                <span>Upload Files</span>
               </button>
 
               <button
