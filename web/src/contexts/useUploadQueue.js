@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { UploadContext } from './UploadContext';
+import { UploadContext } from './UploadContext.js';
 
 export const useUploadQueue = () => {
   const context = useContext(UploadContext);

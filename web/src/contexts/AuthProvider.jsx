@@ -9,7 +9,7 @@ import {
   clearAccessToken,
 } from '../services/api';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import { AuthContext } from './AuthContext';
+import { AuthContext } from './AuthContext.js';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(getStoredUser());

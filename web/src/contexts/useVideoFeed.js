@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { VideoFeedContext } from './VideoFeedContext';
+import { VideoFeedContext } from './VideoFeedContext.js';
 
 export const useVideoFeed = () => {
   const context = useContext(VideoFeedContext);

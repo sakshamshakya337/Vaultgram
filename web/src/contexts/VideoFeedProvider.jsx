@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
-import { useAuth } from './useAuth';
-import { VideoFeedContext } from './VideoFeedContext';
+import { useAuth } from './useAuth.js';
+import { VideoFeedContext } from './VideoFeedContext.js';
 
 export const VideoFeedProvider = ({ children }) => {
   const { user, hasPin } = useAuth();

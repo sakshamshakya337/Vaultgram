@@ -4,7 +4,7 @@ import {
   UploadContext,
   MAX_VIDEO_UPLOAD_SIZE_MB,
   MAX_NON_VIDEO_UPLOAD_SIZE_MB,
-} from './UploadContext';
+} from './UploadContext.js';
 
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 
