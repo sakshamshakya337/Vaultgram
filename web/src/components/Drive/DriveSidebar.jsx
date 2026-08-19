@@ -17,7 +17,7 @@ import {
   Download
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
 
 export const DriveSidebar = ({

@@ -1,16 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getAccessToken, API_BASE_URL } from '../services/api';
+import {
+  UploadContext,
+  MAX_VIDEO_UPLOAD_SIZE_MB,
+  MAX_NON_VIDEO_UPLOAD_SIZE_MB,
+} from './UploadContext';
 
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 
-// Configurable upload size limits matching backend settings
-export const MAX_VIDEO_UPLOAD_SIZE_MB = parseInt(import.meta.env.VITE_MAX_VIDEO_UPLOAD_SIZE_MB, 10) || 200;
-export const MAX_NON_VIDEO_UPLOAD_SIZE_MB = parseInt(import.meta.env.VITE_MAX_NON_VIDEO_UPLOAD_SIZE_MB, 10) || 20;
-
 const MAX_VIDEO_BYTES = MAX_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024;
 const MAX_NON_VIDEO_BYTES = MAX_NON_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024;
-
-export const UploadContext = createContext(null);
 
 export const UploadProvider = ({ children }) => {
   const [uploadQueue, setUploadQueue] = useState([]);

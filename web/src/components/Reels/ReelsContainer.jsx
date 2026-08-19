@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { ReelCard } from './ReelCard';
 import { TapToUnmuteHint } from './TapToUnmuteHint';
 import { Video, Sparkles, Plus, RefreshCw, Lock, Shield } from 'lucide-react';

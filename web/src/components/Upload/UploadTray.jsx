@@ -294,5 +294,3 @@ export const UploadTray = () => {
     </div>
   );
 };
-
-export default UploadTray;

@@ -13,7 +13,7 @@ import {
   Fingerprint,
   Smartphone
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 
 export const SettingsModal = () => {

@@ -1,7 +1,7 @@
 import React from 'react';
-import { AuthProvider } from './contexts/AuthContext';
-import { VideoFeedProvider } from './contexts/VideoFeedContext';
-import { UploadProvider } from './contexts/UploadContext';
+import { AuthProvider } from './contexts/AuthProvider';
+import { VideoFeedProvider } from './contexts/VideoFeedProvider';
+import { UploadProvider } from './contexts/UploadProvider';
 import { DriveLayout } from './components/Drive/DriveLayout';
 import { UploadModal } from './components/Upload/UploadModal';
 import { UploadTray } from './components/Upload/UploadTray';

@@ -14,7 +14,7 @@ import {
   Plus,
   ArrowLeft
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
 

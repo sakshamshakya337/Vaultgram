@@ -131,5 +131,3 @@ export const UploadCategoryPromptModal = () => {
     </div>
   );
 };
-
-export default UploadCategoryPromptModal;

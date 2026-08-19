@@ -1,7 +1,7 @@
 import React from 'react';
 import { Sparkles, Download, Plus, User, Shield } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
 
 export const TopHeader = () => {

@@ -1,8 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
-import { useAuth } from './AuthContext';
-
-const VideoFeedContext = createContext(null);
+import { useAuth } from './useAuth';
+import { VideoFeedContext } from './VideoFeedContext';
 
 export const VideoFeedProvider = ({ children }) => {
   const { user, hasPin } = useAuth();
@@ -420,6 +419,3 @@ export const VideoFeedProvider = ({ children }) => {
     </VideoFeedContext.Provider>
   );
 };
-
-export { VideoFeedContext };
-export default VideoFeedContext;

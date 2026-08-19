@@ -215,5 +215,3 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
     </div>
   );
 };
-
-export default ReelOverlay;

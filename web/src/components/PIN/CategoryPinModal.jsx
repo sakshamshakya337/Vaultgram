@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { PinKeypad } from './PinKeypad';
 import { Fingerprint, ScanFace, Shield } from 'lucide-react';

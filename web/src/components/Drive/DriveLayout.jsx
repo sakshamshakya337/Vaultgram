@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
 import { api } from '../../services/api';
 import { DriveSidebar } from './DriveSidebar';

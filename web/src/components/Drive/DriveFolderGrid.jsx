@@ -10,7 +10,7 @@ import {
   Shield
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export const DriveFolderGrid = ({

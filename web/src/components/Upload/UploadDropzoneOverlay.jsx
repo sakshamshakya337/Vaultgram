@@ -117,5 +117,3 @@ export const UploadDropzoneOverlay = ({ currentFolder, selectedCategory }) => {
     </div>
   );
 };
-
-export default UploadDropzoneOverlay;
