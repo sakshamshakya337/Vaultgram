@@ -390,7 +390,8 @@ export const DriveLayout = () => {
       <DesktopVideoModal
         video={modalPreviewState ? modalPreviewState.items[modalPreviewState.index] : null}
         items={modalPreviewState?.items || []}
-        initialIndex={modalPreviewState?.index ?? 0}
+        currentIndex={modalPreviewState?.index ?? 0}
+        onIndexChange={(newIdx) => setModalPreviewState((prev) => (prev ? { ...prev, index: newIdx } : null))}
         onClose={() => setModalPreviewState(null)}
         onDelete={handleDeleteFile}
       />

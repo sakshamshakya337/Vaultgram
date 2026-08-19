@@ -13,7 +13,6 @@ import {
   Music,
   FileText,
   Image as ImageIcon,
-  File
 } from 'lucide-react';
 import { api, formatBytes, formatDuration, formatViews, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
@@ -22,52 +21,55 @@ import { DeleteConfirmModal } from './DeleteConfirmModal';
 export const DesktopVideoModal = ({
   video,
   items = [],
+  currentIndex = 0,
   initialIndex = 0,
+  onIndexChange,
   onClose,
   onDelete,
 }) => {
   const videoRef = useRef(null);
   const { toggleLike } = useVideoFeed();
 
-  // Internal active list & index tracking
-  const [activeItems, setActiveItems] = useState(items.length > 0 ? items : (video ? [video] : []));
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [localIndex, setLocalIndex] = useState(currentIndex ?? initialIndex ?? 0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Synchronize when incoming props change
-  useEffect(() => {
-    if (items && items.length > 0) {
-      setActiveItems(items);
-      if (initialIndex >= 0 && initialIndex < items.length) {
-        setCurrentIndex(initialIndex);
-      } else if (video) {
-        const foundIdx = items.findIndex((it) => (it._id || it.id) === (video._id || video.id));
-        setCurrentIndex(foundIdx !== -1 ? foundIdx : 0);
-      }
-    } else if (video) {
-      setActiveItems([video]);
-      setCurrentIndex(0);
-    }
-  }, [items, initialIndex, video]);
+  // Derive the active list of files
+  const activeItems = items && items.length > 0 ? items : (video ? [video] : []);
+  
+  // Use controlled currentIndex if provided, otherwise fallback to local state
+  const activeIndex = typeof currentIndex === 'number' ? currentIndex : localIndex;
+  const safeIndex = Math.max(0, Math.min(activeIndex, Math.max(0, activeItems.length - 1)));
+  const currentFile = activeItems[safeIndex] || video;
 
-  const currentFile = activeItems[currentIndex] || video;
-
-  // Previous & Next navigation handlers
+  // Previous item handler
   const handlePrev = useCallback(() => {
-    setCurrentIndex((prev) => Math.max(0, prev - 1));
-  }, []);
+    if (safeIndex > 0) {
+      const nextIdx = safeIndex - 1;
+      setLocalIndex(nextIdx);
+      if (onIndexChange) {
+        onIndexChange(nextIdx);
+      }
+    }
+  }, [safeIndex, onIndexChange]);
 
+  // Next item handler
   const handleNext = useCallback(() => {
-    setCurrentIndex((prev) => Math.min(activeItems.length - 1, prev + 1));
-  }, [activeItems.length]);
+    if (safeIndex < activeItems.length - 1) {
+      const nextIdx = safeIndex + 1;
+      setLocalIndex(nextIdx);
+      if (onIndexChange) {
+        onIndexChange(nextIdx);
+      }
+    }
+  }, [safeIndex, activeItems.length, onIndexChange]);
 
   // Keyboard navigation: Left/Right arrow keys & Escape
   useEffect(() => {
     if (!currentFile) return;
 
     const handleKeyDown = (e) => {
-      // Avoid intercepting if user is typing in an input/textarea
+      // Do not capture if typing in form inputs
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) {
         return;
@@ -76,20 +78,23 @@ export const DesktopVideoModal = ({
       if (e.key === 'Escape') {
         if (isDeleteModalOpen) {
           setIsDeleteModalOpen(false);
-        } else {
+        } else if (onClose) {
           onClose();
         }
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
+        e.stopPropagation();
         handlePrev();
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
+        e.stopPropagation();
         handleNext();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Use capture phase to ensure arrow key events are caught
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [currentFile, isDeleteModalOpen, onClose, handlePrev, handleNext]);
 
   if (!currentFile) return null;
@@ -114,14 +119,14 @@ export const DesktopVideoModal = ({
         await api.drive.delete(fileId);
       }
 
-      // Remove deleted item from internal list
       const nextList = activeItems.filter((it) => (it._id || it.id) !== fileId);
       if (nextList.length === 0) {
         setIsDeleteModalOpen(false);
         onClose();
       } else {
-        setActiveItems(nextList);
-        setCurrentIndex((prev) => Math.min(prev, nextList.length - 1));
+        const nextIdx = Math.min(safeIndex, nextList.length - 1);
+        setLocalIndex(nextIdx);
+        if (onIndexChange) onIndexChange(nextIdx);
         setIsDeleteModalOpen(false);
       }
     } catch (err) {
@@ -144,18 +149,19 @@ export const DesktopVideoModal = ({
         className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/85 backdrop-blur-xl animate-fade-in select-none"
         onClick={onClose}
       >
-        {/* Left Arrow Navigation Button */}
+        {/* On-Screen Left Arrow Navigation Button */}
         {activeItems.length > 1 && (
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               handlePrev();
             }}
-            disabled={currentIndex === 0}
-            className={`fixed left-3 md:left-6 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer ${
-              currentIndex === 0
-                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 pointer-events-none'
-                : 'opacity-70 hover:opacity-100 bg-black/70 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+            disabled={safeIndex === 0}
+            className={`fixed left-3 md:left-6 top-1/2 -translate-y-1/2 z-[60] w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer pointer-events-auto ${
+              safeIndex === 0
+                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 cursor-not-allowed'
+                : 'opacity-75 hover:opacity-100 bg-black/80 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
             }`}
             aria-label="Previous item (Left Arrow)"
             title="Previous item (Left Arrow)"
@@ -164,18 +170,19 @@ export const DesktopVideoModal = ({
           </button>
         )}
 
-        {/* Right Arrow Navigation Button */}
+        {/* On-Screen Right Arrow Navigation Button */}
         {activeItems.length > 1 && (
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               handleNext();
             }}
-            disabled={currentIndex === activeItems.length - 1}
-            className={`fixed right-3 md:right-6 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer ${
-              currentIndex === activeItems.length - 1
-                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 pointer-events-none'
-                : 'opacity-70 hover:opacity-100 bg-black/70 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+            disabled={safeIndex === activeItems.length - 1}
+            className={`fixed right-3 md:right-6 top-1/2 -translate-y-1/2 z-[60] w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer pointer-events-auto ${
+              safeIndex === activeItems.length - 1
+                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 cursor-not-allowed'
+                : 'opacity-75 hover:opacity-100 bg-black/80 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
             }`}
             aria-label="Next item (Right Arrow)"
             title="Next item (Right Arrow)"
@@ -186,7 +193,7 @@ export const DesktopVideoModal = ({
 
         {/* Main Modal Window */}
         <div
-          className="relative w-full max-w-4xl max-h-[90vh] rounded-3xl bg-zinc-950 border border-white/10 shadow-2xl overflow-hidden flex flex-col"
+          className="relative w-full max-w-4xl max-h-[90vh] rounded-3xl bg-zinc-950 border border-white/10 shadow-2xl overflow-hidden flex flex-col z-10"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Top Header */}
@@ -201,8 +208,8 @@ export const DesktopVideoModal = ({
                     {currentFile.title || 'Untitled File'}
                   </h3>
                   {activeItems.length > 1 && (
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-zinc-300 shrink-0">
-                      {currentIndex + 1} / {activeItems.length}
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-zinc-300 shrink-0 font-semibold">
+                      {safeIndex + 1} / {activeItems.length}
                     </span>
                   )}
                 </div>
