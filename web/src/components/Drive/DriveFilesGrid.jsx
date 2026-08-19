@@ -31,7 +31,7 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-        {videos.map((video) => {
+        {videos.map((video, index) => {
           const videoId = video._id || video.id;
           const isStarred = !!video.isStarred;
           const downloadUrl = api.stream.getUrl(videoId, true);
@@ -39,7 +39,7 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
           return (
             <div
               key={videoId}
-              onClick={() => onSelectVideo(video)}
+              onClick={() => onSelectVideo(video, index)}
               className="group relative rounded-2xl bg-zinc-900/50 hover:bg-zinc-900 border border-white/5 hover:border-cyan-500/30 overflow-hidden shadow-lg transition-all duration-200 cursor-pointer flex flex-col"
             >
               {/* Thumbnail Preview Area */}

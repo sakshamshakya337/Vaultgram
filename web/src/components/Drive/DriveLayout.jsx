@@ -37,7 +37,7 @@ export const DriveLayout = () => {
   const [currentFolder, setCurrentFolder] = useState(null); // null = root
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
-  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [modalPreviewState, setModalPreviewState] = useState(null); // { items: [], index: 0 }
 
   // Drive state
   const [driveItems, setDriveItems] = useState([]);
@@ -347,13 +347,23 @@ export const DriveLayout = () => {
                 viewMode === 'grid' ? (
                   <DriveFilesGrid
                     videos={files}
-                    onSelectVideo={(v) => setSelectedVideo(v)}
+                    onSelectVideo={(v, idx) =>
+                      setModalPreviewState({
+                        items: files,
+                        index: typeof idx === 'number' ? idx : files.findIndex((f) => (f._id || f.id) === (v._id || v.id)),
+                      })
+                    }
                     onDeleteVideo={handleDeleteFile}
                   />
                 ) : (
                   <DriveFilesList
                     videos={files}
-                    onSelectVideo={(v) => setSelectedVideo(v)}
+                    onSelectVideo={(v, idx) =>
+                      setModalPreviewState({
+                        items: files,
+                        index: typeof idx === 'number' ? idx : files.findIndex((f) => (f._id || f.id) === (v._id || v.id)),
+                      })
+                    }
                     onDeleteVideo={handleDeleteFile}
                   />
                 )
@@ -376,10 +386,12 @@ export const DriveLayout = () => {
         />
       </div>
 
-      {/* Desktop Video Playback Modal with HTML5 Controls */}
+      {/* Desktop Video/Media Playback Modal with Prev/Next Navigation */}
       <DesktopVideoModal
-        video={selectedVideo}
-        onClose={() => setSelectedVideo(null)}
+        video={modalPreviewState ? modalPreviewState.items[modalPreviewState.index] : null}
+        items={modalPreviewState?.items || []}
+        initialIndex={modalPreviewState?.index ?? 0}
+        onClose={() => setModalPreviewState(null)}
         onDelete={handleDeleteFile}
       />
 

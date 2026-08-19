@@ -1,43 +1,129 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { X, Play, Heart, Download, Trash2, Clock, HardDrive, Eye } from 'lucide-react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import {
+  X,
+  Play,
+  Heart,
+  Download,
+  Trash2,
+  Clock,
+  HardDrive,
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  Music,
+  FileText,
+  Image as ImageIcon,
+  File
+} from 'lucide-react';
 import { api, formatBytes, formatDuration, formatViews, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
-export const DesktopVideoModal = ({ video, onClose, onDelete }) => {
+export const DesktopVideoModal = ({
+  video,
+  items = [],
+  initialIndex = 0,
+  onClose,
+  onDelete,
+}) => {
   const videoRef = useRef(null);
   const { toggleLike } = useVideoFeed();
+
+  // Internal active list & index tracking
+  const [activeItems, setActiveItems] = useState(items.length > 0 ? items : (video ? [video] : []));
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Synchronize when incoming props change
   useEffect(() => {
+    if (items && items.length > 0) {
+      setActiveItems(items);
+      if (initialIndex >= 0 && initialIndex < items.length) {
+        setCurrentIndex(initialIndex);
+      } else if (video) {
+        const foundIdx = items.findIndex((it) => (it._id || it.id) === (video._id || video.id));
+        setCurrentIndex(foundIdx !== -1 ? foundIdx : 0);
+      }
+    } else if (video) {
+      setActiveItems([video]);
+      setCurrentIndex(0);
+    }
+  }, [items, initialIndex, video]);
+
+  const currentFile = activeItems[currentIndex] || video;
+
+  // Previous & Next navigation handlers
+  const handlePrev = useCallback(() => {
+    setCurrentIndex((prev) => Math.max(0, prev - 1));
+  }, []);
+
+  const handleNext = useCallback(() => {
+    setCurrentIndex((prev) => Math.min(activeItems.length - 1, prev + 1));
+  }, [activeItems.length]);
+
+  // Keyboard navigation: Left/Right arrow keys & Escape
+  useEffect(() => {
+    if (!currentFile) return;
+
     const handleKeyDown = (e) => {
+      // Avoid intercepting if user is typing in an input/textarea
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) {
+        return;
+      }
+
       if (e.key === 'Escape') {
-        if (isDeleteModalOpen) setIsDeleteModalOpen(false);
-        else onClose();
+        if (isDeleteModalOpen) {
+          setIsDeleteModalOpen(false);
+        } else {
+          onClose();
+        }
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrev();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNext();
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, isDeleteModalOpen]);
+  }, [currentFile, isDeleteModalOpen, onClose, handlePrev, handleNext]);
 
-  if (!video) return null;
+  if (!currentFile) return null;
 
-  const videoId = video._id || video.id;
-  const streamUrl = video.streamUrl || api.stream.getUrl(videoId);
-  const downloadUrl = api.stream.getUrl(videoId, true);
-  const isStarred = !!video.isStarred;
+  const fileId = currentFile._id || currentFile.id;
+  const streamUrl = currentFile.streamUrl || api.stream.getUrl(fileId);
+  const downloadUrl = api.stream.getUrl(fileId, true);
+  const isStarred = !!currentFile.isStarred;
+  const rawFileType = currentFile.fileType || currentFile.fileCategory || 'video';
+  const isVideo = rawFileType === 'video' || (!rawFileType && currentFile.duration > 0);
+  const isImage = rawFileType === 'image';
+  const isAudio = rawFileType === 'audio';
+
+  const thumbUrl = currentFile.thumbnail || (currentFile.thumbnailFileId ? api.videos.getThumbnailUrl(fileId) : '');
 
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
       if (onDelete) {
-        await onDelete(videoId);
+        await onDelete(fileId);
       } else {
-        await api.drive.delete(videoId);
+        await api.drive.delete(fileId);
       }
-      setIsDeleteModalOpen(false);
-      onClose();
+
+      // Remove deleted item from internal list
+      const nextList = activeItems.filter((it) => (it._id || it.id) !== fileId);
+      if (nextList.length === 0) {
+        setIsDeleteModalOpen(false);
+        onClose();
+      } else {
+        setActiveItems(nextList);
+        setCurrentIndex((prev) => Math.min(prev, nextList.length - 1));
+        setIsDeleteModalOpen(false);
+      }
     } catch (err) {
       alert(err.message || 'Failed to delete file');
     } finally {
@@ -45,12 +131,60 @@ export const DesktopVideoModal = ({ video, onClose, onDelete }) => {
     }
   };
 
+  const getFileIcon = () => {
+    if (isVideo) return <Play className="w-4 h-4 fill-cyan-400 text-cyan-400" />;
+    if (isImage) return <ImageIcon className="w-4 h-4 text-emerald-400" />;
+    if (isAudio) return <Music className="w-4 h-4 text-purple-400" />;
+    return <FileText className="w-4 h-4 text-amber-400" />;
+  };
+
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/85 backdrop-blur-xl animate-fade-in select-none"
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/85 backdrop-blur-xl animate-fade-in select-none"
         onClick={onClose}
       >
+        {/* Left Arrow Navigation Button */}
+        {activeItems.length > 1 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrev();
+            }}
+            disabled={currentIndex === 0}
+            className={`fixed left-3 md:left-6 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer ${
+              currentIndex === 0
+                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 pointer-events-none'
+                : 'opacity-70 hover:opacity-100 bg-black/70 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+            }`}
+            aria-label="Previous item (Left Arrow)"
+            title="Previous item (Left Arrow)"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        )}
+
+        {/* Right Arrow Navigation Button */}
+        {activeItems.length > 1 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
+            disabled={currentIndex === activeItems.length - 1}
+            className={`fixed right-3 md:right-6 top-1/2 -translate-y-1/2 z-50 w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer ${
+              currentIndex === activeItems.length - 1
+                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 pointer-events-none'
+                : 'opacity-70 hover:opacity-100 bg-black/70 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+            }`}
+            aria-label="Next item (Right Arrow)"
+            title="Next item (Right Arrow)"
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
+        )}
+
+        {/* Main Modal Window */}
         <div
           className="relative w-full max-w-4xl max-h-[90vh] rounded-3xl bg-zinc-950 border border-white/10 shadow-2xl overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
@@ -58,15 +192,24 @@ export const DesktopVideoModal = ({ video, onClose, onDelete }) => {
           {/* Modal Top Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-zinc-900/60 shrink-0">
             <div className="flex items-center gap-3 min-w-0 pr-4">
-              <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
-                <Play className="w-4 h-4 fill-cyan-400" />
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0">
+                {getFileIcon()}
               </div>
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-white truncate">{video.title || 'Untitled Video'}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white truncate" title={currentFile.title}>
+                    {currentFile.title || 'Untitled File'}
+                  </h3>
+                  {activeItems.length > 1 && (
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-white/10 text-zinc-300 shrink-0">
+                      {currentIndex + 1} / {activeItems.length}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-zinc-400 flex items-center gap-2">
-                  <span className="text-cyan-400 font-semibold">#{video.category || 'General'}</span>
+                  <span className="text-cyan-400 font-semibold">#{currentFile.category || 'General'}</span>
                   <span>•</span>
-                  <span>{video.createdAt ? formatRelativeTime(video.createdAt) : 'Recently uploaded'}</span>
+                  <span>{currentFile.createdAt ? formatRelativeTime(currentFile.createdAt) : 'Recently uploaded'}</span>
                 </p>
               </div>
             </div>
@@ -74,7 +217,7 @@ export const DesktopVideoModal = ({ video, onClose, onDelete }) => {
             <div className="flex items-center gap-2 shrink-0">
               {/* Like Button */}
               <button
-                onClick={() => toggleLike(videoId)}
+                onClick={() => toggleLike(fileId)}
                 className={`p-2 rounded-xl border transition-all cursor-pointer ${
                   isStarred
                     ? 'bg-rose-500/10 border-rose-500/30 text-rose-500'
@@ -88,7 +231,7 @@ export const DesktopVideoModal = ({ video, onClose, onDelete }) => {
               {/* Direct Download */}
               <a
                 href={downloadUrl}
-                download={video.title || 'video.mp4'}
+                download={currentFile.title || 'download'}
                 className="p-2 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title="Download file"
               >
@@ -108,49 +251,96 @@ export const DesktopVideoModal = ({ video, onClose, onDelete }) => {
               <button
                 onClick={onClose}
                 className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer ml-1"
+                aria-label="Close modal"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Video Player Container */}
+          {/* Media Player / Viewer Container */}
           <div className="relative flex-1 min-h-[380px] max-h-[65vh] bg-black flex items-center justify-center overflow-hidden">
-            <video
-              ref={videoRef}
-              src={streamUrl}
-              poster={video.thumbnail || ''}
-              controls
-              autoPlay
-              playsInline
-              className="w-full h-full max-h-[65vh] object-contain"
-            />
+            {isVideo ? (
+              <video
+                key={fileId}
+                ref={videoRef}
+                src={streamUrl}
+                poster={thumbUrl || ''}
+                controls
+                autoPlay
+                playsInline
+                className="w-full h-full max-h-[65vh] object-contain"
+              />
+            ) : isImage ? (
+              <img
+                key={fileId}
+                src={streamUrl || thumbUrl}
+                alt={currentFile.title || 'Image preview'}
+                className="w-full h-full max-h-[65vh] object-contain p-2 animate-fade-in"
+              />
+            ) : isAudio ? (
+              <div key={fileId} className="flex flex-col items-center justify-center p-8 gap-5 animate-fade-in">
+                <div className="w-24 h-24 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shadow-xl shadow-purple-500/10">
+                  <Music className="w-12 h-12 animate-pulse" />
+                </div>
+                <div className="text-center">
+                  <h4 className="text-sm font-bold text-white mb-1">{currentFile.title}</h4>
+                  <p className="text-xs text-zinc-400">{formatBytes(currentFile.fileSizeBytes)}</p>
+                </div>
+                <audio
+                  src={streamUrl}
+                  controls
+                  autoPlay
+                  className="w-full max-w-md mt-2"
+                />
+              </div>
+            ) : (
+              <div key={fileId} className="flex flex-col items-center justify-center p-8 gap-5 text-center animate-fade-in">
+                <div className="w-24 h-24 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shadow-xl shadow-amber-500/10">
+                  <FileText className="w-12 h-12" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white mb-1">{currentFile.title}</h4>
+                  <p className="text-xs text-zinc-400 font-mono">{formatBytes(currentFile.fileSizeBytes)} • {currentFile.extension?.toUpperCase() || 'DOCUMENT'}</p>
+                </div>
+                <a
+                  href={downloadUrl}
+                  download={currentFile.title || 'document'}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs shadow-lg shadow-cyan-500/25 transition-all active:scale-95"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Document</span>
+                </a>
+              </div>
+            )}
           </div>
 
-          {/* Video Details Footer */}
+          {/* Details Footer */}
           <div className="px-6 py-3.5 border-t border-white/10 bg-zinc-900/40 flex items-center justify-between text-xs text-zinc-400 shrink-0">
             <div className="flex items-center gap-4 flex-wrap">
-              {video.fileSizeBytes ? (
+              {currentFile.fileSizeBytes ? (
                 <span className="flex items-center gap-1.5 font-mono">
                   <HardDrive className="w-3.5 h-3.5 text-zinc-500" />
-                  <span>{formatBytes(video.fileSizeBytes)}</span>
+                  <span>{formatBytes(currentFile.fileSizeBytes)}</span>
                 </span>
               ) : null}
-              {video.duration ? (
+              {currentFile.duration ? (
                 <span className="flex items-center gap-1.5 font-mono">
                   <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                  <span>{formatDuration(video.duration)}</span>
+                  <span>{formatDuration(currentFile.duration)}</span>
                 </span>
               ) : null}
-              <span className="flex items-center gap-1.5">
-                <Eye className="w-3.5 h-3.5 text-zinc-500" />
-                <span>{formatViews(video.views || 0)} views</span>
-              </span>
+              {isVideo && (
+                <span className="flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>{formatViews(currentFile.views || 0)} views</span>
+                </span>
+              )}
             </div>
 
-            {video.description && (
+            {currentFile.description && (
               <p className="text-xs text-zinc-300 max-w-md truncate hidden sm:block">
-                {video.description}
+                {currentFile.description}
               </p>
             )}
           </div>
@@ -160,9 +350,9 @@ export const DesktopVideoModal = ({ video, onClose, onDelete }) => {
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}
-        title="Delete Video"
-        itemName={video.title || 'this video'}
-        itemType="video"
+        title="Delete File"
+        itemName={currentFile.title || 'this file'}
+        itemType="file"
         loading={isDeleting}
         onConfirm={handleConfirmDelete}
         onCancel={() => setIsDeleteModalOpen(false)}

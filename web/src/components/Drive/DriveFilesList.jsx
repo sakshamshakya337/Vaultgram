@@ -40,7 +40,7 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
         </div>
 
         <div className="divide-y divide-white/5">
-          {videos.map((video) => {
+          {videos.map((video, index) => {
             const videoId = video._id || video.id;
             const isStarred = !!video.isStarred;
             const downloadUrl = api.stream.getUrl(videoId, true);
@@ -48,7 +48,7 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
             return (
               <div
                 key={videoId}
-                onClick={() => onSelectVideo(video)}
+                onClick={() => onSelectVideo(video, index)}
                 className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-white/[0.03] transition-colors cursor-pointer group text-xs text-zinc-300"
               >
                 {/* File Title + Thumbnail */}
