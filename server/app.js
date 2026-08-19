@@ -63,15 +63,15 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(generalLimiter);
 
-// Health checks
+// Health checks (lightweight, zero-DB ping for uptime monitors)
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', service: 'Personal Storage API' });
+  res.status(200).json({ status: 'ok', service: 'Personal Storage API', timestamp: Date.now() });
 });
 app.get('/api/v1/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
     service: 'Personal Storage API',
-    timestamp: new Date().toISOString(),
+    timestamp: Date.now(),
     version: '1.0.0',
   });
 });
