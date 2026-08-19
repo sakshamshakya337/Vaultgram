@@ -115,8 +115,9 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
   const originalSize = inputBuffer.length;
   const isVideo = mimeType.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts)$/i.test(originalName);
 
-  // If not a video or already under 20MB, no recompression needed
+  // EARLY SIZE & TYPE CHECK: If not a video or already <= 20MB, skip ALL processing
   if (!isVideo || originalSize <= MAX_TARGET_BYTES) {
+    console.log(`[VideoCompression] File "${originalName}" (${(originalSize / (1024 * 1024)).toFixed(2)} MB) is already within limit (${MAX_COMPRESSED_VIDEO_SIZE_MB} MB). Skipping compression.`);
     return {
       buffer: inputBuffer,
       size: originalSize,

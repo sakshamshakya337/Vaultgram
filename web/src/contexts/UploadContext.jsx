@@ -282,9 +282,14 @@ export const UploadProvider = ({ children }) => {
               prev.map((q) => (q.id === item.id ? { ...q, status: 'uploading', progress: clamped } : q))
             );
           } else {
-            // Byte upload complete — transition to honest server-side compressing/processing phase
+            // Byte upload complete — enter 'compressing' ONLY if it's a video over 20MB that needs FFmpeg
+            const needsCompression = item.isVideo && item.fileSize > 20 * 1024 * 1024;
             setUploadQueue((prev) =>
-              prev.map((q) => (q.id === item.id ? { ...q, status: 'compressing', progress: 100 } : q))
+              prev.map((q) =>
+                q.id === item.id
+                  ? { ...q, status: needsCompression ? 'compressing' : 'uploading', progress: 100 }
+                  : q
+              )
             );
           }
         }

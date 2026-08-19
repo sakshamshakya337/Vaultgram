@@ -242,23 +242,36 @@ exports.uploadMedia = async (req, res) => {
     let compressionRatio = 0;
     let compressedMeta = {};
 
-    // ─── Automatic Video Compression to <= 20MB ──────────────────────────────────
-    if (autoFileType === 'video' || uploadedFile.mimetype.startsWith('video/')) {
-      const compressionResult = await compressVideoIfNeeded(
-        uploadedFile.buffer,
-        uploadedFile.originalname,
-        uploadedFile.mimetype
-      );
+    const MAX_COMPRESSED_VIDEO_SIZE_MB = parseInt(process.env.MAX_COMPRESSED_VIDEO_SIZE_MB, 10) || 20;
+    const MAX_TARGET_BYTES = MAX_COMPRESSED_VIDEO_SIZE_MB * 1024 * 1024;
+    const isVideo = autoFileType === 'video' || uploadedFile.mimetype.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts)$/i.test(uploadedFile.originalname);
 
-      finalBuffer = compressionResult.buffer;
-      finalSize = compressionResult.size;
-      isCompressed = compressionResult.compressed;
-      compressionRatio = compressionResult.compressionPercentage;
-      compressedMeta = {
-        duration: compressionResult.duration,
-        width: compressionResult.width,
-        height: compressionResult.height,
-      };
+    // ─── Automatic Video Compression to <= 20MB ONLY when exceeding 20MB ──────
+    if (isVideo) {
+      if (uploadedFile.size > MAX_TARGET_BYTES) {
+        console.log(`[uploadMedia] Video size (${(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB) exceeds ${MAX_COMPRESSED_VIDEO_SIZE_MB}MB limit. Initiating FFmpeg compression...`);
+        const compressionResult = await compressVideoIfNeeded(
+          uploadedFile.buffer,
+          uploadedFile.originalname,
+          uploadedFile.mimetype
+        );
+
+        finalBuffer = compressionResult.buffer;
+        finalSize = compressionResult.size;
+        isCompressed = compressionResult.compressed;
+        compressionRatio = compressionResult.compressionPercentage;
+        compressedMeta = {
+          duration: compressionResult.duration,
+          width: compressionResult.width,
+          height: compressionResult.height,
+        };
+      } else {
+        console.log(`[uploadMedia] Video size (${(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB) is already <= ${MAX_COMPRESSED_VIDEO_SIZE_MB}MB. Skipping FFmpeg compression entirely.`);
+        finalBuffer = uploadedFile.buffer;
+        finalSize = uploadedFile.size;
+        isCompressed = false;
+        compressionRatio = 0;
+      }
     } else {
       // For non-video files (images, documents), enforce Telegram standard 20MB limit
       const MAX_HOSTED_TELEGRAM_SIZE = 20 * 1024 * 1024;
@@ -323,9 +336,13 @@ exports.uploadMedia = async (req, res) => {
     });
 
     const resultDoc = ensureFileType(doc.toObject());
+    resultDoc.success = true;
+    resultDoc.message = isCompressed ? 'Video compressed and uploaded successfully' : 'File uploaded successfully';
     resultDoc.originalSize = uploadedFile.size;
+    resultDoc.compressedSize = finalSize;
     resultDoc.finalSize = finalSize;
     resultDoc.compressed = isCompressed;
+    resultDoc.compressionApplied = isCompressed;
     resultDoc.compressionPercentage = compressionRatio;
 
     res.status(201).json(resultDoc);
