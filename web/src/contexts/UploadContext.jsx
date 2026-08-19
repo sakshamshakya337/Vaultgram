@@ -181,25 +181,38 @@ export const UploadProvider = ({ children }) => {
   };
 
   /**
-   * Cancel an upload item
+   * Cancel an individual upload item (aborts in-flight XHR if currently active)
    */
   const cancelUpload = useCallback((id) => {
-    setUploadQueue((prev) => {
-      const item = prev.find((i) => i.id === id);
-      if (!item) return prev;
-
-      // If currently uploading, abort XHR
-      if (item.status === 'uploading' && activeXhrRef.current && currentProcessingIdRef.current === id) {
-        try {
-          activeXhrRef.current.abort();
-        } catch (err) {
-          console.warn('Error aborting upload XHR:', err);
-        }
-        activeXhrRef.current = null;
+    // If the cancelled item is currently active (uploading or compressing), abort XHR mid-flight
+    if (activeXhrRef.current && currentProcessingIdRef.current === id) {
+      try {
+        activeXhrRef.current.abort();
+      } catch (err) {
+        console.warn('Error aborting upload XHR:', err);
       }
+      activeXhrRef.current = null;
+      currentProcessingIdRef.current = null;
+    }
 
-      return prev.filter((i) => i.id !== id);
-    });
+    setUploadQueue((prev) => prev.filter((i) => i.id !== id));
+  }, []);
+
+  /**
+   * Cancel all upload items, abort active in-flight transfers, and reset queue
+   */
+  const cancelAllUploads = useCallback(() => {
+    if (activeXhrRef.current) {
+      try {
+        activeXhrRef.current.abort();
+      } catch (err) {
+        console.warn('Error aborting upload XHR:', err);
+      }
+      activeXhrRef.current = null;
+      currentProcessingIdRef.current = null;
+    }
+    setUploadQueue([]);
+    setIsTrayOpen(false);
   }, []);
 
   /**
@@ -247,7 +260,7 @@ export const UploadProvider = ({ children }) => {
   }, []);
 
   /**
-   * Dismiss the entire tray
+   * Dismiss the entire tray (like Google Drive, does not abort background uploads)
    */
   const dismissTray = useCallback(() => {
     setIsTrayOpen(false);
@@ -424,6 +437,7 @@ export const UploadProvider = ({ children }) => {
         confirmCategoryPrompt,
         openFilePicker,
         cancelUpload,
+        cancelAllUploads,
         retryUpload,
         clearCompleted,
         dismissTray,

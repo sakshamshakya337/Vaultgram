@@ -59,7 +59,7 @@ function probeVideo(filePath) {
 /**
  * Runs a single FFmpeg compression pass
  */
-function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKbps, maxWidth, hasAudio }) {
+function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKbps, maxWidth, hasAudio, onCommand }) {
   return new Promise((resolve, reject) => {
     let command = ffmpeg(inputPath)
       .output(outputPath)
@@ -72,6 +72,10 @@ function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKb
         `-bufsize ${Math.floor(videoBitrateKbps * 2)}k`,
       ])
       .videoBitrate(`${Math.max(150, Math.floor(videoBitrateKbps))}k`);
+
+    if (onCommand && typeof onCommand === 'function') {
+      onCommand(command);
+    }
 
     // Resolution scaling preserving aspect ratio and ensuring even pixel dimensions
     if (maxWidth && maxWidth > 0) {
@@ -96,6 +100,9 @@ function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKb
     command
       .on('end', () => resolve(outputPath))
       .on('error', (err) => {
+        if (err.message && (err.message.includes('SIGKILL') || err.message.includes('killed') || err.message.includes('SIGTERM'))) {
+          return reject(new Error('FFmpeg compression process was terminated by client cancellation.'));
+        }
         console.error('[FFmpeg Pass Error]:', err.message);
         reject(new Error(`FFmpeg encoding error: ${err.message}`));
       })
@@ -109,9 +116,10 @@ function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKb
  * @param {Buffer} inputBuffer - The original uploaded video buffer
  * @param {string} originalName - Original filename
  * @param {string} mimeType - Original MIME type
+ * @param {object} req - Express request object for detecting client cancellation
  * @returns {Promise<{ buffer: Buffer, size: number, originalSize: number, compressed: boolean, compressionPercentage: number, duration: number, width: number, height: number }>}
  */
-async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mimeType = 'video/mp4') {
+async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mimeType = 'video/mp4', req = null) {
   const originalSize = inputBuffer.length;
   const isVideo = mimeType.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts)$/i.test(originalName);
 
@@ -142,6 +150,39 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
   const fileHash = crypto.randomBytes(6).toString('hex');
   const tempInputPath = path.join(tempDir, `vg_in_${Date.now()}_${fileHash}.mp4`);
   const tempFilesToClean = [tempInputPath];
+
+  let activeFfmpegCommand = null;
+  let isAborted = false;
+
+  const handleAbort = () => {
+    if (isAborted) return;
+    isAborted = true;
+    console.log(`[VideoCompression] Client disconnected/cancelled. Terminating FFmpeg process and cleaning temp files for "${originalName}"...`);
+    if (activeFfmpegCommand) {
+      try {
+        activeFfmpegCommand.kill('SIGKILL');
+      } catch (err) {
+        console.warn('[VideoCompression] Note killing FFmpeg process:', err.message);
+      }
+      activeFfmpegCommand = null;
+    }
+    for (const filePath of tempFilesToClean) {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {}
+    }
+  };
+
+  if (req) {
+    req.on('close', () => {
+      if (!req.complete && !req.res?.writableEnded) {
+        handleAbort();
+      }
+    });
+    req.on('aborted', handleAbort);
+  }
 
   try {
     // Write incoming buffer to temporary input file
@@ -219,6 +260,9 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
           audioBitrateKbps,
           maxWidth: attempt.maxWidth,
           hasAudio: metadata.hasAudio,
+          onCommand: (cmd) => {
+            activeFfmpegCommand = cmd;
+          },
         });
 
         const stat = await fs.promises.stat(tempOutputPath);

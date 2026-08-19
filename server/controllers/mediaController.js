@@ -253,7 +253,8 @@ exports.uploadMedia = async (req, res) => {
         const compressionResult = await compressVideoIfNeeded(
           uploadedFile.buffer,
           uploadedFile.originalname,
-          uploadedFile.mimetype
+          uploadedFile.mimetype,
+          req
         );
 
         finalBuffer = compressionResult.buffer;
@@ -422,17 +423,41 @@ exports.toggleStar = async (req, res) => {
 /**
  * POST /api/v1/media/:id/trash
  */
+/**
+ * POST /api/v1/media/:id/trash or DELETE /api/v1/media/:id
+ */
 exports.trashOrDelete = async (req, res) => {
   try {
     const item = await Media.findById(req.params.id);
     if (!item) return res.status(404).json({ message: 'Item not found' });
 
-    if (item.isTrashed) {
-      if (item.telegramMessageId) {
-        await deleteMediaFromTelegram(item.telegramMessageId);
+    // Permanent delete if item is already trashed, or if direct DELETE HTTP method or ?permanent=true is used
+    const isPermanent = item.isTrashed || req.query.permanent === 'true' || req.method === 'DELETE';
+
+    if (isPermanent) {
+      let telegramResult = { success: true };
+
+      // If it's a folder, permanently delete all children and their Telegram messages
+      if (item.isFolder) {
+        const nestedFiles = await Media.find({ folderId: item._id });
+        for (const nested of nestedFiles) {
+          if (nested.telegramMessageId) {
+            await deleteMediaFromTelegram(nested.telegramMessageId);
+          }
+        }
+        await Media.deleteMany({ folderId: item._id });
+      } else if (item.telegramMessageId) {
+        telegramResult = await deleteMediaFromTelegram(item.telegramMessageId);
       }
+
       await Media.findByIdAndDelete(req.params.id);
-      return res.json({ message: 'Item permanently deleted' });
+
+      return res.json({
+        success: true,
+        message: 'Item permanently deleted',
+        telegramDeleted: telegramResult.success,
+        telegramNote: telegramResult.error ? `Telegram note: ${telegramResult.error}` : undefined,
+      });
     }
 
     item.isTrashed = true;
@@ -471,13 +496,20 @@ exports.restoreTrash = async (req, res) => {
 exports.emptyTrash = async (req, res) => {
   try {
     const trashedItems = await Media.find({ isTrashed: true });
+    let telegramDeleteCount = 0;
     for (const item of trashedItems) {
       if (item.telegramMessageId) {
-        await deleteMediaFromTelegram(item.telegramMessageId);
+        const delRes = await deleteMediaFromTelegram(item.telegramMessageId);
+        if (delRes?.success) telegramDeleteCount++;
       }
     }
     await Media.deleteMany({ isTrashed: true });
-    res.json({ message: 'Trash emptied permanently' });
+    res.json({
+      success: true,
+      message: 'Trash emptied permanently',
+      itemsRemoved: trashedItems.length,
+      telegramMessagesDeleted: telegramDeleteCount,
+    });
   } catch (err) {
     console.error('[emptyTrash error]:', err.message);
     res.status(500).json({ message: 'Failed to empty trash' });

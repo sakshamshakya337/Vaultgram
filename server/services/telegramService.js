@@ -190,19 +190,43 @@ async function resolveFileUrl(fileId) {
 }
 
 /**
- * Deletes message from Telegram channel
+ * Deletes video/file message from Telegram cloud channel
+ * POST https://api.telegram.org/bot<TOKEN>/deleteMessage
  */
-async function deleteMediaFromTelegram(messageId) {
+async function deleteVideoFromTelegram(messageId) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!chatId || !messageId) return;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-  await axios.post(`${TELEGRAM_API_BASE()}/deleteMessage`, {
-    chat_id: chatId,
-    message_id: messageId,
-  }).catch((err) => {
-    console.warn('[deleteMediaFromTelegram] Note:', err.response?.data || err.message);
-  });
+  if (!chatId || !botToken) {
+    console.warn('[deleteVideoFromTelegram] Telegram credentials not configured in .env');
+    return { success: false, error: 'Telegram credentials missing' };
+  }
+
+  if (!messageId) {
+    return { success: false, error: 'No telegramMessageId provided' };
+  }
+
+  try {
+    const { data } = await axios.post(`${TELEGRAM_API_BASE()}/deleteMessage`, {
+      chat_id: chatId,
+      message_id: messageId,
+    });
+
+    if (data.ok) {
+      console.log(`[deleteVideoFromTelegram] Successfully deleted Telegram message ${messageId} from channel ${chatId}`);
+      return { success: true, data };
+    } else {
+      console.warn(`[deleteVideoFromTelegram] Telegram deleteMessage returned not ok: ${data.description}`);
+      return { success: false, error: data.description || 'Unknown Telegram delete error' };
+    }
+  } catch (err) {
+    const errMsg = err.response?.data?.description || err.message;
+    console.warn(`[deleteVideoFromTelegram] Telegram deleteMessage failed for messageId ${messageId}:`, errMsg);
+    return { success: false, error: errMsg };
+  }
 }
+
+const deleteMediaFromTelegram = deleteVideoFromTelegram;
 
 module.exports = {
   uploadMediaToTelegram,
@@ -210,7 +234,7 @@ module.exports = {
   uploadDocumentToTelegram,
   resolveFileUrl,
   deleteMediaFromTelegram,
-  deleteVideoFromTelegram: deleteMediaFromTelegram,
+  deleteVideoFromTelegram,
   detectFileCategory,
   detectFileType,
 };

@@ -26,6 +26,7 @@ export const UploadTray = () => {
     setIsTrayMinimized,
     dismissTray,
     cancelUpload,
+    cancelAllUploads,
     retryUpload,
     clearCompleted,
     isProcessing,
@@ -122,8 +123,8 @@ export const UploadTray = () => {
             <button
               onClick={dismissTray}
               className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-              title="Close Tray"
-              aria-label="Close Tray"
+              title="Hide tray (uploads continue in background)"
+              aria-label="Hide tray"
             >
               <X className="w-4 h-4" />
             </button>
@@ -169,15 +170,33 @@ export const UploadTray = () => {
                       )}
 
                       {isUploading && (
-                        <span className="text-xs font-mono text-cyan-400 font-bold">
-                          {item.progress}%
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono text-cyan-400 font-bold">
+                            {item.progress}%
+                          </span>
+                          <button
+                            onClick={() => cancelUpload(item.id)}
+                            className="p-1 text-zinc-500 hover:text-rose-400 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                            title="Cancel upload"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
 
                       {isCompressing && (
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[10px] font-semibold">
-                          <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
-                          <span>{item.isVideo ? 'Compressing...' : 'Finalizing...'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[10px] font-semibold">
+                            <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                            <span>{item.isVideo ? 'Compressing...' : 'Finalizing...'}</span>
+                          </div>
+                          <button
+                            onClick={() => cancelUpload(item.id)}
+                            className="p-1 text-zinc-500 hover:text-rose-400 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                            title="Cancel upload"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       )}
 
@@ -188,8 +207,8 @@ export const UploadTray = () => {
                           </span>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="p-1 text-zinc-500 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
-                            title="Cancel upload"
+                            className="p-1 text-zinc-500 hover:text-rose-400 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                            title="Cancel queued upload"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -248,18 +267,27 @@ export const UploadTray = () => {
           </div>
         )}
 
-        {/* Footer when finished */}
-        {!isTrayMinimized && !inProgress && uploadQueue.length > 0 && (
+        {/* Footer actions */}
+        {!isTrayMinimized && uploadQueue.length > 0 && (
           <div className="px-4 py-2.5 bg-zinc-950/60 border-t border-white/5 flex items-center justify-between text-xs shrink-0">
             <span className="text-zinc-500 text-[11px]">
               {completedFiles} of {totalFiles} completed
             </span>
-            <button
-              onClick={clearCompleted}
-              className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer text-[11px]"
-            >
-              Clear Finished
-            </button>
+            {inProgress ? (
+              <button
+                onClick={cancelAllUploads}
+                className="text-rose-400 hover:text-rose-300 font-semibold cursor-pointer text-[11px] hover:underline"
+              >
+                Cancel All
+              </button>
+            ) : (
+              <button
+                onClick={clearCompleted}
+                className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer text-[11px]"
+              >
+                Clear Finished
+              </button>
+            )}
           </div>
         )}
       </div>
