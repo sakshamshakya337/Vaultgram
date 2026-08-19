@@ -36,20 +36,22 @@ function probeVideo(filePath) {
       }
 
       const format = metadata.format || {};
-      const videoStream = (metadata.streams || []).find((s) => s.codec_type === 'video') || {};
-      const audioStream = (metadata.streams || []).find((s) => s.codec_type === 'audio') || {};
+      const streams = metadata.streams || [];
+      const videoStream = streams.find((s) => s.codec_type?.toLowerCase() === 'video') || {};
+      const audioStream = streams.find((s) => s.codec_type?.toLowerCase() === 'audio') || {};
 
       const duration = parseFloat(format.duration || videoStream.duration || 0);
       const width = parseInt(videoStream.width || 0, 10);
       const height = parseInt(videoStream.height || 0, 10);
       const videoBitrate = parseInt(videoStream.bit_rate || format.bit_rate || 0, 10);
+      const hasAudio = streams.some((s) => s.codec_type?.toLowerCase() === 'audio');
 
       resolve({
         duration,
         width,
         height,
         videoBitrate,
-        hasAudio: !!audioStream.codec_type,
+        hasAudio,
         formatName: format.format_name || '',
       });
     });
@@ -88,13 +90,17 @@ function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKb
       ]);
     }
 
-    if (hasAudio) {
+    // Ensure audio stream is preserved and encoded cleanly
+    if (hasAudio !== false) {
       command = command
         .audioCodec('aac')
-        .audioBitrate(`${Math.max(48, Math.floor(audioBitrateKbps))}k`)
-        .audioChannels(2);
-    } else {
-      command = command.noAudio();
+        .audioBitrate(`${Math.max(64, Math.floor(audioBitrateKbps || 96))}k`)
+        .audioChannels(2)
+        .outputOptions([
+          '-strict -2',
+          '-map 0:v:0',
+          '-map 0:a:0?',
+        ]);
     }
 
     command

@@ -42,6 +42,25 @@ export const DesktopVideoModal = ({
   const safeIndex = Math.max(0, Math.min(activeIndex, Math.max(0, activeItems.length - 1)));
   const currentFile = activeItems[safeIndex] || video;
 
+  // Ensure unmuted audio and volume 1.0 on video element
+  useEffect(() => {
+    if (videoRef.current) {
+      const vid = videoRef.current;
+      vid.volume = 1.0;
+      vid.muted = false;
+      const p = vid.play();
+      if (p !== undefined) {
+        p.catch((err) => {
+          // If browser strictly blocks unmuted autoplay without prior interaction, fallback to muted
+          if (err.name === 'NotAllowedError') {
+            vid.muted = true;
+            vid.play().catch(() => {});
+          }
+        });
+      }
+    }
+  }, [currentFile?._id, currentFile?.id]);
+
   // Previous item handler
   const handlePrev = useCallback(() => {
     if (safeIndex > 0) {
