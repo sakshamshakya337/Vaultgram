@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUploadQueue } from '../../contexts/UploadContext';
 
 export const DriveSidebar = ({
   currentNav,
