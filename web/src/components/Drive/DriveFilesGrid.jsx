@@ -44,12 +44,15 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
             >
               {/* Thumbnail Preview Area */}
               <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
-                {video.thumbnail ? (
+                {video.thumbnail || video.thumbnailFileId ? (
                   <img
-                    src={video.thumbnail}
+                    src={video.thumbnail || api.videos.getThumbnailUrl(videoId)}
                     alt={video.title || 'Video thumbnail'}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-tr from-zinc-900 to-zinc-950 flex items-center justify-center">

@@ -411,6 +411,8 @@ export const api = {
 
     get: (id) => request(`/videos/${id}`),
 
+    getThumbnailUrl: (id) => (id ? `${BASE_URL}/videos/${id}/thumbnail` : ''),
+
     toggleLike: (id) => request(`/media/${id}/like`, { method: 'POST' }),
 
     upload: (formData, onProgress) => {

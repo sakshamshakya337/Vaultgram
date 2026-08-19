@@ -192,6 +192,7 @@ export const ReelCard = ({ video, isActive, index }) => {
   };
 
   const isActuallyMuted = !isAudioUnlocked || isCardMuted;
+  const thumbUrl = video.thumbnail || (video.thumbnailFileId ? api.videos.getThumbnailUrl(videoId) : '');
 
   return (
     <div
@@ -202,10 +203,10 @@ export const ReelCard = ({ video, isActive, index }) => {
       className="snap-item relative w-full h-full h-[100dvh] flex items-center justify-center bg-zinc-950 overflow-hidden select-none cursor-pointer"
     >
       {/* Background Ambient Glow / Blur */}
-      {video.thumbnail ? (
+      {thumbUrl ? (
         <div
           className="absolute inset-0 bg-cover bg-center filter blur-3xl opacity-25 scale-125 pointer-events-none"
-          style={{ backgroundImage: `url(${video.thumbnail})` }}
+          style={{ backgroundImage: `url(${thumbUrl})` }}
         />
       ) : null}
 
@@ -213,7 +214,7 @@ export const ReelCard = ({ video, isActive, index }) => {
       <video
         ref={videoRef}
         src={streamUrl}
-        poster={video.thumbnail || ''}
+        poster={thumbUrl || ''}
         playsInline
         webkit-playsinline="true"
         loop

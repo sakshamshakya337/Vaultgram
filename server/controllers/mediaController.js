@@ -18,6 +18,7 @@ const {
 } = require('../services/telegramService');
 const {
   compressVideoIfNeeded,
+  generateVideoThumbnail,
   MAX_VIDEO_UPLOAD_SIZE_MB,
 } = require('../services/videoCompressionService');
 
@@ -290,9 +291,28 @@ exports.uploadMedia = async (req, res) => {
     const targetParent = folderId || parentFolderId;
     const parentId = targetParent && targetParent !== 'root' && targetParent !== 'null' ? targetParent : null;
 
+    let activeThumbBuffer = thumbFile?.buffer || null;
+
+    // Automatic thumbnail generation for video files if no custom thumbnail was provided
+    if (!activeThumbBuffer && isVideo) {
+      try {
+        activeThumbBuffer = await generateVideoThumbnail(finalBuffer, uploadedFile.originalname);
+      } catch (thumbErr) {
+        console.warn('[uploadMedia] Video thumbnail extraction note:', thumbErr.message);
+      }
+    }
+
+    let thumbnailFileId = '';
     let finalThumbnail = req.body.thumbnail || '';
-    if (thumbFile) {
-      finalThumbnail = `data:${thumbFile.mimetype || 'image/jpeg'};base64,${thumbFile.buffer.toString('base64')}`;
+
+    if (activeThumbBuffer) {
+      finalThumbnail = `data:image/jpeg;base64,${activeThumbBuffer.toString('base64')}`;
+      try {
+        const thumbUpload = await uploadDocumentToTelegram(activeThumbBuffer, `${path.parse(uploadedFile.originalname).name}_thumb.jpg`, 'image/jpeg');
+        thumbnailFileId = thumbUpload.fileId || '';
+      } catch (tUploadErr) {
+        console.warn('[uploadMedia] Telegram thumbnail upload note:', tUploadErr.message);
+      }
     }
 
     // 1. Upload to Telegram Cloud
@@ -311,7 +331,7 @@ exports.uploadMedia = async (req, res) => {
       finalBuffer,
       uploadedFile.originalname,
       uploadedFile.mimetype,
-      thumbFile?.buffer
+      activeThumbBuffer
     );
 
     // 2. Save document in MongoDB
@@ -327,6 +347,7 @@ exports.uploadMedia = async (req, res) => {
       extension: extension || path.extname(uploadedFile.originalname).replace('.', ''),
       mimeType: uploadedFile.mimetype || '',
       thumbnail: finalThumbnail,
+      thumbnailFileId: thumbnailFileId,
       telegramFileId: fileId,
       telegramMessageId: messageId,
       duration: duration || compressedMeta.duration || 0,
@@ -753,6 +774,52 @@ exports.getCategories = async (req, res) => {
   } catch (err) {
     console.error('[getCategories error]:', err.message);
     res.status(500).json({ message: 'Failed to fetch categories' });
+  }
+};
+
+/**
+ * GET /api/v1/videos/:id/thumbnail or /api/v1/media/:id/thumbnail
+ */
+exports.getVideoThumbnail = async (req, res) => {
+  try {
+    const item = await Media.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: 'Media not found' });
+    }
+
+    // 1. If base64 data URL is stored in database
+    if (item.thumbnail && item.thumbnail.startsWith('data:image/')) {
+      const parts = item.thumbnail.split(',');
+      const mimeMatch = parts[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+      const imgBuffer = Buffer.from(parts[1], 'base64');
+
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+      res.setHeader('Content-Length', imgBuffer.length);
+      return res.send(imgBuffer);
+    }
+
+    // 2. If thumbnail is stored in Telegram via thumbnailFileId
+    const targetFileId = item.thumbnailFileId || (item.fileType === 'image' ? item.telegramFileId : null);
+    if (targetFileId) {
+      const fileUrl = await resolveFileUrl(targetFileId);
+      const response = await axios({
+        method: 'GET',
+        url: fileUrl,
+        responseType: 'stream',
+        timeout: 60000,
+      });
+
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+      return response.data.pipe(res);
+    }
+
+    res.status(404).json({ message: 'Thumbnail not available' });
+  } catch (err) {
+    console.error('[getVideoThumbnail error]:', err.message);
+    res.status(500).json({ message: 'Failed to retrieve thumbnail' });
   }
 };
 

@@ -312,10 +312,72 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
       }
     }
   }
+/**
+ * Automatically extracts a representative JPEG thumbnail frame from a video buffer
+ * 
+ * @param {Buffer} inputBuffer - The video buffer
+ * @param {string} originalName - Original filename for logging
+ * @returns {Promise<Buffer|null>} The generated JPEG thumbnail buffer or null on error
+ */
+async function generateVideoThumbnail(inputBuffer, originalName = 'video.mp4') {
+  if (!inputBuffer || inputBuffer.length === 0) return null;
+
+  const tempDir = os.tmpdir();
+  const fileHash = crypto.randomBytes(6).toString('hex');
+  const tempInputPath = path.join(tempDir, `vg_thumb_in_${Date.now()}_${fileHash}.mp4`);
+  const tempOutputPath = path.join(tempDir, `vg_thumb_out_${Date.now()}_${fileHash}.jpg`);
+  const tempFiles = [tempInputPath, tempOutputPath];
+
+  try {
+    await fs.promises.writeFile(tempInputPath, inputBuffer);
+
+    let duration = 0;
+    try {
+      const meta = await probeVideo(tempInputPath);
+      duration = meta.duration || 0;
+    } catch {}
+
+    // Pull from ~1 second mark (or 10% into duration for short clips) to avoid frame 0 blackness
+    const seekSeconds = duration > 2 ? 1.0 : Math.max(0.1, duration * 0.1);
+
+    await new Promise((resolve, reject) => {
+      ffmpeg(tempInputPath)
+        .seekInput(seekSeconds)
+        .frames(1)
+        .outputOptions([
+          "-vf scale='min(iw,480)':-2",
+          "-q:v 3"
+        ])
+        .output(tempOutputPath)
+        .on('end', () => resolve(tempOutputPath))
+        .on('error', (err) => reject(err))
+        .run();
+    });
+
+    if (fs.existsSync(tempOutputPath)) {
+      const thumbBuffer = await fs.promises.readFile(tempOutputPath);
+      console.log(`[generateVideoThumbnail] Successfully extracted thumbnail for "${originalName}" (${(thumbBuffer.length / 1024).toFixed(1)} KB)`);
+      return thumbBuffer;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn(`[generateVideoThumbnail] Thumbnail extraction failed for "${originalName}":`, err.message);
+    return null;
+  } finally {
+    for (const filePath of tempFiles) {
+      try {
+        if (fs.existsSync(filePath)) {
+          await fs.promises.unlink(filePath);
+        }
+      } catch {}
+    }
+  }
 }
 
 module.exports = {
   compressVideoIfNeeded,
+  generateVideoThumbnail,
   probeVideo,
   MAX_VIDEO_UPLOAD_SIZE_MB,
   MAX_COMPRESSED_VIDEO_SIZE_MB,

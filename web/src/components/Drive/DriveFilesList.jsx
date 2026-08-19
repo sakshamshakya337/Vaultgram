@@ -54,8 +54,15 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                 {/* File Title + Thumbnail */}
                 <div className="col-span-5 sm:col-span-5 flex items-center gap-3 min-w-0">
                   <div className="w-10 h-7 rounded-lg bg-zinc-950 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center relative">
-                    {video.thumbnail ? (
-                      <img src={video.thumbnail} alt="" className="w-full h-full object-cover" />
+                    {video.thumbnail || video.thumbnailFileId ? (
+                      <img
+                        src={video.thumbnail || api.videos.getThumbnailUrl(videoId)}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
                     ) : (
                       <Video className="w-4 h-4 text-zinc-600" />
                     )}
