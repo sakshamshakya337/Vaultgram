@@ -347,6 +347,18 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, []);
 
+  // Delete a reel permanently
+  const deleteReel = useCallback(async (id) => {
+    try {
+      await api.videos.delete(id);
+      setVideos((prev) => prev.filter((v) => (v._id || v.id) !== id));
+      return { success: true };
+    } catch (err) {
+      console.error('Failed to delete reel:', err);
+      throw err;
+    }
+  }, []);
+
   const triggerInstall = async () => {
     if (deferredInstallPrompt) {
       deferredInstallPrompt.prompt();
@@ -392,6 +404,7 @@ export const VideoFeedProvider = ({ children }) => {
         activeVideoIndex,
         setActiveVideoIndex,
         toggleLike,
+        deleteReel,
         isUploadOpen,
         setIsUploadOpen,
         isAuthOpen,

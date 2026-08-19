@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Heart, Volume2, VolumeX, Share2, Eye, Sparkles, Music, Check } from 'lucide-react';
+import { Heart, Volume2, VolumeX, Share2, Eye, Sparkles, Music, Check, Trash2, Loader2 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { formatViews, formatDuration, formatBytes } from '../../services/api';
 
 export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
   const [copied, setCopied] = useState(false);
-  const { setSelectedCategory } = useVideoFeed();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { setSelectedCategory, deleteReel } = useVideoFeed();
 
   const handleShare = async (e) => {
     e.stopPropagation();
@@ -24,6 +25,21 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch {}
+    }
+  };
+
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    const reelTitle = video.title || 'this reel';
+    const confirmed = window.confirm(`Delete "${reelTitle}"?\n\nThis will permanently delete the video and remove it from your cloud storage.`);
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      await deleteReel(video._id || video.id);
+    } catch (err) {
+      alert(err.message || 'Failed to delete reel');
+      setIsDeleting(false);
     }
   };
 
@@ -98,7 +114,7 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
         </div>
 
         {/* Right Rail: Action Buttons */}
-        <div className="flex flex-col items-center gap-4 pointer-events-auto pb-1 shrink-0">
+        <div className="flex flex-col items-center gap-3.5 pointer-events-auto pb-1 shrink-0">
           {/* Like Button */}
           <button
             onClick={(e) => {
@@ -174,8 +190,30 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
               {copied ? 'Copied' : 'Share'}
             </span>
           </button>
+
+          {/* Delete Reel Button */}
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="group flex flex-col items-center gap-1 transition-transform active:scale-75 cursor-pointer disabled:opacity-50"
+            aria-label="Delete video"
+            title="Delete reel"
+          >
+            <div className="w-12 h-12 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-xl border border-white/15 text-zinc-400 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10 transition-all">
+              {isDeleting ? (
+                <Loader2 className="w-5 h-5 text-rose-400 animate-spin" />
+              ) : (
+                <Trash2 className="w-5 h-5 transition-transform group-hover:scale-110" />
+              )}
+            </div>
+            <span className="text-[11px] font-medium text-zinc-400 group-hover:text-rose-300 drop-shadow">
+              Delete
+            </span>
+          </button>
         </div>
       </div>
     </div>
   );
 };
+
+export default ReelOverlay;
