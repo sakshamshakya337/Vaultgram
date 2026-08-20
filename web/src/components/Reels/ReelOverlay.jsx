@@ -37,7 +37,7 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
   return (
     <div className="reels-overlay absolute inset-0 pointer-events-none flex flex-col justify-between p-4 pb-20 md:pb-6 z-20">
       {/* Top Bar: Category Pill & Sound Badge */}
-      <div className="flex items-center justify-between pt-12 md:pt-2 px-1">
+      <div className="flex items-center justify-between pt-10 md:pt-2 px-1">
         <div className="flex items-center gap-2 pointer-events-auto">
           <button
             onClick={(e) => handleCategoryClick(e, category)}
