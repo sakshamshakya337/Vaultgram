@@ -11,12 +11,16 @@ import {
   Check,
   AlertCircle,
   Fingerprint,
-  Smartphone
+  Smartphone,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useTheme } from '../../contexts/useTheme';
 
 export const SettingsModal = () => {
+  const { theme, toggleTheme, setTheme } = useTheme();
   const {
     user,
     isAuthenticated,
@@ -183,6 +187,46 @@ export const SettingsModal = () => {
               </button>
             </div>
           )}
+
+          {/* Theme & Appearance Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  {theme === 'dark' ? <Moon className="w-4 h-4 text-cyan-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
+                  <span>Appearance & Theme</span>
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Choose your interface display preference
+                </p>
+              </div>
+            </div>
+
+            <div className="p-1.5 rounded-2xl bg-zinc-900/60 border border-white/5 grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setTheme('dark')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-semibold text-xs transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Moon className="w-4 h-4" />
+                <span>Dark Mode</span>
+              </button>
+              <button
+                onClick={() => setTheme('light')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-semibold text-xs transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Sun className="w-4 h-4" />
+                <span>Light Mode</span>
+              </button>
+            </div>
+          </div>
 
           {/* App-Level PIN Lock Section */}
           <div className="space-y-3">

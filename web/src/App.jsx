@@ -2,6 +2,7 @@ import React from 'react';
 import { AuthProvider } from './contexts/AuthProvider';
 import { VideoFeedProvider } from './contexts/VideoFeedProvider';
 import { UploadProvider } from './contexts/UploadProvider';
+import { ThemeProvider } from './contexts/ThemeProvider';
 import { DriveLayout } from './components/Drive/DriveLayout';
 import { UploadModal } from './components/Upload/UploadModal';
 import { UploadTray } from './components/Upload/UploadTray';
@@ -47,13 +48,15 @@ const StreamVaultApp = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <VideoFeedProvider>
-        <UploadProvider>
-          <StreamVaultApp />
-        </UploadProvider>
-      </VideoFeedProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <VideoFeedProvider>
+          <UploadProvider>
+            <StreamVaultApp />
+          </UploadProvider>
+        </VideoFeedProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
