@@ -114,9 +114,9 @@ export const DriveLayout = () => {
 
     if (effectiveLocked.length > 0) {
       list = list.filter((v) => {
-        const cat = (v.category || '').toLowerCase().trim();
+        const cat = (v.category || '').replace(/^#/, '').toLowerCase().trim();
         const isCatLocked = effectiveLocked.some(
-          (lc) => lc.toLowerCase().trim() === cat
+          (lc) => lc.replace(/^#/, '').toLowerCase().trim() === cat
         );
         if (!isCatLocked) return true;
 
@@ -126,15 +126,16 @@ export const DriveLayout = () => {
           return false;
         }
 
-        const isCatUnlocked = sessionUnlockedCategories?.has(cat);
+        const isCatUnlocked = sessionUnlockedCategories?.has(cat) || sessionUnlockedCategories?.has(`#${cat}`);
         return isCatUnlocked;
       });
     }
 
     // If viewing a category filter
     if (selectedCategory !== 'All' && currentNav === 'all') {
+      const cleanSelected = selectedCategory.replace(/^#/, '').toLowerCase().trim();
       list = list.filter(
-        (v) => (v.category || '').toLowerCase() === selectedCategory.toLowerCase()
+        (v) => (v.category || '').replace(/^#/, '').toLowerCase().trim() === cleanSelected
       );
     }
 

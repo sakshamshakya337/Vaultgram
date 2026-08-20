@@ -82,6 +82,11 @@ exports.listMedia = async (req, res) => {
         query.isStarred = true;
       } else if (filterType === 'recent') {
         // recent shows all files without folder constraints
+      } else if (category && category !== 'All') {
+        // category view shows all files in that category across folders unless a specific folderId is given
+        if (folderId && folderId !== 'null' && folderId !== 'root') {
+          query.folderId = folderId;
+        }
       } else {
         // 'my-drive' or folder navigation
         if (!folderId || folderId === 'null' || folderId === 'root') {
@@ -123,33 +128,35 @@ exports.listMedia = async (req, res) => {
 
     const unlockedList = rawUnlocked
       .split(',')
-      .map((c) => c.trim().toLowerCase())
+      .map((c) => c.trim().replace(/^#/, '').toLowerCase())
       .filter(Boolean);
-
-    const activeLockedCategories = userLocked.filter(
-      (c) => !unlockedList.includes(c.toLowerCase())
-    );
 
     // If requesting a specific single category
     if (category && category !== 'All') {
-      const isLocked = userLocked.some((c) => c.toLowerCase() === category.toLowerCase());
-      const isUnlockedInSession = unlockedList.includes(category.toLowerCase());
+      const cleanCat = category.replace(/^#/, '').trim();
+      const isLocked = userLocked.some((c) => c.replace(/^#/, '').toLowerCase() === cleanCat.toLowerCase());
+      const isUnlockedInSession = unlockedList.some((c) => c === cleanCat.toLowerCase());
       if (isLocked && !isUnlockedInSession) {
         return res.status(403).json({
           locked: true,
-          message: `Category "${category}" is locked. Unlock with biometric or PIN passcode.`,
+          message: `Category "${cleanCat}" is locked. Unlock with biometric or PIN passcode.`,
           items: [],
           total: 0,
         });
       }
-      query.category = category;
+      query.category = new RegExp(`^#?${cleanCat.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i');
+      if (folderId && folderId !== 'null' && folderId !== 'root') {
+        query.folderId = folderId;
+      } else {
+        delete query.folderId;
+      }
     } else {
       // General Aggregate / Home / All Files / Root / Starred / Recent listing:
       // STRICT SCOPING: ALWAYS exclude all locked categories from aggregate views,
       // regardless of whether any category was unlocked in another context this session.
       if (userLocked.length > 0) {
         query.category = {
-          $nin: userLocked.map((c) => new RegExp(`^${c.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')),
+          $nin: userLocked.map((c) => new RegExp(`^#?${c.replace(/^#/, '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')),
         };
       }
     }
@@ -349,7 +356,7 @@ exports.uploadMedia = async (req, res) => {
     const doc = await Media.create({
       title: finalTitle,
       description: description?.trim() || '',
-      category: category?.trim() || 'General',
+      category: (category?.trim() || 'General').replace(/^#/, '').trim() || 'General',
       isFolder: false,
       folderId: parentId,
       fileType: fileType || autoFileType,
@@ -762,7 +769,8 @@ exports.getFeed = async (req, res) => {
     };
 
     if (category && category !== 'All') {
-      query.category = category;
+      const cleanCat = category.replace(/^#/, '').trim();
+      query.category = new RegExp(`^#?${cleanCat.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i');
     } else {
       try {
         let userLocked = Array.isArray(req.user?.lockedCategories) ? req.user.lockedCategories : [];
