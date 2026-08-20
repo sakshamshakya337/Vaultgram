@@ -350,6 +350,28 @@ input[type=range]::-webkit-slider-thumb {
   color: #0f172a;
 }
 
+/* Sidebar Light Theme Specific Overrides */
+[data-theme="light"] aside {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] aside div.border-t,
+[data-theme="light"] aside .bg-zinc-950\/60,
+[data-theme="light"] aside .bg-zinc-950 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] aside .bg-zinc-900\/60 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] aside .bg-zinc-800 {
+  background-color: #e2e8f0 !important;
+}
+
 [data-theme="light"] .keypad-btn {
   background-color: #ffffff !important;
   border-color: #cbd5e1 !important;

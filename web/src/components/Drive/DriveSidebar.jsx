@@ -278,7 +278,7 @@ export const DriveSidebar = ({
                   }}
                   className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer group ${
                     isSelected
-                      ? 'bg-white/10 text-white font-bold border border-white/15'
+                      ? 'bg-cyan-500/15 text-cyan-400 font-bold border border-cyan-500/30 shadow-sm'
                       : 'text-zinc-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
