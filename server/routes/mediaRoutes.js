@@ -15,6 +15,7 @@ const {
   listFolders,
   renameItem,
   moveItem,
+  updateNote,
   trashOrDelete,
   restoreTrash,
   emptyTrash,
@@ -43,6 +44,7 @@ router.post('/folder', optionalAuth, createFolder);
 // ─── Drive File & Folder Operations ──────────────────────────────────────────
 router.patch('/:id/rename', optionalAuth, renameItem);
 router.patch('/:id/move', optionalAuth, moveItem);
+router.patch('/:id/note', optionalAuth, updateNote);
 router.post('/:id/star', optionalAuth, toggleStar);
 router.post('/:id/like', optionalAuth, toggleStar); // Alias
 router.post('/:id/trash', optionalAuth, trashOrDelete);

@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Play, Heart, Download, Trash2, Video, Cloud, Loader2 } from 'lucide-react';
+import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { NoteEditModal } from './NoteEditModal';
 
 export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();
   const { isOfflineAvailable, toggleOfflineSave, isCaching } = useOfflineMedia();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [noteTarget, setNoteTarget] = useState(null);
 
   if (!videos || videos.length === 0) return null;
 
@@ -97,6 +99,14 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                       #{video.category || 'General'}
                     </span>
                   </div>
+
+                  {/* Note Subtitle Tooltip if Present */}
+                  {video.note && (
+                    <div className="flex items-center gap-1 mt-1.5 text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 truncate" title={video.note}>
+                      <StickyNote className="w-3 h-3 shrink-0 text-amber-400" />
+                      <span className="truncate">{video.note}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Bottom Details & Quick Actions */}
@@ -108,6 +118,17 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                   </div>
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                    {/* Add/Edit Note Button */}
+                    <button
+                      onClick={() => setNoteTarget(video)}
+                      className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
+                        video.note ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-300'
+                      }`}
+                      title={video.note ? 'Edit Note' : 'Add Note'}
+                    >
+                      <StickyNote className={`w-3.5 h-3.5 ${video.note ? 'fill-amber-400/20' : ''}`} />
+                    </button>
+
                     {/* Offline Toggle Button */}
                     <button
                       onClick={() => toggleOfflineSave(video)}
@@ -157,6 +178,17 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
           );
         })}
       </div>
+
+      {/* Note Edit Modal */}
+      <NoteEditModal
+        isOpen={!!noteTarget}
+        file={noteTarget}
+        onClose={() => setNoteTarget(null)}
+        onNoteUpdated={(id, newNote) => {
+          const item = videos.find((v) => (v._id || v.id) === id);
+          if (item) item.note = newNote;
+        }}
+      />
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal

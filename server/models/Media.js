@@ -13,6 +13,12 @@ const mediaSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    note: {
+      type: String,
+      trim: true,
+      maxlength: [200, 'Note cannot exceed 200 characters'],
+      default: '',
+    },
     isFolder: {
       type: Boolean,
       default: false,

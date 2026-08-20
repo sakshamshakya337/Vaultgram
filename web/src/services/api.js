@@ -419,6 +419,12 @@ export const api = {
       return uploadWithProgress(formData, onProgress);
     },
 
+    updateNote: (id, note) =>
+      request(`/videos/${id}/note`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note }),
+      }),
+
     delete: (id) => request(`/videos/${id}`, { method: 'DELETE' }),
   },
 
@@ -448,6 +454,12 @@ export const api = {
       request(`/videos/${id}/rename`, {
         method: 'PATCH',
         body: JSON.stringify({ title }),
+      }),
+
+    updateNote: (id, note) =>
+      request(`/videos/${id}/note`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note }),
       }),
 
     move: (id, targetFolderId) =>

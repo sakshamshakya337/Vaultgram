@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Video, Heart, Download, Play, Clock, HardDrive, Trash2, Cloud, Loader2 } from 'lucide-react';
+import { Video, Heart, Download, Play, Clock, HardDrive, Trash2, Cloud, Loader2, StickyNote } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { NoteEditModal } from './NoteEditModal';
 
 export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();
   const { isOfflineAvailable, toggleOfflineSave, isCaching } = useOfflineMedia();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [noteTarget, setNoteTarget] = useState(null);
 
   if (!videos || videos.length === 0) return null;
 
@@ -74,14 +76,22 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                       <Play className="w-3 h-3 text-cyan-400 fill-cyan-400" />
                     </div>
                   </div>
-                  <div className="min-w-0 flex items-center gap-1.5 truncate">
-                    <span className="font-semibold text-white group-hover:text-cyan-300 transition-colors truncate">
-                      {video.title || 'Untitled Video'}
-                    </span>
-                    {isOffline && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                        Offline
+                  <div className="min-w-0 flex flex-col justify-center">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="font-semibold text-white group-hover:text-cyan-300 transition-colors truncate">
+                        {video.title || 'Untitled Video'}
                       </span>
+                      {isOffline && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                          Offline
+                        </span>
+                      )}
+                    </div>
+                    {video.note && (
+                      <div className="flex items-center gap-1 mt-0.5 text-[10px] text-amber-400/90 truncate" title={video.note}>
+                        <StickyNote className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">{video.note}</span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -108,6 +118,16 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                   className="col-span-3 sm:col-span-1 flex items-center justify-end gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <button
+                    onClick={() => setNoteTarget(video)}
+                    className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
+                      video.note ? 'text-amber-400' : 'text-zinc-500 hover:text-amber-300'
+                    }`}
+                    title={video.note ? 'Edit Note' : 'Add Note'}
+                  >
+                    <StickyNote className={`w-3.5 h-3.5 ${video.note ? 'fill-amber-400/20' : ''}`} />
+                  </button>
+
                   <button
                     onClick={() => toggleOfflineSave(video)}
                     disabled={caching}
@@ -155,6 +175,17 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
           })}
         </div>
       </div>
+
+      {/* Note Edit Modal */}
+      <NoteEditModal
+        isOpen={!!noteTarget}
+        file={noteTarget}
+        onClose={() => setNoteTarget(null)}
+        onNoteUpdated={(id, newNote) => {
+          const item = videos.find((v) => (v._id || v.id) === id);
+          if (item) item.note = newNote;
+        }}
+      />
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal

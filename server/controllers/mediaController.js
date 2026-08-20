@@ -435,6 +435,40 @@ exports.moveItem = async (req, res) => {
 };
 
 /**
+ * PATCH /api/v1/videos/:id/note
+ * Update reminder/note on a media item (max 200 chars)
+ */
+exports.updateNote = async (req, res) => {
+  try {
+    const rawNote = typeof req.body.note === 'string' ? req.body.note.trim() : '';
+    if (rawNote.length > 200) {
+      return res.status(400).json({ message: 'Note cannot exceed 200 characters' });
+    }
+
+    const item = await Media.findById(req.params.id);
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
+    if (req.user && item.uploadedBy && item.uploadedBy.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to edit notes on this file' });
+    }
+
+    item.note = rawNote;
+    await item.save();
+
+    res.json({
+      success: true,
+      message: 'Note updated successfully',
+      item: ensureFileType(item.toObject()),
+    });
+  } catch (err) {
+    console.error('[updateNote error]:', err.message);
+    res.status(500).json({ message: 'Failed to update note' });
+  }
+};
+
+/**
  * POST /api/v1/media/:id/star
  */
 exports.toggleStar = async (req, res) => {

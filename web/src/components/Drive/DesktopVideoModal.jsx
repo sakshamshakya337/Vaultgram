@@ -15,11 +15,13 @@ import {
   Image as ImageIcon,
   Cloud,
   Loader2,
+  StickyNote,
 } from 'lucide-react';
 import { api, formatBytes, formatDuration, formatViews, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { NoteEditModal } from './NoteEditModal';
 
 export const DesktopVideoModal = ({
   video,
@@ -37,6 +39,7 @@ export const DesktopVideoModal = ({
   const [localIndex, setLocalIndex] = useState(currentIndex ?? initialIndex ?? 0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState(null);
 
   // Derive the active list of files
@@ -269,6 +272,19 @@ export const DesktopVideoModal = ({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {/* Note / Reminder Button */}
+              <button
+                onClick={() => setIsNoteModalOpen(true)}
+                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                  currentFile.note
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                    : 'bg-white/5 border-white/10 text-zinc-400 hover:text-amber-300 hover:bg-white/10'
+                }`}
+                title={currentFile.note ? 'Edit Note' : 'Add Note'}
+              >
+                <StickyNote className={`w-4 h-4 ${currentFile.note ? 'fill-amber-400/20' : ''}`} />
+              </button>
+
               {/* Offline Toggle Button */}
               <button
                 onClick={() => toggleOfflineSave(currentFile)}
@@ -329,6 +345,21 @@ export const DesktopVideoModal = ({
               </button>
             </div>
           </div>
+
+          {/* File Note Banner */}
+          {currentFile.note && (
+            <div
+              onClick={() => setIsNoteModalOpen(true)}
+              className="flex items-center justify-between px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-300 hover:bg-amber-500/15 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2 min-w-0 pr-4">
+                <StickyNote className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="font-semibold text-amber-400 shrink-0">Note:</span>
+                <span className="truncate">{currentFile.note}</span>
+              </div>
+              <span className="text-[10px] font-semibold text-amber-400/80 shrink-0">Edit</span>
+            </div>
+          )}
 
           {/* Media Player / Viewer Container */}
           <div className="relative flex-1 min-h-[380px] max-h-[65vh] bg-black flex items-center justify-center overflow-hidden">
@@ -419,11 +450,21 @@ export const DesktopVideoModal = ({
         </div>
       </div>
 
+      {/* Note Edit Modal */}
+      <NoteEditModal
+        isOpen={isNoteModalOpen}
+        file={currentFile}
+        onClose={() => setIsNoteModalOpen(false)}
+        onNoteUpdated={(id, newNote) => {
+          currentFile.note = newNote;
+        }}
+      />
+
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={isDeleteModalOpen}
         title="Delete File"
-        itemName={currentFile.title || 'this file'}
+        itemName={currentFile?.title || 'this file'}
         itemType="file"
         loading={isDeleting}
         onConfirm={handleConfirmDelete}
