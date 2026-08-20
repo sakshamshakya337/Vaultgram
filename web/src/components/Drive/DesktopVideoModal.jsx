@@ -128,6 +128,24 @@ export const DesktopVideoModal = ({
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [currentFile, isDeleteModalOpen, onClose, handlePrev, handleNext]);
 
+  // ─── Offline blob URL resolution ─────────────────────────────────────────
+  // IMPORTANT: This must stay ABOVE the `if (!currentFile) return null` guard.
+  // React requires hooks to be called the same number of times every render.
+  const safeFileId = currentFile?._id || currentFile?.id || null;
+  useEffect(() => {
+    let active = true;
+    if (safeFileId && isOfflineAvailable(safeFileId)) {
+      getOfflinePlaybackUrl(safeFileId).then((url) => {
+        if (active && url) setOfflineBlobUrl(url);
+      });
+    } else {
+      setOfflineBlobUrl(null);
+    }
+    return () => {
+      active = false;
+    };
+  }, [safeFileId, isOfflineAvailable, getOfflinePlaybackUrl]);
+
   if (!currentFile) return null;
 
   const fileId = currentFile._id || currentFile.id;
@@ -140,20 +158,6 @@ export const DesktopVideoModal = ({
   const isAudio = rawFileType === 'audio';
 
   const thumbUrl = currentFile.thumbnail || (currentFile.thumbnailFileId ? api.videos.getThumbnailUrl(fileId) : '');
-
-  useEffect(() => {
-    let active = true;
-    if (fileId && isOfflineAvailable(fileId)) {
-      getOfflinePlaybackUrl(fileId).then((url) => {
-        if (active && url) setOfflineBlobUrl(url);
-      });
-    } else {
-      setOfflineBlobUrl(null);
-    }
-    return () => {
-      active = false;
-    };
-  }, [fileId, isOfflineAvailable, getOfflinePlaybackUrl]);
 
   const activeStreamSrc = offlineBlobUrl || streamUrl;
 
