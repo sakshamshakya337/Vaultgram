@@ -12,6 +12,7 @@ import { DriveFilesList } from './DriveFilesList';
 import { DesktopVideoModal } from './DesktopVideoModal';
 import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
+import { TimelineView } from './TimelineView';
 import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
@@ -279,6 +280,8 @@ export const DriveLayout = () => {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
                     {currentFolder
                       ? `Folder: ${currentFolder.title}`
+                      : currentNav === 'timeline'
+                      ? 'Timeline (By Date)'
                       : currentNav === 'starred'
                       ? 'Starred Videos'
                       : currentNav === 'recent'
@@ -325,7 +328,9 @@ export const DriveLayout = () => {
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white mb-1">
-                      {currentNav === 'starred'
+                      {currentNav === 'timeline'
+                        ? 'Timeline is Empty'
+                        : currentNav === 'starred'
                         ? 'No Starred Files'
                         : currentNav === 'trash'
                         ? 'Trash is Empty'
@@ -334,7 +339,9 @@ export const DriveLayout = () => {
                         : 'No Files in this Folder'}
                     </h4>
                     <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
-                      {currentNav === 'starred'
+                      {currentNav === 'timeline'
+                        ? 'Upload media to see it organized chronologically by date.'
+                        : currentNav === 'starred'
                         ? 'Like or star videos to save them here for quick access.'
                         : currentNav === 'trash'
                         ? 'Items you delete will appear here.'
@@ -367,6 +374,19 @@ export const DriveLayout = () => {
                     </div>
                   )}
                 </div>
+              ) : currentNav === 'timeline' ? (
+                /* Timeline View */
+                <TimelineView
+                  videos={files}
+                  viewMode={viewMode}
+                  onSelectVideo={(v, idx) =>
+                    setModalPreviewState({
+                      items: files,
+                      index: typeof idx === 'number' ? idx : files.findIndex((f) => (f._id || f.id) === (v._id || v.id)),
+                    })
+                  }
+                  onDeleteVideo={handleDeleteFile}
+                />
               ) : (
                 /* Grid vs List View */
                 viewMode === 'grid' ? (

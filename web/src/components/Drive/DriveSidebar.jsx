@@ -14,7 +14,8 @@ import {
   Cloud,
   Shield,
   Upload,
-  Download
+  Download,
+  Calendar
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
@@ -174,6 +175,18 @@ export const DriveSidebar = ({
           >
             <Clock className="w-4 h-4" />
             <span>Recent</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('timeline')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'timeline'
+                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Timeline</span>
           </button>
 
           <button
