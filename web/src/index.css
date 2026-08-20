@@ -379,3 +379,55 @@ input[type=range]::-webkit-slider-thumb {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+/* ==========================================================================
+   Reels Overlay & Media Player Protection (Universal Across All Devices)
+   ========================================================================== */
+
+.reels-overlay,
+.reels-overlay * {
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="light"] .reels-overlay .text-white,
+[data-theme="light"] .reels-overlay h2,
+[data-theme="light"] .reels-overlay span,
+[data-theme="light"] .reels-overlay p {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .reels-overlay .text-zinc-300 {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .reels-overlay .text-zinc-400 {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .reels-overlay .text-cyan-400 {
+  color: #22d3ee !important;
+}
+
+[data-theme="light"] .reels-overlay .text-rose-400 {
+  color: #fb7185 !important;
+}
+
+[data-theme="light"] .reels-overlay .text-rose-500 {
+  color: #f43f5e !important;
+}
+
+[data-theme="light"] .reels-overlay .bg-black\/60,
+[data-theme="light"] .reels-overlay .bg-black\/50,
+[data-theme="light"] .reels-overlay .bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+[data-theme="light"] .reels-overlay .bg-black\/70 {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+}
+
+[data-theme="light"] .reels-player,
+[data-theme="light"] .reels-player video {
+  background-color: #000000 !important;
+}
+
