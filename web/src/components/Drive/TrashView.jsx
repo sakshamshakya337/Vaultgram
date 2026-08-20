@@ -1,7 +1,40 @@
 import React, { useState } from 'react';
-import { Trash2, RotateCcw, AlertTriangle, Video, Play, Loader2 } from 'lucide-react';
+import { Trash2, RotateCcw, AlertTriangle, Video, Play, Loader2, FileText, Image as ImageIcon, Music } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+
+const getFileKind = (file) => {
+  const mime = (file?.mimeType || '').toLowerCase();
+  const ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
+  const fileCategory = (file?.fileCategory || '').toLowerCase();
+  const fileType = (file?.fileType || '').toLowerCase();
+
+  const isVideo =
+    fileType === 'video' ||
+    fileCategory === 'video' ||
+    mime.startsWith('video/') ||
+    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv'].includes(ext);
+
+  const isImage =
+    fileType === 'image' ||
+    fileCategory === 'image' ||
+    mime.startsWith('image/') ||
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
+
+  const isAudio =
+    fileType === 'audio' ||
+    fileCategory === 'audio' ||
+    mime.startsWith('audio/') ||
+    ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext);
+
+  return {
+    isVideo,
+    isImage,
+    isAudio,
+    isDocument: !isVideo && !isImage && !isAudio,
+    extension: ext ? ext.toUpperCase() : (isVideo ? 'VIDEO' : isImage ? 'IMAGE' : isAudio ? 'AUDIO' : 'DOC'),
+  };
+};
 
 export const TrashView = ({
   items = [],
@@ -111,6 +144,7 @@ export const TrashView = ({
           const id = item._id || item.id;
           const daysLeft = getDaysRemaining(item.trashedAt);
           const isRestoring = restoringId === id;
+          const { isVideo, isImage, isAudio, isDocument, extension } = getFileKind(item);
 
           return (
             <div
@@ -119,14 +153,23 @@ export const TrashView = ({
             >
               {/* Thumbnail Area */}
               <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
-                {item.thumbnail || item.thumbnailFileId ? (
+                {(isImage || isVideo) && (item.thumbnail || item.thumbnailFileId) ? (
                   <img
                     src={item.thumbnail || api.videos.getThumbnailUrl(id)}
                     alt=""
                     className="w-full h-full object-cover opacity-60"
                   />
-                ) : (
+                ) : isVideo ? (
                   <Video className="w-8 h-8 text-zinc-700" />
+                ) : isImage ? (
+                  <ImageIcon className="w-8 h-8 text-zinc-700" />
+                ) : isAudio ? (
+                  <Music className="w-8 h-8 text-zinc-700" />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <FileText className="w-8 h-8 text-amber-500/70" />
+                    <span className="text-[10px] font-mono text-amber-400/80 font-bold">{extension}</span>
+                  </div>
                 )}
 
                 {/* Days Remaining Badge */}
@@ -134,7 +177,7 @@ export const TrashView = ({
                   {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left
                 </div>
 
-                {item.duration ? (
+                {(isVideo || isAudio) && item.duration ? (
                   <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-zinc-300 font-semibold">
                     {formatDuration(item.duration)}
                   </div>

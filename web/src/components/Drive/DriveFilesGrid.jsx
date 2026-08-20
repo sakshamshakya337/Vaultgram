@@ -1,11 +1,44 @@
 import React, { useState } from 'react';
-import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote, Share2 } from 'lucide-react';
+import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote, Share2, FileText, Image as ImageIcon, Music, Eye } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { NoteEditModal } from './NoteEditModal';
 import { ShareModal } from './ShareModal';
+
+const getFileKind = (file) => {
+  const mime = (file?.mimeType || '').toLowerCase();
+  const ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
+  const fileCategory = (file?.fileCategory || '').toLowerCase();
+  const fileType = (file?.fileType || '').toLowerCase();
+
+  const isVideo =
+    fileType === 'video' ||
+    fileCategory === 'video' ||
+    mime.startsWith('video/') ||
+    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv'].includes(ext);
+
+  const isImage =
+    fileType === 'image' ||
+    fileCategory === 'image' ||
+    mime.startsWith('image/') ||
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
+
+  const isAudio =
+    fileType === 'audio' ||
+    fileCategory === 'audio' ||
+    mime.startsWith('audio/') ||
+    ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext);
+
+  return {
+    isVideo,
+    isImage,
+    isAudio,
+    isDocument: !isVideo && !isImage && !isAudio,
+    extension: ext ? ext.toUpperCase() : (isVideo ? 'VIDEO' : isImage ? 'IMAGE' : isAudio ? 'AUDIO' : 'DOC'),
+  };
+};
 
 export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();
@@ -43,6 +76,7 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
           const isOffline = isOfflineAvailable(videoId);
           const caching = isCaching(videoId);
           const downloadUrl = api.stream.getUrl(videoId, true);
+          const { isVideo, isImage, isAudio, isDocument, extension } = getFileKind(video);
 
           return (
             <div
@@ -50,21 +84,37 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
               onClick={() => onSelectVideo(video, index)}
               className="group relative rounded-2xl bg-zinc-900/50 hover:bg-zinc-900 border border-white/5 hover:border-cyan-500/30 overflow-hidden shadow-lg transition-all duration-200 cursor-pointer flex flex-col"
             >
-              {/* Thumbnail Preview Area */}
+              {/* Thumbnail / Media Preview Area */}
               <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
-                {video.thumbnail || video.thumbnailFileId ? (
+                {(isImage || isVideo) && (video.thumbnail || video.thumbnailFileId) ? (
                   <img
                     src={video.thumbnail || api.videos.getThumbnailUrl(videoId)}
-                    alt={video.title || 'Video thumbnail'}
+                    alt={video.title || 'File thumbnail'}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}
                   />
+                ) : isVideo ? (
+                  <div className="w-full h-full bg-gradient-to-tr from-cyan-950/20 to-zinc-950 flex items-center justify-center">
+                    <Video className="w-8 h-8 text-zinc-600 group-hover:text-cyan-400 transition-colors" />
+                  </div>
+                ) : isImage ? (
+                  <div className="w-full h-full bg-gradient-to-tr from-emerald-950/20 to-zinc-950 flex items-center justify-center">
+                    <ImageIcon className="w-8 h-8 text-zinc-600 group-hover:text-emerald-400 transition-colors" />
+                  </div>
+                ) : isAudio ? (
+                  <div className="w-full h-full bg-gradient-to-tr from-purple-950/20 to-zinc-950 flex items-center justify-center">
+                    <Music className="w-8 h-8 text-purple-400/80 group-hover:text-purple-300 transition-colors" />
+                  </div>
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-tr from-zinc-900 to-zinc-950 flex items-center justify-center">
-                    <Video className="w-8 h-8 text-zinc-700 group-hover:text-cyan-500 transition-colors" />
+                  /* Document File Preview */
+                  <div className="w-full h-full bg-gradient-to-tr from-amber-950/20 to-zinc-950 flex flex-col items-center justify-center gap-1 p-3">
+                    <FileText className="w-8 h-8 text-amber-400 group-hover:scale-110 transition-transform" />
+                    <span className="text-[10px] font-mono font-bold text-amber-300/80 uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                      {extension}
+                    </span>
                   </div>
                 )}
 
@@ -75,17 +125,36 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                   </div>
                 )}
 
-                {/* Duration Badge */}
-                {video.duration ? (
+                {/* Duration Badge for Videos and Audios */}
+                {(isVideo || isAudio) && video.duration ? (
                   <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[10px] font-mono text-zinc-300 font-semibold">
                     {formatDuration(video.duration)}
                   </div>
                 ) : null}
 
-                {/* Hover Play Button Overlay */}
+                {/* Document Type Badge in Corner */}
+                {isDocument && (
+                  <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[9px] font-mono text-amber-300 font-semibold">
+                    {extension}
+                  </div>
+                )}
+
+                {/* Hover Action Overlay: Play for Video/Audio, Eye for Image, FileText/Open for Document */}
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <div className="w-11 h-11 rounded-full bg-cyan-500 text-black flex items-center justify-center shadow-lg shadow-cyan-500/40 transform scale-90 group-hover:scale-100 transition-transform">
-                    <Play className="w-5 h-5 fill-black ml-0.5" />
+                  <div className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform ${
+                    isVideo || isAudio
+                      ? 'bg-cyan-500 text-black shadow-cyan-500/40'
+                      : isImage
+                      ? 'bg-emerald-500 text-black shadow-emerald-500/40'
+                      : 'bg-amber-500 text-black shadow-amber-500/40'
+                  }`}>
+                    {isVideo || isAudio ? (
+                      <Play className="w-5 h-5 fill-black ml-0.5" />
+                    ) : isImage ? (
+                      <Eye className="w-5 h-5 text-black" />
+                    ) : (
+                      <FileText className="w-5 h-5 text-black" />
+                    )}
                   </div>
                 </div>
               </div>

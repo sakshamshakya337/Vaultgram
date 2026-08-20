@@ -12,11 +12,14 @@ import {
   Unlock,
   Sparkles,
   Plus,
-  ArrowLeft
+  ArrowLeft,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
+import { useTheme } from '../../contexts/useTheme';
 
 export const DriveHeader = ({
   searchQuery,
@@ -28,6 +31,7 @@ export const DriveHeader = ({
   onResetToRoot,
 }) => {
   const { user, isAuthenticated, hasPin, setIsSetPinModalOpen, setIsSettingsOpen } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const {
     selectedCategory,
     lockedCategories,
@@ -218,6 +222,20 @@ export const DriveHeader = ({
                 <List className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Quick Theme Toggle (Sun / Moon) */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+              title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+              aria-label="Toggle Theme"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-500" />
+              )}
+            </button>
 
             {/* User Avatar & Settings */}
             {isAuthenticated ? (

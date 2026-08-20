@@ -1,11 +1,44 @@
 import React, { useState } from 'react';
-import { Video, Heart, Download, Play, Clock, HardDrive, Trash2, Cloud, Loader2, StickyNote, Share2 } from 'lucide-react';
-import { api, formatBytes, formatDuration } from '../../services/api';
+import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote, Share2, FileText, Image as ImageIcon, Music, Eye } from 'lucide-react';
+import { api, formatBytes, formatDuration, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { NoteEditModal } from './NoteEditModal';
 import { ShareModal } from './ShareModal';
+
+const getFileKind = (file) => {
+  const mime = (file?.mimeType || '').toLowerCase();
+  const ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
+  const fileCategory = (file?.fileCategory || '').toLowerCase();
+  const fileType = (file?.fileType || '').toLowerCase();
+
+  const isVideo =
+    fileType === 'video' ||
+    fileCategory === 'video' ||
+    mime.startsWith('video/') ||
+    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv'].includes(ext);
+
+  const isImage =
+    fileType === 'image' ||
+    fileCategory === 'image' ||
+    mime.startsWith('image/') ||
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
+
+  const isAudio =
+    fileType === 'audio' ||
+    fileCategory === 'audio' ||
+    mime.startsWith('audio/') ||
+    ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext);
+
+  return {
+    isVideo,
+    isImage,
+    isAudio,
+    isDocument: !isVideo && !isImage && !isAudio,
+    extension: ext ? ext.toUpperCase() : (isVideo ? 'VIDEO' : isImage ? 'IMAGE' : isAudio ? 'AUDIO' : 'DOC'),
+  };
+};
 
 export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();
@@ -36,15 +69,16 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
 
   return (
     <>
-      <div className="rounded-2xl bg-zinc-900/40 border border-white/5 overflow-hidden">
-        <div className="grid grid-cols-12 gap-4 px-4 py-2.5 bg-zinc-900/80 border-b border-white/5 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+      <div className="rounded-2xl bg-zinc-900/40 border border-white/5 overflow-hidden shadow-lg">
+        {/* Table Header */}
+        <div className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 text-[11px] font-bold uppercase tracking-wider text-zinc-400 select-none bg-zinc-900/60">
           <div className="col-span-5 sm:col-span-5">Name</div>
           <div className="col-span-2 hidden sm:block">Category</div>
           <div className="col-span-2 sm:col-span-2 text-right">Size</div>
-          <div className="col-span-2 sm:col-span-2 text-right">Duration</div>
-          <div className="col-span-3 sm:col-span-1 text-right">Actions</div>
+          <div className="col-span-3 sm:col-span-3 text-right pr-2">Actions</div>
         </div>
 
+        {/* Rows */}
         <div className="divide-y divide-white/5">
           {videos.map((video, index) => {
             const videoId = video._id || video.id;
@@ -52,6 +86,7 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
             const isOffline = isOfflineAvailable(videoId);
             const caching = isCaching(videoId);
             const downloadUrl = api.stream.getUrl(videoId, true);
+            const { isVideo, isImage, isAudio, isDocument, extension } = getFileKind(video);
 
             return (
               <div
@@ -62,7 +97,7 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                 {/* File Title + Thumbnail */}
                 <div className="col-span-5 sm:col-span-5 flex items-center gap-3 min-w-0">
                   <div className="w-10 h-7 rounded-lg bg-zinc-950 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center relative">
-                    {video.thumbnail || video.thumbnailFileId ? (
+                    {(isImage || isVideo) && (video.thumbnail || video.thumbnailFileId) ? (
                       <img
                         src={video.thumbnail || api.videos.getThumbnailUrl(videoId)}
                         alt=""
@@ -71,17 +106,30 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                           e.currentTarget.style.display = 'none';
                         }}
                       />
+                    ) : isVideo ? (
+                      <Video className="w-4 h-4 text-cyan-400/80" />
+                    ) : isImage ? (
+                      <ImageIcon className="w-4 h-4 text-emerald-400/80" />
+                    ) : isAudio ? (
+                      <Music className="w-4 h-4 text-purple-400/80" />
                     ) : (
-                      <Video className="w-4 h-4 text-zinc-600" />
+                      <FileText className="w-4 h-4 text-amber-400/80" />
                     )}
+
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <Play className="w-3 h-3 text-cyan-400 fill-cyan-400" />
+                      {isVideo || isAudio ? (
+                        <Play className="w-3 h-3 text-cyan-400 fill-cyan-400" />
+                      ) : isImage ? (
+                        <Eye className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <FileText className="w-3 h-3 text-amber-400" />
+                      )}
                     </div>
                   </div>
                   <div className="min-w-0 flex flex-col justify-center">
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="font-semibold text-white group-hover:text-cyan-300 transition-colors truncate">
-                        {video.title || 'Untitled Video'}
+                        {video.title || 'Untitled File'}
                       </span>
                       {isOffline && (
                         <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
