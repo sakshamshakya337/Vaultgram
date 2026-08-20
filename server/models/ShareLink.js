@@ -20,7 +20,6 @@ const shareLinkSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: [true, 'Expiration date is required'],
-      index: true,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
