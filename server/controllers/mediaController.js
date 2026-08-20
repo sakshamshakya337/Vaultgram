@@ -583,6 +583,40 @@ exports.emptyTrash = async (req, res) => {
 };
 
 /**
+ * Auto-purge routine: permanently deletes trashed items older than 30 days
+ */
+exports.autoPurgeOldTrash = async () => {
+  try {
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const cutoffDate = new Date(Date.now() - THIRTY_DAYS_MS);
+
+    const oldTrashed = await Media.find({
+      isTrashed: true,
+      trashedAt: { $lte: cutoffDate },
+    });
+
+    if (oldTrashed.length === 0) return { purged: 0 };
+
+    for (const item of oldTrashed) {
+      if (item.telegramMessageId) {
+        await deleteMediaFromTelegram(item.telegramMessageId).catch(() => {});
+      }
+    }
+
+    await Media.deleteMany({
+      isTrashed: true,
+      trashedAt: { $lte: cutoffDate },
+    });
+
+    console.log(`[AutoPurge] Permanently purged ${oldTrashed.length} items older than 30 days.`);
+    return { purged: oldTrashed.length };
+  } catch (err) {
+    console.error('[AutoPurge error]:', err.message);
+    return { purged: 0, error: err.message };
+  }
+};
+
+/**
  * GET /api/v1/media/folders
  */
 exports.listFolders = async (req, res) => {

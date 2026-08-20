@@ -13,15 +13,24 @@ const mediaRoutes = require('./routes/mediaRoutes');
 const streamRoutes = require('./routes/streamRoutes');
 const shareRoutes = require('./routes/shareRoutes');
 
+const { autoPurgeOldTrash } = require('./controllers/mediaController');
+
 const app = express();
 
 // Trust reverse proxy headers on Render/Vercel/Heroku
 app.set('trust proxy', 1);
 
-// Initialize DB connection in background
-connectDB().catch((err) => {
-  console.warn('Initial MongoDB connection note:', err.message);
-});
+// Initialize DB connection in background & run 30-day auto-purge
+connectDB()
+  .then(() => {
+    autoPurgeOldTrash().catch(() => {});
+    setInterval(() => {
+      autoPurgeOldTrash().catch(() => {});
+    }, 24 * 60 * 60 * 1000);
+  })
+  .catch((err) => {
+    console.warn('Initial MongoDB connection note:', err.message);
+  });
 
 // Security & utility middleware
 app.use(

@@ -482,6 +482,11 @@ export const api = {
       request(`/videos/${id}`, {
         method: 'DELETE',
       }),
+
+    emptyTrash: () =>
+      request('/videos/trash/empty', {
+        method: 'DELETE',
+      }),
   },
 
   stream: {

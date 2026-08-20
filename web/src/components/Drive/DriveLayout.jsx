@@ -13,6 +13,7 @@ import { DesktopVideoModal } from './DesktopVideoModal';
 import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
 import { TimelineView } from './TimelineView';
+import { TrashView } from './TrashView';
 import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
@@ -399,6 +400,15 @@ export const DriveLayout = () => {
                     </div>
                   )}
                 </div>
+              ) : currentNav === 'trash' ? (
+                /* Trash Recycle Bin View */
+                <TrashView
+                  items={files}
+                  viewMode={viewMode}
+                  onItemRestored={loadDriveItems}
+                  onItemDeletedPermanently={loadDriveItems}
+                  onTrashEmptied={loadDriveItems}
+                />
               ) : currentNav === 'timeline' ? (
                 /* Timeline View */
                 <TimelineView
