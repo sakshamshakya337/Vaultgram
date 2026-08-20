@@ -33,7 +33,7 @@ export const BottomNav = ({ currentNav = 'all', currentFolder = null, onSelectNa
   };
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-center justify-around px-2 pb-safe pt-2 bg-zinc-950/90 backdrop-blur-xl border-t border-white/10 pointer-events-auto shadow-2xl">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-center justify-around px-2 pb-1 pt-2 bg-zinc-950/95 backdrop-blur-xl border-t border-white/10 pointer-events-auto shadow-2xl">
       {/* 1. Drive Tab (Default) */}
       <button
         onClick={() => handleNavClick('all')}

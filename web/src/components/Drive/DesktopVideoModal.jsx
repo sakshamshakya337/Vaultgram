@@ -35,6 +35,7 @@ export const DesktopVideoModal = ({
   onDelete,
 }) => {
   const videoRef = useRef(null);
+  const backdropPointerRef = useRef(false);
   const { toggleLike } = useVideoFeed();
   const { isOfflineAvailable, getOfflinePlaybackUrl, toggleOfflineSave, isCaching } = useOfflineMedia();
 
@@ -193,7 +194,17 @@ export const DesktopVideoModal = ({
     <>
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/85 backdrop-blur-xl animate-fade-in select-none"
-        onClick={onClose}
+        onPointerDown={(e) => {
+          // Only mark as backdrop pointer-down if the pointer is directly on the backdrop (not a child)
+          backdropPointerRef.current = e.target === e.currentTarget;
+        }}
+        onClick={(e) => {
+          // Only close if both pointerdown AND click landed directly on the backdrop
+          if (backdropPointerRef.current && e.target === e.currentTarget) {
+            onClose();
+          }
+          backdropPointerRef.current = false;
+        }}
       >
         {/* On-Screen Left Arrow Navigation Button */}
         {activeItems.length > 1 && (
@@ -242,6 +253,7 @@ export const DesktopVideoModal = ({
         {/* Modal Dialog Card */}
         <div
           className="relative w-full max-w-4xl max-h-[90vh] rounded-3xl bg-zinc-950 border border-white/10 shadow-2xl overflow-hidden flex flex-col z-10"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Top Header */}

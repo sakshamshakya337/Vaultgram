@@ -200,7 +200,7 @@ export const ReelCard = ({ video, isActive, index }) => {
       data-video-id={videoId}
       data-index={index}
       onClick={handleContainerClick}
-      className="reels-player snap-item relative w-full h-full h-[100dvh] flex items-center justify-center bg-zinc-950 overflow-hidden select-none cursor-pointer"
+      className="reels-player snap-item relative w-full h-full flex items-center justify-center bg-zinc-950 overflow-hidden select-none cursor-pointer"
     >
       {/* Background Ambient Glow / Blur */}
       {thumbUrl ? (

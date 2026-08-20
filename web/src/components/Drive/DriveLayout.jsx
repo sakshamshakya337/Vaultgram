@@ -270,7 +270,7 @@ export const DriveLayout = () => {
 
         {/* Main Content Area: Responsive Reels vs Drive Browser */}
         {currentNav === 'reels' ? (
-          <div className="flex-1 w-full h-full flex items-center justify-center overflow-hidden pb-16 md:pb-0 bg-black md:bg-zinc-950/60 md:p-6">
+          <div className="flex-1 w-full h-full flex items-center justify-center overflow-hidden pb-[52px] md:pb-0 bg-black md:bg-zinc-950/60 md:p-6">
             <div className="w-full h-full md:max-w-[420px] md:h-[calc(100vh-6rem)] md:rounded-3xl overflow-hidden md:border md:border-white/10 md:shadow-2xl bg-black relative">
               <ReelsContainer />
             </div>

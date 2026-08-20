@@ -31,7 +31,7 @@ export const ReelsContainer = () => {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.8) {
-            const indexAttr = entry.target.getAttribute('data-index');
+            const indexAttr = entry.target.getAttribute('data-reel-index');
             if (indexAttr !== null) {
               const idx = parseInt(indexAttr, 10);
               setActiveVideoIndex(idx);
@@ -41,11 +41,11 @@ export const ReelsContainer = () => {
       },
       {
         root: container,
-        threshold: [0.8], // 80% visibility threshold
+        threshold: [0.8],
       }
     );
 
-    const children = container.querySelectorAll('.snap-item');
+    const children = container.querySelectorAll('.reel-snap-item');
     children.forEach((child) => observer.observe(child));
 
     return () => {
@@ -63,12 +63,12 @@ export const ReelsContainer = () => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         const nextIndex = Math.min(videos.length - 1, activeVideoIndex + 1);
-        const target = container.querySelector(`[data-index="${nextIndex}"]`);
+        const target = container.querySelector(`[data-reel-index="${nextIndex}"]`);
         if (target) target.scrollIntoView({ behavior: 'smooth' });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         const prevIndex = Math.max(0, activeVideoIndex - 1);
-        const target = container.querySelector(`[data-index="${prevIndex}"]`);
+        const target = container.querySelector(`[data-reel-index="${prevIndex}"]`);
         if (target) target.scrollIntoView({ behavior: 'smooth' });
       }
     };
@@ -173,12 +173,17 @@ export const ReelsContainer = () => {
         className="w-full h-full overflow-y-scroll snap-y-mandatory no-scrollbar"
       >
         {videos.map((video, idx) => (
-          <ReelCard
+          <div
             key={video._id || video.id || idx}
-            video={video}
-            index={idx}
-            isActive={idx === activeVideoIndex}
-          />
+            className="reel-snap-item snap-start w-full h-full shrink-0"
+            data-reel-index={idx}
+          >
+            <ReelCard
+              video={video}
+              index={idx}
+              isActive={idx === activeVideoIndex}
+            />
+          </div>
         ))}
       </div>
     </div>
