@@ -16,8 +16,11 @@ import { CategoryPinModal } from './components/PIN/CategoryPinModal';
 import { SetPinModal } from './components/PIN/SetPinModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
 import { SharePlayerPage } from './components/Share/SharePlayerPage';
+import { useUploadQueue } from './contexts/useUploadQueue';
 
 const StreamVaultApp = () => {
+  const { enqueueFiles } = useUploadQueue();
+
   // Check if current URL is a public share link
   const path = window.location.pathname;
   if (path.startsWith('/share/')) {
@@ -26,6 +29,13 @@ const StreamVaultApp = () => {
       return <SharePlayerPage token={token} />;
     }
   }
+
+  // Handle incoming PWA Web Share Target
+  React.useEffect(() => {
+    if (path === '/share-target' || window.location.search.includes('share_target')) {
+      window.history.replaceState({}, document.title, '/');
+    }
+  }, [path]);
 
   return (
     <div className="relative w-full h-full min-h-[100dvh] bg-black text-white overflow-hidden">

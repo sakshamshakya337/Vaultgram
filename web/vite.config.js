@@ -59,7 +59,23 @@ export default defineConfig(({ mode }) => {
               type: 'image/png',
               purpose: 'maskable'
             }
-          ]
+          ],
+          share_target: {
+            action: '/share-target',
+            method: 'POST',
+            enctype: 'multipart/form-data',
+            params: {
+              title: 'title',
+              text: 'text',
+              url: 'url',
+              files: [
+                {
+                  name: 'media',
+                  accept: ['video/*', 'image/*', 'audio/*', 'application/*', '.pdf', '.mp4', '.mov', '.jpg', '.png']
+                }
+              ]
+            }
+          }
         },
         workbox: {
           // Cache app shell assets only
