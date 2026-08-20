@@ -136,6 +136,13 @@ export const VideoFeedProvider = ({ children }) => {
     };
   }, []);
 
+  // Synchronize locked categories immediately from authenticated user state
+  useEffect(() => {
+    if (Array.isArray(user?.lockedCategories)) {
+      setLockedCategories(user.lockedCategories);
+    }
+  }, [user?.lockedCategories]);
+
   // Fetch categories and locked status from API
   const fetchCategories = useCallback(async () => {
     try {

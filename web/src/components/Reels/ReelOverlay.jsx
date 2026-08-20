@@ -6,7 +6,7 @@ import { formatViews, formatDuration, formatBytes } from '../../services/api';
 export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
   const [copied, setCopied] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const { setSelectedCategory, deleteReel } = useVideoFeed();
+  const { requestCategory, deleteReel } = useVideoFeed();
 
   const handleShare = async (e) => {
     e.stopPropagation();
@@ -18,24 +18,29 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
           text: `Watch ${video.title} on StreamVault!`,
           url: shareUrl,
         });
-      } catch {}
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          copyToClipboard(shareUrl);
+        }
+      }
     } else {
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch {}
+      copyToClipboard(shareUrl);
     }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDelete = async (e) => {
     e.stopPropagation();
-    const reelTitle = video.title || 'this reel';
-    const confirmed = window.confirm(`Delete "${reelTitle}"?\n\nThis will permanently delete the video and remove it from your cloud storage.`);
-    if (!confirmed) return;
+    const confirmDelete = window.confirm('Are you sure you want to delete this reel? This action is permanent.');
+    if (!confirmDelete) return;
 
+    setIsDeleting(true);
     try {
-      setIsDeleting(true);
       await deleteReel(video._id || video.id);
     } catch (err) {
       alert(err.message || 'Failed to delete reel');
@@ -46,7 +51,7 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
   const handleCategoryClick = (e, cat) => {
     e.stopPropagation();
     if (cat) {
-      setSelectedCategory(cat);
+      requestCategory(cat);
     }
   };
 
