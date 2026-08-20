@@ -7,6 +7,7 @@ import {
   setStoredUser,
   removeStoredUser,
   clearAccessToken,
+  removeStoredRefreshToken,
 } from '../services/api';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { AuthContext } from './AuthContext.js';
@@ -16,6 +17,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isSetPinModalOpen, setIsSetPinModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -41,6 +43,12 @@ export const AuthProvider = ({ children }) => {
                 setUser(meRes.user);
                 setStoredUser(meRes.user);
               }
+            } else {
+              // Token invalid and refresh failed
+              setUser(null);
+              clearAccessToken();
+              removeStoredRefreshToken();
+              removeStoredUser();
             }
           }
         }
@@ -53,10 +61,24 @@ export const AuthProvider = ({ children }) => {
               setUser(meRes.user);
               setStoredUser(meRes.user);
             }
+          } else {
+            setUser(null);
+            clearAccessToken();
+            removeStoredRefreshToken();
+            removeStoredUser();
           }
         } catch (err) {
           console.warn('Initial session restore note:', err.message);
+          setUser(null);
+          clearAccessToken();
+          removeStoredRefreshToken();
+          removeStoredUser();
         }
+      } else {
+        setUser(null);
+        clearAccessToken();
+        removeStoredRefreshToken();
+        removeStoredUser();
       }
       setLoading(false);
     };
@@ -66,6 +88,9 @@ export const AuthProvider = ({ children }) => {
     // Listen for unauthorized events from API interceptor
     const handleUnauthorized = () => {
       setUser(null);
+      clearAccessToken();
+      removeStoredRefreshToken();
+      removeStoredUser();
     };
     window.addEventListener('auth:unauthorized', handleUnauthorized);
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
@@ -74,6 +99,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const res = await api.auth.login(email, password);
     setUser(res.user);
+    setIsAuthOpen(false);
     if (res.user && !res.user.hasPin) {
       setTimeout(() => setIsSetPinModalOpen(true), 600);
     }
@@ -83,6 +109,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password) => {
     const res = await api.auth.register(username, email, password);
     setUser(res.user);
+    setIsAuthOpen(false);
     if (res.user && !res.user.hasPin) {
       setTimeout(() => setIsSetPinModalOpen(true), 600);
     }
@@ -90,8 +117,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await api.auth.logout();
+    try {
+      await api.auth.logout();
+    } catch {}
     setUser(null);
+    setIsSettingsOpen(false);
+    setIsAuthOpen(false);
+    window.dispatchEvent(new Event('auth:unauthorized'));
   };
 
   const handleSetPin = async (pin) => {
@@ -157,6 +189,8 @@ export const AuthProvider = ({ children }) => {
         setIsSetPinModalOpen,
         isSettingsOpen,
         setIsSettingsOpen,
+        isAuthOpen,
+        setIsAuthOpen,
       }}
     >
       {children}

@@ -182,11 +182,14 @@ export const SettingsModal = () => {
                 </div>
               </div>
               <button
-                onClick={() => {
-                  logout();
-                  setIsSettingsOpen(false);
+                onClick={async () => {
+                  try {
+                    await logout();
+                  } finally {
+                    setIsSettingsOpen(false);
+                  }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-sm"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Sign Out</span>
