@@ -3,6 +3,7 @@ import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
 import { ReelCard } from './ReelCard';
 import { TapToUnmuteHint } from './TapToUnmuteHint';
+import { ReelSkeleton } from '../Skeletons/ReelSkeleton';
 import { Video, Sparkles, Plus, RefreshCw, Lock, Shield } from 'lucide-react';
 
 export const ReelsContainer = () => {
@@ -126,16 +127,7 @@ export const ReelsContainer = () => {
   }
 
   if (loading && videos.length === 0) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950 p-6 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4 animate-spin">
-          <RefreshCw className="w-6 h-6" />
-        </div>
-        <p className="text-sm font-semibold text-zinc-400 animate-pulse">
-          Loading StreamVault feed...
-        </p>
-      </div>
-    );
+    return <ReelSkeleton />;
   }
 
   if (videos.length === 0 && !loading) {

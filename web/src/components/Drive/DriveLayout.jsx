@@ -11,10 +11,10 @@ import { DriveFilesGrid } from './DriveFilesGrid';
 import { DriveFilesList } from './DriveFilesList';
 import { DesktopVideoModal } from './DesktopVideoModal';
 import { NewFolderModal } from './NewFolderModal';
-import { RenameModal } from './RenameModal';
 import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
+import { DriveFolderSkeleton, DriveGridSkeleton, DriveListSkeleton } from '../Skeletons/DriveSkeleton';
 
 export const DriveLayout = () => {
   const {
@@ -242,14 +242,18 @@ export const DriveLayout = () => {
           <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-8 pb-28 md:pb-8 no-scrollbar">
             {/* FOLDERS SECTION */}
             {isAtRoot && (
-              <DriveFolderGrid
-                folders={folders}
-                categoryFolders={categoryFoldersList}
-                onOpenFolder={handleOpenFolder}
-                onOpenCategory={handleOpenCategory}
-                onRenameFolder={(folder) => setRenameTarget(folder)}
-                onDeleteFolder={handleDeleteFolder}
-              />
+              loadingDrive && folders.length === 0 ? (
+                <DriveFolderSkeleton count={6} />
+              ) : (
+                <DriveFolderGrid
+                  folders={folders}
+                  categoryFolders={categoryFoldersList}
+                  onOpenFolder={handleOpenFolder}
+                  onOpenCategory={handleOpenCategory}
+                  onRenameFolder={(folder) => setRenameTarget(folder)}
+                  onDeleteFolder={handleDeleteFolder}
+                />
+              )
             )}
 
             {/* FILES SECTION */}
@@ -270,7 +274,7 @@ export const DriveLayout = () => {
                       : `#${selectedCategory} Files`}
                   </h3>
                   <span className="text-xs font-mono text-zinc-500">
-                    ({files.length})
+                    ({loadingDrive && files.length === 0 ? '...' : files.length})
                   </span>
                 </div>
 
@@ -284,8 +288,15 @@ export const DriveLayout = () => {
                 )}
               </div>
 
-              {/* Empty State */}
-              {files.length === 0 && !loadingDrive && (
+              {/* Skeletons when initial loading or network is slow */}
+              {loadingDrive && files.length === 0 ? (
+                viewMode === 'grid' ? (
+                  <DriveGridSkeleton count={8} />
+                ) : (
+                  <DriveListSkeleton count={6} />
+                )
+              ) : files.length === 0 ? (
+                /* Empty State */
                 <div className="p-8 md:p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
                   <div className="w-16 h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600">
                     {currentNav === 'starred' ? (
@@ -340,10 +351,8 @@ export const DriveLayout = () => {
                     </div>
                   )}
                 </div>
-              )}
-
-              {/* Grid vs List View */}
-              {files.length > 0 && (
+              ) : (
+                /* Grid vs List View */
                 viewMode === 'grid' ? (
                   <DriveFilesGrid
                     videos={files}
