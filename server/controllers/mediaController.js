@@ -130,9 +130,11 @@ exports.listMedia = async (req, res) => {
       (c) => !unlockedList.includes(c.toLowerCase())
     );
 
-    // If requesting a specific locked category without session unlock, block with 403
+    // If requesting a specific single category
     if (category && category !== 'All') {
-      if (activeLockedCategories.some((c) => c.toLowerCase() === category.toLowerCase())) {
+      const isLocked = userLocked.some((c) => c.toLowerCase() === category.toLowerCase());
+      const isUnlockedInSession = unlockedList.includes(category.toLowerCase());
+      if (isLocked && !isUnlockedInSession) {
         return res.status(403).json({
           locked: true,
           message: `Category "${category}" is locked. Unlock with biometric or PIN passcode.`,
@@ -141,11 +143,15 @@ exports.listMedia = async (req, res) => {
         });
       }
       query.category = category;
-    } else if (activeLockedCategories.length > 0) {
-      // Exclude all locked categories from the general dashboard listing
-      query.category = {
-        $nin: activeLockedCategories.map((c) => new RegExp(`^${c.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')),
-      };
+    } else {
+      // General Aggregate / Home / All Files / Root / Starred / Recent listing:
+      // STRICT SCOPING: ALWAYS exclude all locked categories from aggregate views,
+      // regardless of whether any category was unlocked in another context this session.
+      if (userLocked.length > 0) {
+        query.category = {
+          $nin: userLocked.map((c) => new RegExp(`^${c.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')),
+        };
+      }
     }
 
     let sort = { isFolder: -1, createdAt: -1 };

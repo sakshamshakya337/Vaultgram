@@ -52,7 +52,11 @@ export const DriveLayout = () => {
   const loadDriveItems = useCallback(async () => {
     setLoadingDrive(true);
     try {
-      const unlockedCats = Array.from(sessionUnlockedCategories || []).join(',');
+      const isScopedView = selectedCategory !== 'All' || !!currentFolder;
+      const unlockedCats = isScopedView
+        ? Array.from(sessionUnlockedCategories || []).join(',')
+        : undefined;
+
       if (searchQuery.trim()) {
         const res = await api.drive.list({ limit: 100, unlockedCategories: unlockedCats });
         const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
@@ -108,9 +112,16 @@ export const DriveLayout = () => {
         const isCatLocked = effectiveLocked.some(
           (lc) => lc.toLowerCase().trim() === cat
         );
+        if (!isCatLocked) return true;
+
+        // In aggregate / home view (selectedCategory === 'All' and no currentFolder),
+        // locked categories are ALWAYS completely excluded, even if unlocked in another context.
+        if (selectedCategory === 'All' && !currentFolder) {
+          return false;
+        }
+
         const isCatUnlocked = sessionUnlockedCategories?.has(cat);
-        // If category is locked and not unlocked in this session, strictly omit it from the UI
-        return !isCatLocked || isCatUnlocked;
+        return isCatUnlocked;
       });
     }
 
