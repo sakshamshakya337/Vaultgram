@@ -15,6 +15,7 @@ import { RenameModal } from './RenameModal';
 import { TimelineView } from './TimelineView';
 import { TrashView } from './TrashView';
 import { CameraCaptureModal } from '../Upload/CameraCaptureModal';
+import { VoiceMemoModal } from '../Upload/VoiceMemoModal';
 import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
@@ -50,6 +51,7 @@ export const DriveLayout = () => {
   // Modals
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isVoiceMemoOpen, setIsVoiceMemoOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState(null);
 
   // Load drive items (folders and files)
@@ -235,6 +237,7 @@ export const DriveLayout = () => {
           }}
           onOpenNewFolder={() => setIsNewFolderOpen(true)}
           onOpenCamera={() => setIsCameraOpen(true)}
+          onOpenVoiceMemo={() => setIsVoiceMemoOpen(true)}
         />
       </div>
 
@@ -501,6 +504,14 @@ export const DriveLayout = () => {
         folderId={currentFolder?._id || null}
         folderTitle={currentFolder?.title || ''}
         category={selectedCategory}
+      />
+
+      {/* Quick Voice Memo Recording Modal */}
+      <VoiceMemoModal
+        isOpen={isVoiceMemoOpen}
+        onClose={() => setIsVoiceMemoOpen(false)}
+        folderId={currentFolder?._id || null}
+        folderTitle={currentFolder?.title || ''}
       />
     </div>
   );
