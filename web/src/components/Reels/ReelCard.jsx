@@ -229,7 +229,7 @@ export const ReelCard = ({ video, isActive, index }) => {
         }}
         onCanPlay={() => setIsBuffering(false)}
         onError={handleVideoError}
-        className="w-full h-full object-contain md:object-cover relative z-10"
+        className="absolute inset-0 w-full h-full object-cover z-10"
       />
 
       {/* Buffering Spinner */}
