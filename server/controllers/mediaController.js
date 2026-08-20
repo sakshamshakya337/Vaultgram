@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const axios = require('axios');
 const Media = require('../models/Media');
+const User = require('../models/User');
 const WatchHistory = require('../models/WatchHistory');
 const Like = require('../models/Like');
 const Playlist = require('../models/Playlist');

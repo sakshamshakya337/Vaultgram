@@ -70,11 +70,11 @@ export const DriveLayout = () => {
       }
     } catch (err) {
       console.warn('Drive items fetch error:', err.message);
-      setDriveItems(videos || []);
+      setDriveItems([]);
     } finally {
       setLoadingDrive(false);
     }
-  }, [currentFolder, currentNav, searchQuery, selectedCategory, sessionUnlockedCategories, videos]);
+  }, [currentFolder, currentNav, searchQuery, selectedCategory, sessionUnlockedCategories]);
 
   useEffect(() => {
     loadDriveItems();
