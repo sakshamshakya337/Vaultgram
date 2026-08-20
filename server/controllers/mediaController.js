@@ -101,14 +101,18 @@ exports.listMedia = async (req, res) => {
     }
 
     // ─── Locked Categories Security Protection ──────────────────────────────────
-    let userLocked = Array.isArray(req.user?.lockedCategories) ? req.user.lockedCategories : [];
+    let userLocked = [];
+    if (req.user?._id) {
+      const u = await User.findById(req.user._id).lean();
+      if (Array.isArray(u?.lockedCategories)) {
+        userLocked = u.lockedCategories;
+      }
+    }
     if (userLocked.length === 0) {
-      try {
-        const dbUser = await User.findOne({ 'lockedCategories.0': { $exists: true } }).lean();
-        if (dbUser?.lockedCategories) {
-          userLocked = dbUser.lockedCategories;
-        }
-      } catch {}
+      const anyUser = await User.findOne({ 'lockedCategories.0': { $exists: true } }).lean();
+      if (Array.isArray(anyUser?.lockedCategories)) {
+        userLocked = anyUser.lockedCategories;
+      }
     }
 
     const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
@@ -140,7 +144,7 @@ exports.listMedia = async (req, res) => {
     } else if (activeLockedCategories.length > 0) {
       // Exclude all locked categories from the general dashboard listing
       query.category = {
-        $nin: activeLockedCategories.map((c) => new RegExp(`^${c}$`, 'i')),
+        $nin: activeLockedCategories.map((c) => new RegExp(`^${c.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')),
       };
     }
 

@@ -415,10 +415,17 @@ exports.unlockCategory = async (req, res) => {
  */
 exports.getLockedStatus = async (req, res) => {
   try {
-    if (!req.user) {
-      return res.json({ lockedCategories: [], hasPin: false });
+    let user = null;
+    if (req.user?._id) {
+      user = await User.findById(req.user._id).select('+pinHash');
     }
-    const user = await User.findById(req.user._id).select('+pinHash');
+    if (!user) {
+      user = await User.findOne({ 'lockedCategories.0': { $exists: true } }).select('+pinHash');
+    }
+    if (!user) {
+      user = await User.findOne({ pinHash: { $exists: true, $ne: null } }).select('+pinHash');
+    }
+
     res.json({
       lockedCategories: user?.lockedCategories || [],
       hasPin: !!user?.pinHash,

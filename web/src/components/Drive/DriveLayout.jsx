@@ -30,7 +30,7 @@ export const DriveLayout = () => {
     setIsUploadOpen,
   } = useVideoFeed();
 
-  const { isAuthenticated, hasPin } = useAuth();
+  const { user, isAuthenticated, hasPin } = useAuth();
   const { registerOnUploadSuccess, openFilePicker } = useUploadQueue();
 
   // Navigation & Data
@@ -98,10 +98,14 @@ export const DriveLayout = () => {
     let list = driveItems.filter((item) => !item.isFolder);
 
     // ─── Strict Privacy Protection: Exclude Locked Categories ────────────────
-    if (Array.isArray(lockedCategories) && lockedCategories.length > 0) {
+    const effectiveLocked = Array.isArray(lockedCategories) && lockedCategories.length > 0
+      ? lockedCategories
+      : (Array.isArray(user?.lockedCategories) ? user.lockedCategories : []);
+
+    if (effectiveLocked.length > 0) {
       list = list.filter((v) => {
         const cat = (v.category || '').toLowerCase().trim();
-        const isCatLocked = lockedCategories.some(
+        const isCatLocked = effectiveLocked.some(
           (lc) => lc.toLowerCase().trim() === cat
         );
         const isCatUnlocked = sessionUnlockedCategories?.has(cat);
@@ -129,7 +133,7 @@ export const DriveLayout = () => {
     }
 
     return list;
-  }, [driveItems, lockedCategories, sessionUnlockedCategories, selectedCategory, currentNav, searchQuery]);
+  }, [driveItems, lockedCategories, user?.lockedCategories, sessionUnlockedCategories, selectedCategory, currentNav, searchQuery]);
 
   // Handle opening custom folder with PIN check
   const handleOpenFolder = (folder) => {
