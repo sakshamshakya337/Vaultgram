@@ -16,12 +16,14 @@ import {
   Cloud,
   Loader2,
   StickyNote,
+  Share2,
 } from 'lucide-react';
 import { api, formatBytes, formatDuration, formatViews, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { NoteEditModal } from './NoteEditModal';
+import { ShareModal } from './ShareModal';
 
 export const DesktopVideoModal = ({
   video,
@@ -40,6 +42,7 @@ export const DesktopVideoModal = ({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState(null);
 
   // Derive the active list of files
@@ -326,6 +329,15 @@ export const DesktopVideoModal = ({
                 <Download className="w-4 h-4" />
               </a>
 
+              {/* Share Button */}
+              <button
+                onClick={() => setIsShareModalOpen(true)}
+                className="p-2 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-cyan-400 hover:bg-white/10 transition-colors cursor-pointer"
+                title="Share time-limited link"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+
               {/* Delete Button */}
               <button
                 onClick={() => setIsDeleteModalOpen(true)}
@@ -377,7 +389,7 @@ export const DesktopVideoModal = ({
             ) : isImage ? (
               <img
                 key={fileId}
-                src={streamUrl || thumbUrl}
+                src={activeStreamSrc}
                 alt={currentFile.title || 'Image preview'}
                 className="w-full h-full max-h-[65vh] object-contain p-2 animate-fade-in"
               />
@@ -391,7 +403,8 @@ export const DesktopVideoModal = ({
                   <p className="text-xs text-zinc-400">{formatBytes(currentFile.fileSizeBytes)}</p>
                 </div>
                 <audio
-                  src={streamUrl}
+                  ref={videoRef}
+                  src={activeStreamSrc}
                   controls
                   autoPlay
                   className="w-full max-w-md mt-2"
@@ -449,6 +462,13 @@ export const DesktopVideoModal = ({
           </div>
         </div>
       </div>
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        file={currentFile}
+        onClose={() => setIsShareModalOpen(false)}
+      />
 
       {/* Note Edit Modal */}
       <NoteEditModal

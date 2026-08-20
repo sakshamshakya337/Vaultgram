@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Video, Heart, Download, Play, Clock, HardDrive, Trash2, Cloud, Loader2, StickyNote } from 'lucide-react';
+import { Video, Heart, Download, Play, Clock, HardDrive, Trash2, Cloud, Loader2, StickyNote, Share2 } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { NoteEditModal } from './NoteEditModal';
+import { ShareModal } from './ShareModal';
 
 export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();
@@ -12,6 +13,7 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [noteTarget, setNoteTarget] = useState(null);
+  const [shareTarget, setShareTarget] = useState(null);
 
   if (!videos || videos.length === 0) return null;
 
@@ -162,6 +164,15 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                     <Download className="w-3.5 h-3.5" />
                   </a>
 
+                  {/* Share Button */}
+                  <button
+                    onClick={() => setShareTarget(video)}
+                    className="p-1.5 rounded-lg text-zinc-500 hover:text-cyan-400 hover:bg-white/10 transition-colors cursor-pointer"
+                    title="Share Time-Limited Link"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </button>
+
                   <button
                     onClick={() => setDeleteTarget(video)}
                     className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
@@ -175,6 +186,13 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
           })}
         </div>
       </div>
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={!!shareTarget}
+        file={shareTarget}
+        onClose={() => setShareTarget(null)}
+      />
 
       {/* Note Edit Modal */}
       <NoteEditModal

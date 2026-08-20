@@ -11,6 +11,7 @@ const { generalLimiter } = require('./middleware/rateLimiter');
 const authRoutes = require('./routes/authRoutes');
 const mediaRoutes = require('./routes/mediaRoutes');
 const streamRoutes = require('./routes/streamRoutes');
+const shareRoutes = require('./routes/shareRoutes');
 
 const app = express();
 
@@ -81,6 +82,7 @@ app.use('/api/v1/auth', dbMiddleware, authRoutes);
 app.use('/api/v1/media', dbMiddleware, mediaRoutes);
 app.use('/api/v1/videos', dbMiddleware, mediaRoutes);
 app.use('/api/v1/files', dbMiddleware, mediaRoutes);
+app.use('/api/v1/share', dbMiddleware, shareRoutes);
 app.use('/api/v1/stream', dbMiddleware, streamRoutes);
 
 // Global error handler

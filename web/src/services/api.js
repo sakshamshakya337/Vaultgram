@@ -494,6 +494,19 @@ export const api = {
       return params.length > 0 ? `${base}?${params.join('&')}` : base;
     },
   },
+
+  share: {
+    create: (fileId, durationHours = 24) =>
+      request(`/share/create/${fileId}`, {
+        method: 'POST',
+        body: JSON.stringify({ durationHours }),
+      }),
+    getInfo: (token) => request(`/share/${token}/info`),
+    revoke: (token) =>
+      request(`/share/${token}`, {
+        method: 'DELETE',
+      }),
+  },
 };
 
 export function formatDuration(seconds) {

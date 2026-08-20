@@ -15,8 +15,18 @@ import { OfflineIndicator } from './components/PWA/OfflineIndicator';
 import { CategoryPinModal } from './components/PIN/CategoryPinModal';
 import { SetPinModal } from './components/PIN/SetPinModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
+import { SharePlayerPage } from './components/Share/SharePlayerPage';
 
 const StreamVaultApp = () => {
+  // Check if current URL is a public share link
+  const path = window.location.pathname;
+  if (path.startsWith('/share/')) {
+    const token = path.replace(/^\/share\//, '').split('/')[0];
+    if (token) {
+      return <SharePlayerPage token={token} />;
+    }
+  }
+
   return (
     <div className="relative w-full h-full min-h-[100dvh] bg-black text-white overflow-hidden">
       {/* Offline Status Alert */}
