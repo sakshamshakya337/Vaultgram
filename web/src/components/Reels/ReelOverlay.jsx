@@ -1,38 +1,11 @@
 import React, { useState } from 'react';
-import { Heart, Volume2, VolumeX, Share2, Eye, Sparkles, Music, Check, Trash2, Loader2 } from 'lucide-react';
+import { Heart, Volume2, VolumeX, Eye, Sparkles, Music, Trash2, Loader2 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { formatViews, formatDuration, formatBytes } from '../../services/api';
 
 export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
-  const [copied, setCopied] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { requestCategory, deleteReel } = useVideoFeed();
-
-  const handleShare = async (e) => {
-    e.stopPropagation();
-    const shareUrl = window.location.origin + `?v=${video._id || video.id}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: video.title || 'StreamVault Reel',
-          text: `Watch ${video.title} on StreamVault!`,
-          url: shareUrl,
-        });
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          copyToClipboard(shareUrl);
-        }
-      }
-    } else {
-      copyToClipboard(shareUrl);
-    }
-  };
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleDelete = async (e) => {
     e.stopPropagation();
@@ -63,69 +36,85 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 pb-20 md:pb-6 z-20">
-      {/* Top Scrim Gradient */}
-      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/80 via-black/30 to-transparent pointer-events-none" />
+      {/* Top Bar: Category Pill & Sound Badge */}
+      <div className="flex items-center justify-between pt-12 md:pt-2 px-1">
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={(e) => handleCategoryClick(e, category)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/60 backdrop-blur-xl border border-white/15 text-white text-xs font-bold hover:bg-black/80 hover:border-cyan-500/40 transition-all cursor-pointer shadow-lg"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>#{category}</span>
+          </button>
+        </div>
 
-      {/* Bottom Scrim Gradient */}
-      <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none" />
-
-      {/* Top Content Area (Empty spacer for category bar) */}
-      <div className="relative z-10" />
-
-      {/* Main Bottom + Right Rails Overlay */}
-      <div className="relative z-10 flex items-end justify-between gap-4 w-full">
-        {/* Left Side: Video Info */}
-        <div className="flex-1 min-w-0 pr-2 pointer-events-auto space-y-2.5">
-          {/* Category Chip */}
-          <div className="flex items-center gap-2 flex-wrap">
+        {/* Muted Pill Indicator when audio is locked/muted */}
+        {isMuted && (
+          <div className="pointer-events-auto">
             <button
-              onClick={(e) => handleCategoryClick(e, category)}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 backdrop-blur-md hover:bg-cyan-500/30 transition-colors cursor-pointer"
+              onClick={onToggleMute}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/80 backdrop-blur-md text-white text-[11px] font-bold shadow-lg animate-pulse cursor-pointer hover:bg-rose-600 transition-colors"
             >
-              <Sparkles className="w-3 h-3" />
-              <span>#{category}</span>
+              <VolumeX className="w-3.5 h-3.5" />
+              <span>Tap for Sound</span>
             </button>
-            {video.duration ? (
-              <span className="text-[11px] font-mono text-zinc-400 bg-black/40 px-2 py-0.5 rounded border border-white/10 backdrop-blur-sm">
-                {formatDuration(video.duration)}
-              </span>
-            ) : null}
-            {video.fileSizeBytes ? (
-              <span className="text-[11px] font-mono text-zinc-400 bg-black/40 px-2 py-0.5 rounded border border-white/10 backdrop-blur-sm">
-                {formatBytes(video.fileSizeBytes)}
-              </span>
-            ) : null}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Area: Left Info & Right Action Buttons */}
+      <div className="flex items-end justify-between gap-4">
+        {/* Left Side: Video Title, Description, Duration, Size */}
+        <div className="flex-1 min-w-0 pointer-events-auto pr-2">
+          {/* Uploader / Tag row */}
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center p-0.5 shadow-md">
+              <div className="w-full h-full bg-zinc-950 rounded-full flex items-center justify-center">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              </div>
+            </div>
+            <span className="text-xs font-bold text-white drop-shadow">
+              {video.uploadedBy?.username || 'StreamVault User'}
+            </span>
           </div>
 
-          {/* Video Title */}
-          <h2 className="text-base md:text-lg font-bold text-white leading-snug drop-shadow-md line-clamp-2">
+          {/* Title */}
+          <h2 className="text-sm font-bold text-white leading-snug line-clamp-2 drop-shadow-md mb-1">
             {title}
           </h2>
 
           {/* Description if present */}
-          {video.description ? (
-            <p className="text-xs md:text-sm text-zinc-300 line-clamp-2 leading-relaxed drop-shadow">
+          {video.description && (
+            <p className="text-xs text-zinc-300 line-clamp-2 drop-shadow leading-relaxed mb-2 font-normal">
               {video.description}
             </p>
-          ) : null}
+          )}
 
-          {/* Audio Ticker / Channel Info */}
-          <div className="flex items-center gap-2 text-xs text-zinc-300/90 pt-1">
-            <div className="flex items-center gap-1.5 bg-black/40 px-2.5 py-1 rounded-full border border-white/10 backdrop-blur-sm max-w-[220px]">
-              <Music className="w-3 h-3 text-cyan-400 shrink-0 animate-spin-slow" />
-              <span className="truncate text-[11px] font-medium">Original Audio • StreamVault</span>
-            </div>
+          {/* Meta tags: Duration, Size, Extension */}
+          <div className="flex items-center gap-2.5 text-[11px] font-mono text-zinc-300 drop-shadow">
+            {video.duration ? (
+              <span className="px-2 py-0.5 rounded-md bg-black/40 backdrop-blur-md border border-white/10">
+                {formatDuration(video.duration)}
+              </span>
+            ) : null}
+            {video.fileSizeBytes ? (
+              <span className="px-2 py-0.5 rounded-md bg-black/40 backdrop-blur-md border border-white/10">
+                {formatBytes(video.fileSizeBytes)}
+              </span>
+            ) : null}
+            {video.extension ? (
+              <span className="px-2 py-0.5 rounded-md bg-black/40 backdrop-blur-md border border-white/10 uppercase text-cyan-400 font-bold">
+                {video.extension}
+              </span>
+            ) : null}
           </div>
         </div>
 
-        {/* Right Rail: Action Buttons */}
-        <div className="flex flex-col items-center gap-3.5 pointer-events-auto pb-1 shrink-0">
+        {/* Right Side: Interaction Floating Buttons */}
+        <div className="flex flex-col items-center gap-3.5 pointer-events-auto shrink-0 pb-1">
           {/* Like Button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onLike();
-            }}
+            onClick={onLike}
             className="group flex flex-col items-center gap-1 transition-transform active:scale-75 cursor-pointer"
             aria-label="Like video"
           >
@@ -177,24 +166,6 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
               {formatViews(views)}
             </span>
           </div>
-
-          {/* Share Button */}
-          <button
-            onClick={handleShare}
-            className="group flex flex-col items-center gap-1 transition-transform active:scale-75 cursor-pointer"
-            aria-label="Share video"
-          >
-            <div className="w-12 h-12 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-xl border border-white/15 text-white hover:bg-black/70 hover:border-white/30 transition-all">
-              {copied ? (
-                <Check className="w-5 h-5 text-emerald-400" />
-              ) : (
-                <Share2 className="w-5 h-5 text-white group-hover:scale-110" />
-              )}
-            </div>
-            <span className="text-[11px] font-medium text-zinc-300 drop-shadow">
-              {copied ? 'Copied' : 'Share'}
-            </span>
-          </button>
 
           {/* Delete Reel Button */}
           <button

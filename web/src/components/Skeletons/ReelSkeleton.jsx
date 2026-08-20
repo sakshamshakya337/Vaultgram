@@ -32,7 +32,7 @@ export const ReelSkeleton = () => {
         </div>
 
         {/* Right Action Buttons Placeholder */}
-        <div className="flex flex-col items-center gap-4 shrink-0">
+        <div className="flex flex-col items-center gap-3.5 shrink-0">
           {/* Like button skeleton */}
           <div className="flex flex-col items-center gap-1">
             <div className="w-11 h-11 rounded-full bg-zinc-800/80 border border-white/5 animate-pulse" />
@@ -42,11 +42,11 @@ export const ReelSkeleton = () => {
           {/* Mute button skeleton */}
           <div className="w-11 h-11 rounded-full bg-zinc-800/80 border border-white/5 animate-pulse" />
 
-          {/* Share button skeleton */}
+          {/* Views skeleton */}
           <div className="w-11 h-11 rounded-full bg-zinc-800/80 border border-white/5 animate-pulse" />
 
-          {/* Music disk skeleton */}
-          <div className="w-10 h-10 rounded-full bg-zinc-800/90 border border-cyan-500/20 animate-pulse mt-1" />
+          {/* Delete button skeleton */}
+          <div className="w-11 h-11 rounded-full bg-zinc-800/80 border border-white/5 animate-pulse" />
         </div>
       </div>
 
