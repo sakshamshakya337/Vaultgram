@@ -418,6 +418,8 @@ export const api = {
     upload: (formData, onProgress) => {
       return uploadWithProgress(formData, onProgress);
     },
+
+    delete: (id) => request(`/videos/${id}`, { method: 'DELETE' }),
   },
 
   drive: {
