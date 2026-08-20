@@ -133,6 +133,19 @@ export const DriveLayout = () => {
       );
     }
 
+    // Auto-categorize smart views by date
+    if (currentNav === 'this-week') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(startOfWeek.getDate() - today.getDay());
+      list = list.filter((v) => new Date(v.createdAt || 0) >= startOfWeek);
+    } else if (currentNav === 'this-month') {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      list = list.filter((v) => new Date(v.createdAt || 0) >= startOfMonth);
+    }
+
     // Search query filtering
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -282,6 +295,10 @@ export const DriveLayout = () => {
                       ? `Folder: ${currentFolder.title}`
                       : currentNav === 'timeline'
                       ? 'Timeline (By Date)'
+                      : currentNav === 'this-week'
+                      ? 'Files from This Week'
+                      : currentNav === 'this-month'
+                      ? 'Files from This Month'
                       : currentNav === 'starred'
                       ? 'Starred Videos'
                       : currentNav === 'recent'
@@ -330,6 +347,10 @@ export const DriveLayout = () => {
                     <h4 className="text-sm font-bold text-white mb-1">
                       {currentNav === 'timeline'
                         ? 'Timeline is Empty'
+                        : currentNav === 'this-week'
+                        ? 'No Files This Week'
+                        : currentNav === 'this-month'
+                        ? 'No Files This Month'
                         : currentNav === 'starred'
                         ? 'No Starred Files'
                         : currentNav === 'trash'
@@ -341,6 +362,10 @@ export const DriveLayout = () => {
                     <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
                       {currentNav === 'timeline'
                         ? 'Upload media to see it organized chronologically by date.'
+                        : currentNav === 'this-week'
+                        ? 'Files you upload this week will automatically appear here.'
+                        : currentNav === 'this-month'
+                        ? 'Files you upload this month will automatically appear here.'
                         : currentNav === 'starred'
                         ? 'Like or star videos to save them here for quick access.'
                         : currentNav === 'trash'

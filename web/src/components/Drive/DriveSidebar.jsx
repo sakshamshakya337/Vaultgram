@@ -15,7 +15,9 @@ import {
   Shield,
   Upload,
   Download,
-  Calendar
+  Calendar,
+  CalendarDays,
+  CalendarRange
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
@@ -119,9 +121,6 @@ export const DriveSidebar = ({
           <button
             onClick={() => {
               onSelectNav('reels');
-              if (hasPin && !sessionUnlockedReels) {
-                setCategoryLockTarget('Reels');
-              }
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'reels'
@@ -187,6 +186,30 @@ export const DriveSidebar = ({
           >
             <Calendar className="w-4 h-4" />
             <span>Timeline</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('this-week')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'this-week'
+                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            <span>This Week</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('this-month')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'this-month'
+                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <CalendarRange className="w-4 h-4" />
+            <span>This Month</span>
           </button>
 
           <button
