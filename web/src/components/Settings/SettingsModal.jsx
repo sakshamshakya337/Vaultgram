@@ -13,14 +13,20 @@ import {
   Fingerprint,
   Smartphone,
   Sun,
-  Moon
+  Moon,
+  Cloud,
+  HardDrive,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useTheme } from '../../contexts/useTheme';
+import { useOfflineMedia } from '../../contexts/useOfflineMedia';
+import { formatBytes } from '../../services/api';
 
 export const SettingsModal = () => {
   const { theme, toggleTheme, setTheme } = useTheme();
+  const { storageUsed, clearCache, offlineList } = useOfflineMedia();
   const {
     user,
     isAuthenticated,
@@ -225,6 +231,50 @@ export const SettingsModal = () => {
                 <Sun className="w-4 h-4" />
                 <span>Light Mode</span>
               </button>
+            </div>
+          </div>
+
+          {/* Offline Storage Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Cloud className="w-4 h-4 text-cyan-400" />
+                  <span>Offline Storage</span>
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Saved videos available without internet
+                </p>
+              </div>
+              <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                {offlineList.length} {offlineList.length === 1 ? 'video' : 'videos'} ({formatBytes(storageUsed)})
+              </span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-white">Device Cache Storage</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  {storageUsed > 0
+                    ? `${formatBytes(storageUsed)} currently cached on this device.`
+                    : 'No videos currently saved offline.'}
+                </p>
+              </div>
+
+              {storageUsed > 0 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('Clear all offline cached videos to free up storage?')) {
+                      clearCache();
+                      showSuccess('Offline cache cleared');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear Cache</span>
+                </button>
+              )}
             </div>
           </div>
 

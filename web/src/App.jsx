@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { VideoFeedProvider } from './contexts/VideoFeedProvider';
 import { UploadProvider } from './contexts/UploadProvider';
 import { ThemeProvider } from './contexts/ThemeProvider';
+import { OfflineMediaProvider } from './contexts/OfflineMediaProvider';
 import { DriveLayout } from './components/Drive/DriveLayout';
 import { UploadModal } from './components/Upload/UploadModal';
 import { UploadTray } from './components/Upload/UploadTray';
@@ -52,7 +53,9 @@ export default function App() {
       <AuthProvider>
         <VideoFeedProvider>
           <UploadProvider>
-            <StreamVaultApp />
+            <OfflineMediaProvider>
+              <StreamVaultApp />
+            </OfflineMediaProvider>
           </UploadProvider>
         </VideoFeedProvider>
       </AuthProvider>

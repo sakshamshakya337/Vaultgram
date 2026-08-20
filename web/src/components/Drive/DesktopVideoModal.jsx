@@ -13,9 +13,12 @@ import {
   Music,
   FileText,
   Image as ImageIcon,
+  Cloud,
+  Loader2,
 } from 'lucide-react';
 import { api, formatBytes, formatDuration, formatViews, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export const DesktopVideoModal = ({
@@ -29,10 +32,12 @@ export const DesktopVideoModal = ({
 }) => {
   const videoRef = useRef(null);
   const { toggleLike } = useVideoFeed();
+  const { isOfflineAvailable, getOfflinePlaybackUrl, toggleOfflineSave, isCaching } = useOfflineMedia();
 
   const [localIndex, setLocalIndex] = useState(currentIndex ?? initialIndex ?? 0);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [offlineBlobUrl, setOfflineBlobUrl] = useState(null);
 
   // Derive the active list of files
   const activeItems = items && items.length > 0 ? items : (video ? [video] : []);
@@ -129,6 +134,22 @@ export const DesktopVideoModal = ({
 
   const thumbUrl = currentFile.thumbnail || (currentFile.thumbnailFileId ? api.videos.getThumbnailUrl(fileId) : '');
 
+  useEffect(() => {
+    let active = true;
+    if (fileId && isOfflineAvailable(fileId)) {
+      getOfflinePlaybackUrl(fileId).then((url) => {
+        if (active && url) setOfflineBlobUrl(url);
+      });
+    } else {
+      setOfflineBlobUrl(null);
+    }
+    return () => {
+      active = false;
+    };
+  }, [fileId, isOfflineAvailable, getOfflinePlaybackUrl]);
+
+  const activeStreamSrc = offlineBlobUrl || streamUrl;
+
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
@@ -173,19 +194,20 @@ export const DesktopVideoModal = ({
           <button
             type="button"
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               handlePrev();
             }}
-            disabled={safeIndex === 0}
-            className={`fixed left-3 md:left-6 top-1/2 -translate-y-1/2 z-[60] w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer pointer-events-auto ${
-              safeIndex === 0
-                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 cursor-not-allowed'
-                : 'opacity-75 hover:opacity-100 bg-black/80 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+            disabled={safeIndex <= 0}
+            className={`fixed left-3 md:left-6 top-1/2 -translate-y-1/2 z-[60] pointer-events-auto w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xl backdrop-blur-xl cursor-pointer ${
+              safeIndex > 0
+                ? 'bg-black/70 hover:bg-black/90 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+                : 'bg-black/30 border-white/5 text-zinc-600 opacity-40 cursor-not-allowed pointer-events-none'
             }`}
-            aria-label="Previous item (Left Arrow)"
-            title="Previous item (Left Arrow)"
+            aria-label="Previous file"
+            title="Previous file (Left Arrow)"
           >
-            <ChevronLeft className="w-6 h-6" />
+            <ChevronLeft className="w-6 h-6 md:w-7 md:h-7" />
           </button>
         )}
 
@@ -194,23 +216,24 @@ export const DesktopVideoModal = ({
           <button
             type="button"
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               handleNext();
             }}
-            disabled={safeIndex === activeItems.length - 1}
-            className={`fixed right-3 md:right-6 top-1/2 -translate-y-1/2 z-[60] w-12 h-12 rounded-full border flex items-center justify-center backdrop-blur-md shadow-2xl transition-all cursor-pointer pointer-events-auto ${
-              safeIndex === activeItems.length - 1
-                ? 'opacity-20 border-white/5 bg-black/40 text-zinc-600 cursor-not-allowed'
-                : 'opacity-75 hover:opacity-100 bg-black/80 hover:bg-zinc-900 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+            disabled={safeIndex >= activeItems.length - 1}
+            className={`fixed right-3 md:right-6 top-1/2 -translate-y-1/2 z-[60] pointer-events-auto w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center border transition-all duration-200 shadow-2xl backdrop-blur-xl cursor-pointer ${
+              safeIndex < activeItems.length - 1
+                ? 'bg-black/70 hover:bg-black/90 border-white/20 hover:border-cyan-500/50 text-white hover:scale-110 active:scale-95'
+                : 'bg-black/30 border-white/5 text-zinc-600 opacity-40 cursor-not-allowed pointer-events-none'
             }`}
-            aria-label="Next item (Right Arrow)"
-            title="Next item (Right Arrow)"
+            aria-label="Next file"
+            title="Next file (Right Arrow)"
           >
-            <ChevronRight className="w-6 h-6" />
+            <ChevronRight className="w-6 h-6 md:w-7 md:h-7" />
           </button>
         )}
 
-        {/* Main Modal Window */}
+        {/* Modal Dialog Card */}
         <div
           className="relative w-full max-w-4xl max-h-[90vh] rounded-3xl bg-zinc-950 border border-white/10 shadow-2xl overflow-hidden flex flex-col z-10"
           onClick={(e) => e.stopPropagation()}
@@ -231,6 +254,11 @@ export const DesktopVideoModal = ({
                       {safeIndex + 1} / {activeItems.length}
                     </span>
                   )}
+                  {isOfflineAvailable(fileId) && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                      Offline
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-zinc-400 flex items-center gap-2">
                   <span className="text-cyan-400 font-semibold">#{currentFile.category || 'General'}</span>
@@ -241,6 +269,24 @@ export const DesktopVideoModal = ({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {/* Offline Toggle Button */}
+              <button
+                onClick={() => toggleOfflineSave(currentFile)}
+                disabled={isCaching(fileId)}
+                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                  isOfflineAvailable(fileId)
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-white/5 border-white/10 text-zinc-400 hover:text-cyan-400 hover:bg-white/10'
+                }`}
+                title={isCaching(fileId) ? 'Saving offline...' : isOfflineAvailable(fileId) ? 'Available Offline (Click to remove)' : 'Make available offline'}
+              >
+                {isCaching(fileId) ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                ) : (
+                  <Cloud className={`w-4 h-4 ${isOfflineAvailable(fileId) ? 'fill-emerald-400/20' : ''}`} />
+                )}
+              </button>
+
               {/* Like Button */}
               <button
                 onClick={() => toggleLike(fileId)}
@@ -290,7 +336,7 @@ export const DesktopVideoModal = ({
               <video
                 key={fileId}
                 ref={videoRef}
-                src={streamUrl}
+                src={activeStreamSrc}
                 poster={thumbUrl || ''}
                 controls
                 autoPlay

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Video, Heart, Download, Play, Clock, HardDrive, Trash2 } from 'lucide-react';
+import { Video, Heart, Download, Play, Clock, HardDrive, Trash2, Cloud, Loader2 } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();
+  const { isOfflineAvailable, toggleOfflineSave, isCaching } = useOfflineMedia();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -43,6 +45,8 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
           {videos.map((video, index) => {
             const videoId = video._id || video.id;
             const isStarred = !!video.isStarred;
+            const isOffline = isOfflineAvailable(videoId);
+            const caching = isCaching(videoId);
             const downloadUrl = api.stream.getUrl(videoId, true);
 
             return (
@@ -70,9 +74,16 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                       <Play className="w-3 h-3 text-cyan-400 fill-cyan-400" />
                     </div>
                   </div>
-                  <span className="font-semibold text-white group-hover:text-cyan-300 transition-colors truncate">
-                    {video.title || 'Untitled Video'}
-                  </span>
+                  <div className="min-w-0 flex items-center gap-1.5 truncate">
+                    <span className="font-semibold text-white group-hover:text-cyan-300 transition-colors truncate">
+                      {video.title || 'Untitled Video'}
+                    </span>
+                    {isOffline && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                        Offline
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Category */}
@@ -97,6 +108,21 @@ export const DriveFilesList = ({ videos, onSelectVideo, onDeleteVideo }) => {
                   className="col-span-3 sm:col-span-1 flex items-center justify-end gap-1"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <button
+                    onClick={() => toggleOfflineSave(video)}
+                    disabled={caching}
+                    className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
+                      isOffline ? 'text-emerald-400' : 'text-zinc-500 hover:text-cyan-400'
+                    }`}
+                    title={caching ? 'Saving offline...' : isOffline ? 'Available Offline (Click to remove)' : 'Make available offline'}
+                  >
+                    {caching ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                    ) : (
+                      <Cloud className={`w-3.5 h-3.5 ${isOffline ? 'fill-emerald-400/20' : ''}`} />
+                    )}
+                  </button>
+
                   <button
                     onClick={() => toggleLike(videoId)}
                     className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${

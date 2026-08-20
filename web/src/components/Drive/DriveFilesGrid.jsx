@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Play, Heart, Download, Trash2, Video } from 'lucide-react';
+import { Play, Heart, Download, Trash2, Video, Cloud, Loader2 } from 'lucide-react';
 import { api, formatBytes, formatDuration } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();
+  const { isOfflineAvailable, toggleOfflineSave, isCaching } = useOfflineMedia();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -34,6 +36,8 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
         {videos.map((video, index) => {
           const videoId = video._id || video.id;
           const isStarred = !!video.isStarred;
+          const isOffline = isOfflineAvailable(videoId);
+          const caching = isCaching(videoId);
           const downloadUrl = api.stream.getUrl(videoId, true);
 
           return (
@@ -57,6 +61,13 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                 ) : (
                   <div className="w-full h-full bg-gradient-to-tr from-zinc-900 to-zinc-950 flex items-center justify-center">
                     <Video className="w-8 h-8 text-zinc-700 group-hover:text-cyan-500 transition-colors" />
+                  </div>
+                )}
+
+                {/* Offline Available Badge */}
+                {isOffline && (
+                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/90 text-black text-[10px] font-bold shadow-md backdrop-blur-md">
+                    <span>Offline</span>
                   </div>
                 )}
 
@@ -97,6 +108,22 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                   </div>
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                    {/* Offline Toggle Button */}
+                    <button
+                      onClick={() => toggleOfflineSave(video)}
+                      disabled={caching}
+                      className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
+                        isOffline ? 'text-emerald-400' : 'text-zinc-400 hover:text-cyan-400'
+                      }`}
+                      title={caching ? 'Saving offline...' : isOffline ? 'Remove from offline' : 'Make available offline'}
+                    >
+                      {caching ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                      ) : (
+                        <Cloud className={`w-3.5 h-3.5 ${isOffline ? 'fill-emerald-400/20' : ''}`} />
+                      )}
+                    </button>
+
                     <button
                       onClick={() => toggleLike(videoId)}
                       className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
