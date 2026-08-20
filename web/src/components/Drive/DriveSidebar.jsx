@@ -17,7 +17,8 @@ import {
   Download,
   Calendar,
   CalendarDays,
-  CalendarRange
+  CalendarRange,
+  Camera
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
@@ -28,6 +29,7 @@ export const DriveSidebar = ({
   currentFolder,
   onSelectNav,
   onOpenNewFolder,
+  onOpenCamera,
 }) => {
   const {
     categories,
@@ -97,6 +99,17 @@ export const DriveSidebar = ({
               >
                 <Upload className="w-4 h-4 text-cyan-400" />
                 <span>Upload Files</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowNewMenu(false);
+                  if (onOpenCamera) onOpenCamera();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <Camera className="w-4 h-4 text-emerald-400" />
+                <span>Capture / Record</span>
               </button>
 
               <button

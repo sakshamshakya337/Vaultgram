@@ -14,6 +14,7 @@ import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
 import { TimelineView } from './TimelineView';
 import { TrashView } from './TrashView';
+import { CameraCaptureModal } from '../Upload/CameraCaptureModal';
 import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
@@ -48,6 +49,7 @@ export const DriveLayout = () => {
 
   // Modals
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState(null);
 
   // Load drive items (folders and files)
@@ -232,6 +234,7 @@ export const DriveLayout = () => {
             }
           }}
           onOpenNewFolder={() => setIsNewFolderOpen(true)}
+          onOpenCamera={() => setIsCameraOpen(true)}
         />
       </div>
 
@@ -489,6 +492,15 @@ export const DriveLayout = () => {
         item={renameTarget}
         onClose={() => setRenameTarget(null)}
         onRenamed={loadDriveItems}
+      />
+
+      {/* In-App Camera / Video Recording Modal */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        folderId={currentFolder?._id || null}
+        folderTitle={currentFolder?.title || ''}
+        category={selectedCategory}
       />
     </div>
   );
