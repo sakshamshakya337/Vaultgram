@@ -17,6 +17,7 @@ import { SetPinModal } from './components/PIN/SetPinModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
 import { SharePlayerPage } from './components/Share/SharePlayerPage';
 import { useAuth } from './contexts/useAuth';
+import { useUploadQueue } from './contexts/useUploadQueue';
 import { AuthScreen } from './components/Auth/AuthScreen';
 import { Sparkles } from 'lucide-react';
 
