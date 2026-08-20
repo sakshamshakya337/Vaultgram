@@ -11,6 +11,7 @@ import { DriveFilesGrid } from './DriveFilesGrid';
 import { DriveFilesList } from './DriveFilesList';
 import { DesktopVideoModal } from './DesktopVideoModal';
 import { NewFolderModal } from './NewFolderModal';
+import { RenameModal } from './RenameModal';
 import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
