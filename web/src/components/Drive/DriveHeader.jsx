@@ -178,7 +178,7 @@ export const DriveHeader = ({
             {/* Mobile Search Toggle Icon */}
             <button
               onClick={() => setIsMobileSearchOpen(true)}
-              className="md:hidden p-2 rounded-xl bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white cursor-pointer"
+              className="md:hidden w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
               aria-label="Search"
             >
               <Search className="w-4 h-4" />
@@ -191,17 +191,17 @@ export const DriveHeader = ({
                 folderTitle: currentFolder?.title || '',
                 category: selectedCategory,
               })}
-              className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+              className="md:hidden flex items-center gap-1.5 h-9 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Upload</span>
             </button>
 
             {/* Desktop Grid / List View Toggle */}
-            <div className="hidden md:flex items-center p-1 rounded-xl bg-zinc-900 border border-white/5">
+            <div className="hidden md:flex items-center h-9 p-0.5 rounded-xl bg-zinc-900 border border-white/5">
               <button
                 onClick={() => onViewModeChange('grid')}
-                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                   viewMode === 'grid'
                     ? 'bg-cyan-500/20 text-cyan-300 shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-300'
@@ -212,7 +212,7 @@ export const DriveHeader = ({
               </button>
               <button
                 onClick={() => onViewModeChange('list')}
-                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                   viewMode === 'list'
                     ? 'bg-cyan-500/20 text-cyan-300 shadow-sm'
                     : 'text-zinc-500 hover:text-zinc-300'
@@ -226,7 +226,7 @@ export const DriveHeader = ({
             {/* Quick Theme Toggle (Sun / Moon) */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-xl bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+              className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center"
               title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
               aria-label="Toggle Theme"
             >
@@ -241,9 +241,9 @@ export const DriveHeader = ({
             {isAuthenticated ? (
               <button
                 onClick={() => setIsSettingsOpen(true)}
-                className="hidden md:flex items-center gap-2 py-1.5 px-2.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-white/5 transition-colors cursor-pointer"
+                className="hidden md:flex items-center gap-2 h-9 px-3 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-white/5 transition-colors cursor-pointer"
               >
-                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white">
+                <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
                   {user?.username?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <span className="text-xs font-semibold text-zinc-300 max-w-[100px] truncate">
@@ -253,7 +253,7 @@ export const DriveHeader = ({
             ) : (
               <button
                 onClick={() => setIsAuthOpen(true)}
-                className="hidden md:flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-bold text-white transition-colors cursor-pointer"
+                className="hidden md:flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-bold text-white transition-colors cursor-pointer"
               >
                 <User className="w-3.5 h-3.5" />
                 <span>Sign In</span>

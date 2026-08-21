@@ -168,18 +168,18 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                 </div>
 
                 {/* Bottom Details & Quick Actions */}
-                <div className="flex items-center justify-between text-[11px] text-zinc-500 font-mono pt-2 border-t border-white/5">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between text-[11px] text-zinc-500 font-mono pt-2 border-t border-white/5 h-8">
+                  <div className="flex items-center gap-1.5 shrink-0 text-zinc-400">
                     {video.fileSizeBytes ? (
                       <span>{formatBytes(video.fileSizeBytes)}</span>
                     ) : null}
                   </div>
 
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                     {/* Add/Edit Note Button */}
                     <button
                       onClick={() => setNoteTarget(video)}
-                      className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
+                      className={`w-6 h-6 rounded-md flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer ${
                         video.note ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-300'
                       }`}
                       title={video.note ? 'Edit Note' : 'Add Note'}
@@ -191,7 +191,7 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                     <button
                       onClick={() => toggleOfflineSave(video)}
                       disabled={caching}
-                      className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
+                      className={`w-6 h-6 rounded-md flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer ${
                         isOffline ? 'text-emerald-400' : 'text-zinc-400 hover:text-cyan-400'
                       }`}
                       title={caching ? 'Saving offline...' : isOffline ? 'Remove from offline' : 'Make available offline'}
@@ -203,9 +203,10 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                       )}
                     </button>
 
+                    {/* Like / Star Button */}
                     <button
                       onClick={() => toggleLike(videoId)}
-                      className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer ${
+                      className={`w-6 h-6 rounded-md flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer ${
                         isStarred ? 'text-rose-500' : 'text-zinc-400 hover:text-white'
                       }`}
                       title={isStarred ? 'Liked' : 'Like'}
@@ -213,10 +214,11 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                       <Heart className={`w-3.5 h-3.5 ${isStarred ? 'fill-rose-500' : ''}`} />
                     </button>
 
+                    {/* Download Button */}
                     <a
                       href={downloadUrl}
-                      download={video.title || 'video.mp4'}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                      download={video.title || 'download'}
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                       title="Download"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -225,15 +227,16 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                     {/* Share Button */}
                     <button
                       onClick={() => setShareTarget(video)}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-cyan-400 hover:bg-white/10 transition-colors cursor-pointer"
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:text-cyan-400 hover:bg-white/10 transition-colors cursor-pointer"
                       title="Share Time-Limited Link"
                     >
                       <Share2 className="w-3.5 h-3.5" />
                     </button>
 
+                    {/* Delete Button */}
                     <button
                       onClick={() => setDeleteTarget(video)}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                       title="Delete File"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

@@ -290,11 +290,11 @@ export const DesktopVideoModal = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
               {/* Note / Reminder Button */}
               <button
                 onClick={() => setIsNoteModalOpen(true)}
-                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                className={`w-9 h-9 md:w-10 md:h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
                   currentFile.note
                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                     : 'bg-white/5 border-white/10 text-zinc-400 hover:text-amber-300 hover:bg-white/10'
@@ -308,7 +308,7 @@ export const DesktopVideoModal = ({
               <button
                 onClick={() => toggleOfflineSave(currentFile)}
                 disabled={isCaching(fileId)}
-                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                className={`w-9 h-9 md:w-10 md:h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
                   isOfflineAvailable(fileId)
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                     : 'bg-white/5 border-white/10 text-zinc-400 hover:text-cyan-400 hover:bg-white/10'
@@ -325,7 +325,7 @@ export const DesktopVideoModal = ({
               {/* Like Button */}
               <button
                 onClick={() => toggleLike(fileId)}
-                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                className={`w-9 h-9 md:w-10 md:h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
                   isStarred
                     ? 'bg-rose-500/10 border-rose-500/30 text-rose-500'
                     : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white hover:bg-white/10'
@@ -339,7 +339,7 @@ export const DesktopVideoModal = ({
               <a
                 href={downloadUrl}
                 download={currentFile.title || 'download'}
-                className="p-2 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
                 title="Download file"
               >
                 <Download className="w-4 h-4" />
@@ -348,7 +348,7 @@ export const DesktopVideoModal = ({
               {/* Share Button */}
               <button
                 onClick={() => setIsShareModalOpen(true)}
-                className="p-2 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-cyan-400 hover:bg-white/10 transition-colors cursor-pointer"
+                className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-cyan-400 hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
                 title="Share time-limited link"
               >
                 <Share2 className="w-4 h-4" />
@@ -357,7 +357,7 @@ export const DesktopVideoModal = ({
               {/* Delete Button */}
               <button
                 onClick={() => setIsDeleteModalOpen(true)}
-                className="p-2 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors cursor-pointer"
                 title="Delete file"
               >
                 <Trash2 className="w-4 h-4" />
@@ -366,7 +366,7 @@ export const DesktopVideoModal = ({
               {/* Close Button */}
               <button
                 onClick={onClose}
-                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer ml-1"
+                className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer ml-1"
                 aria-label="Close modal"
               >
                 <X className="w-4 h-4" />
