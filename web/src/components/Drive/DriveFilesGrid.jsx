@@ -1,44 +1,11 @@
 import React, { useState } from 'react';
 import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote, Share2, FileText, Image as ImageIcon, Music, Eye } from 'lucide-react';
-import { api, formatBytes, formatDuration } from '../../services/api';
+import { api, formatBytes, formatDuration, getFileKind } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { NoteEditModal } from './NoteEditModal';
 import { ShareModal } from './ShareModal';
-
-const getFileKind = (file) => {
-  const mime = (file?.mimeType || '').toLowerCase();
-  const ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
-  const fileCategory = (file?.fileCategory || '').toLowerCase();
-  const fileType = (file?.fileType || '').toLowerCase();
-
-  const isVideo =
-    fileType === 'video' ||
-    fileCategory === 'video' ||
-    mime.startsWith('video/') ||
-    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv'].includes(ext);
-
-  const isImage =
-    fileType === 'image' ||
-    fileCategory === 'image' ||
-    mime.startsWith('image/') ||
-    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
-
-  const isAudio =
-    fileType === 'audio' ||
-    fileCategory === 'audio' ||
-    mime.startsWith('audio/') ||
-    ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext);
-
-  return {
-    isVideo,
-    isImage,
-    isAudio,
-    isDocument: !isVideo && !isImage && !isAudio,
-    extension: ext ? ext.toUpperCase() : (isVideo ? 'VIDEO' : isImage ? 'IMAGE' : isAudio ? 'AUDIO' : 'DOC'),
-  };
-};
 
 export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const { toggleLike } = useVideoFeed();

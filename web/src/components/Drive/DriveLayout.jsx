@@ -3,13 +3,14 @@ import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, Folde
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
-import { api } from '../../services/api';
+import { api, getFileKind } from '../../services/api';
 import { DriveSidebar } from './DriveSidebar';
 import { DriveHeader } from './DriveHeader';
 import { DriveFolderGrid } from './DriveFolderGrid';
 import { DriveFilesGrid } from './DriveFilesGrid';
 import { DriveFilesList } from './DriveFilesList';
 import { DesktopVideoModal } from './DesktopVideoModal';
+import { PhotoViewer } from './PhotoViewer';
 import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
 import { TimelineView } from './TimelineView';
@@ -43,6 +44,7 @@ export const DriveLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [modalPreviewState, setModalPreviewState] = useState(null); // { items: [], index: 0 }
+  const [photoViewerState, setPhotoViewerState] = useState(null); // { items: [], index: 0 }
 
   // Drive state
   const [driveItems, setDriveItems] = useState([]);
@@ -208,6 +210,34 @@ export const DriveLayout = () => {
       alert(err.message || 'Failed to delete file');
     }
   };
+
+  const handleSelectFile = useCallback(
+    (file, idx) => {
+      if (!file) return;
+      const { isImage } = getFileKind(file);
+
+      if (isImage) {
+        // Filter current context files to ONLY photos/images so swipe transitions between photos
+        const imageFiles = files.filter((f) => getFileKind(f).isImage);
+        const photoIdx = imageFiles.findIndex(
+          (f) => (f._id || f.id) === (file._id || file.id)
+        );
+        setPhotoViewerState({
+          items: imageFiles,
+          index: photoIdx >= 0 ? photoIdx : 0,
+        });
+      } else {
+        setModalPreviewState({
+          items: files,
+          index:
+            typeof idx === 'number'
+              ? idx
+              : files.findIndex((f) => (f._id || f.id) === (file._id || file.id)),
+        });
+      }
+    },
+    [files]
+  );
 
   const handleResetToRoot = () => {
     setCurrentNav('all');
@@ -421,12 +451,7 @@ export const DriveLayout = () => {
                 <TimelineView
                   videos={files}
                   viewMode={viewMode}
-                  onSelectVideo={(v, idx) =>
-                    setModalPreviewState({
-                      items: files,
-                      index: typeof idx === 'number' ? idx : files.findIndex((f) => (f._id || f.id) === (v._id || v.id)),
-                    })
-                  }
+                  onSelectVideo={handleSelectFile}
                   onDeleteVideo={handleDeleteFile}
                 />
               ) : (
@@ -434,23 +459,13 @@ export const DriveLayout = () => {
                 viewMode === 'grid' ? (
                   <DriveFilesGrid
                     videos={files}
-                    onSelectVideo={(v, idx) =>
-                      setModalPreviewState({
-                        items: files,
-                        index: typeof idx === 'number' ? idx : files.findIndex((f) => (f._id || f.id) === (v._id || v.id)),
-                      })
-                    }
+                    onSelectVideo={handleSelectFile}
                     onDeleteVideo={handleDeleteFile}
                   />
                 ) : (
                   <DriveFilesList
                     videos={files}
-                    onSelectVideo={(v, idx) =>
-                      setModalPreviewState({
-                        items: files,
-                        index: typeof idx === 'number' ? idx : files.findIndex((f) => (f._id || f.id) === (v._id || v.id)),
-                      })
-                    }
+                    onSelectVideo={handleSelectFile}
                     onDeleteVideo={handleDeleteFile}
                   />
                 )
@@ -482,6 +497,20 @@ export const DriveLayout = () => {
         onClose={() => setModalPreviewState(null)}
         onDelete={handleDeleteFile}
       />
+
+      {/* Full-Screen Instagram-Style Photo Viewer */}
+      {photoViewerState && (
+        <PhotoViewer
+          photo={photoViewerState.items[photoViewerState.index]}
+          items={photoViewerState.items}
+          currentIndex={photoViewerState.index}
+          onIndexChange={(newIdx) =>
+            setPhotoViewerState((prev) => (prev ? { ...prev, index: newIdx } : null))
+          }
+          onClose={() => setPhotoViewerState(null)}
+          onDelete={handleDeleteFile}
+        />
+      )}
 
       {/* New Folder Modal */}
       <NewFolderModal

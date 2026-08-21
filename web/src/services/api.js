@@ -559,4 +559,37 @@ export function formatRelativeTime(dateString) {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+export function getFileKind(file) {
+  const mime = (file?.mimeType || '').toLowerCase();
+  const ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
+  const fileCategory = (file?.fileCategory || '').toLowerCase();
+  const fileType = (file?.fileType || '').toLowerCase();
+
+  const isVideo =
+    fileType === 'video' ||
+    fileCategory === 'video' ||
+    mime.startsWith('video/') ||
+    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv', 'ts'].includes(ext);
+
+  const isImage =
+    fileType === 'image' ||
+    fileCategory === 'image' ||
+    mime.startsWith('image/') ||
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff'].includes(ext);
+
+  const isAudio =
+    fileType === 'audio' ||
+    fileCategory === 'audio' ||
+    mime.startsWith('audio/') ||
+    ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'wma'].includes(ext);
+
+  return {
+    isVideo,
+    isImage,
+    isAudio,
+    isDocument: !isVideo && !isImage && !isAudio,
+    extension: ext ? ext.toUpperCase() : (isVideo ? 'VIDEO' : isImage ? 'IMAGE' : isAudio ? 'AUDIO' : 'DOC'),
+  };
+}
+
 export default api;
