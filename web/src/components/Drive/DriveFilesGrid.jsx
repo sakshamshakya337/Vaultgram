@@ -53,23 +53,43 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
             >
               {/* Thumbnail / Media Preview Area */}
               <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
-                {(isImage || isVideo) && (video.thumbnail || video.thumbnailFileId) ? (
-                  <img
-                    src={video.thumbnail || api.videos.getThumbnailUrl(videoId)}
-                    alt={video.title || 'File thumbnail'}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
+                {isImage ? (
+                  <>
+                    <img
+                      src={video.thumbnail || video.streamUrl || api.stream.getUrl(videoId)}
+                      alt={video.title || 'Photo'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.parentElement?.querySelector('.photo-fallback');
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                    <div className="photo-fallback hidden w-full h-full bg-gradient-to-tr from-emerald-950/20 to-zinc-950 items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-zinc-600 group-hover:text-emerald-400 transition-colors" />
+                    </div>
+                  </>
+                ) : isVideo && (video.thumbnail || video.thumbnailFileId) ? (
+                  <>
+                    <img
+                      src={video.thumbnail || api.videos.getThumbnailUrl(videoId)}
+                      alt={video.title || 'Video thumbnail'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.parentElement?.querySelector('.video-fallback');
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                    <div className="video-fallback hidden w-full h-full bg-gradient-to-tr from-cyan-950/20 to-zinc-950 items-center justify-center">
+                      <Video className="w-8 h-8 text-zinc-600 group-hover:text-cyan-400 transition-colors" />
+                    </div>
+                  </>
                 ) : isVideo ? (
                   <div className="w-full h-full bg-gradient-to-tr from-cyan-950/20 to-zinc-950 flex items-center justify-center">
                     <Video className="w-8 h-8 text-zinc-600 group-hover:text-cyan-400 transition-colors" />
-                  </div>
-                ) : isImage ? (
-                  <div className="w-full h-full bg-gradient-to-tr from-emerald-950/20 to-zinc-950 flex items-center justify-center">
-                    <ImageIcon className="w-8 h-8 text-zinc-600 group-hover:text-emerald-400 transition-colors" />
                   </div>
                 ) : isAudio ? (
                   <div className="w-full h-full bg-gradient-to-tr from-purple-950/20 to-zinc-950 flex items-center justify-center">
