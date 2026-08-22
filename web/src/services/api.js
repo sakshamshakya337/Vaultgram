@@ -429,8 +429,9 @@ export const api = {
   },
 
   drive: {
-    list: async (params = {}) => {
+    list: async (params = {}, signal = null) => {
       const queryParams = new URLSearchParams();
+      if (params.cursor) queryParams.set('cursor', params.cursor);
       if (params.page) queryParams.set('page', params.page);
       if (params.folderId) queryParams.set('folderId', params.folderId);
       if (params.category && params.category !== 'All') queryParams.set('category', params.category);
@@ -439,10 +440,10 @@ export const api = {
       if (params.filter) queryParams.set('filter', params.filter);
       if (params.sort) queryParams.set('sort', params.sort);
       if (params.limit) queryParams.set('limit', params.limit || '24');
-      if (params.search) queryParams.set('q', params.search);
+      if (params.search || params.q) queryParams.set('q', params.search || params.q);
       if (params.unlockedCategories) queryParams.set('unlockedCategories', params.unlockedCategories);
 
-      return request(`/videos?${queryParams.toString()}`);
+      return request(`/videos?${queryParams.toString()}`, signal ? { signal } : {});
     },
 
     getLibrary: () => request('/videos/user/library'),

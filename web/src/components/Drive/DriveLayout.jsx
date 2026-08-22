@@ -21,112 +21,65 @@ import { ReelsContainer } from '../Reels/ReelsContainer';
 import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
 import { DriveFolderSkeleton, DriveGridSkeleton, DriveListSkeleton } from '../Skeletons/DriveSkeleton';
+import { usePaginatedList } from '../../hooks/usePaginatedList';
 
 export const DriveLayout = () => {
   const {
-    videos,
-    selectedCategory,
-    setSelectedCategory,
-    requestCategory,
+    currentCategory: selectedCategory,
+    setCurrentCategory: setSelectedCategory,
     categories,
-    lockedCategories,
-    sessionUnlockedCategories,
+    categoryLockTarget,
     setCategoryLockTarget,
-    setIsUploadOpen,
+    sessionUnlockedCategories,
+    requestCategory,
+    lockedCategories,
   } = useVideoFeed();
 
-  const { user, isAuthenticated, hasPin } = useAuth();
-  const { registerOnUploadSuccess, openFilePicker } = useUploadQueue();
+  const { user, hasPin } = useAuth();
+  const { openFilePicker, registerOnUploadSuccess } = useUploadQueue();
 
   // Navigation & Data
-  const [currentNav, setCurrentNav] = useState('all'); // 'all', 'starred', 'recent', 'trash'
+  const [currentNav, setCurrentNav] = useState('all'); // 'all', 'starred', 'recent', 'this-week', 'this-month', 'trash'
   const [currentFolder, setCurrentFolder] = useState(null); // null = root
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [modalPreviewState, setModalPreviewState] = useState(null); // { items: [], index: 0 }
   const [photoViewerState, setPhotoViewerState] = useState(null); // { items: [], index: 0 }
 
-  // Drive state & auto-pagination
-  const [driveItems, setDriveItems] = useState([]);
-  const [loadingDrive, setLoadingDrive] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const PAGE_SIZE = 24;
-  const sentinelRef = useRef(null);
-
   // Modals
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isVoiceMemoOpen, setIsVoiceMemoOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState(null);
+  const sentinelRef = useRef(null);
 
-  // Load drive items with pagination support
-  const loadDriveItems = useCallback(async (pageToLoad = 1, isAppend = false) => {
-    if (isAppend) {
-      setLoadingMore(true);
-    } else {
-      setLoadingDrive(true);
-    }
+  // Memoized query parameters for unified cursor pagination
+  const queryParams = useMemo(() => {
+    const isScopedView = selectedCategory !== 'All' || !!currentFolder;
+    const unlockedCats = isScopedView
+      ? Array.from(sessionUnlockedCategories || []).join(',')
+      : undefined;
 
-    try {
-      const isScopedView = selectedCategory !== 'All' || !!currentFolder;
-      const unlockedCats = isScopedView
-        ? Array.from(sessionUnlockedCategories || []).join(',')
-        : undefined;
+    return {
+      folderId: currentFolder?._id || null,
+      category: selectedCategory !== 'All' ? selectedCategory : undefined,
+      filter: currentNav,
+      search: searchQuery.trim() || undefined,
+      unlockedCategories: unlockedCats,
+    };
+  }, [currentFolder, selectedCategory, currentNav, searchQuery, sessionUnlockedCategories]);
 
-      const params = {
-        page: pageToLoad,
-        limit: PAGE_SIZE,
-        unlockedCategories: unlockedCats,
-      };
-
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
-      } else {
-        params.folderId = currentFolder?._id || null;
-        if (selectedCategory !== 'All') {
-          params.category = selectedCategory;
-        }
-        params.filter = currentNav;
-      }
-
-      const res = await api.drive.list(params);
-      const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
-      const totalPagesRes = res?.totalPages || Math.ceil((res?.total || items.length) / PAGE_SIZE) || 1;
-
-      setPage(pageToLoad);
-      setTotalPages(totalPagesRes);
-      setTotalCount(res?.total ?? items.length);
-
-      if (isAppend) {
-        setDriveItems((prev) => {
-          const existingIds = new Set(prev.map((it) => it._id || it.id));
-          const newUnique = items.filter((it) => !existingIds.has(it._id || it.id));
-          return [...prev, ...newUnique];
-        });
-      } else {
-        setDriveItems(items);
-      }
-    } catch (err) {
-      console.warn('Drive items fetch error:', err.message);
-      if (!isAppend) setDriveItems([]);
-    } finally {
-      setLoadingDrive(false);
-      setLoadingMore(false);
-    }
-  }, [currentFolder, currentNav, searchQuery, selectedCategory, sessionUnlockedCategories]);
-
-  useEffect(() => {
-    loadDriveItems(1, false);
-  }, [loadDriveItems]);
-
-  const handleLoadMore = useCallback(() => {
-    if (!loadingDrive && !loadingMore && page < totalPages) {
-      loadDriveItems(page + 1, true);
-    }
-  }, [loadingDrive, loadingMore, page, totalPages, loadDriveItems]);
+  // Shared cursor-based pagination hook with AbortController and request-id protection
+  const {
+    items: driveItems,
+    loading: loadingDrive,
+    loadingMore,
+    hasMore,
+    total: totalCount,
+    loadMore,
+    refresh: loadDriveItems,
+    mutateItems: setDriveItems,
+  } = usePaginatedList(api.drive.list, queryParams, { limit: 24 });
 
   // Automatic Infinite Scroll with IntersectionObserver
   useEffect(() => {
@@ -135,16 +88,16 @@ export const DriveLayout = () => {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && !loadingDrive && !loadingMore && page < totalPages) {
-          handleLoadMore();
+        if (entries[0].isIntersecting && !loadingDrive && !loadingMore && hasMore) {
+          loadMore();
         }
       },
-      { threshold: 0.1, rootMargin: '300px' }
+      { threshold: 0.1, rootMargin: '350px' }
     );
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [handleLoadMore, loadingDrive, loadingMore, page, totalPages]);
+  }, [loadMore, loadingDrive, loadingMore, hasMore]);
 
   // Real-time automatic refresh when any queued upload completes
   useEffect(() => {
@@ -533,7 +486,7 @@ export const DriveLayout = () => {
                     <span>Loading more files...</span>
                   </div>
                 )}
-                {!loadingMore && page >= totalPages && files.length > PAGE_SIZE && (
+                {!loadingMore && !hasMore && files.length > 24 && (
                   <span className="text-[11px] font-mono text-zinc-600">
                     All {totalCount || files.length} files loaded
                   </span>

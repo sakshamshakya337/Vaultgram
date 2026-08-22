@@ -63,21 +63,25 @@ const ensureFileType = (item) => {
 
 /**
  * GET /api/v1/media or /api/v1/videos
- * Drive listing: supports folders, categories, filters, search.
+ * Drive listing: supports cursor-based pagination, folders, categories, smart date filters, search.
  */
 exports.listMedia = async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
-    const skip = (page - 1) * limit;
-
-    const filterType = req.query.filter || 'my-drive'; // my-drive, starred, recent, trash
-    const folderId = req.query.folderId; // null, 'root', or folder ObjectId
-    const fileCategory = req.query.fileCategory; // image, video, audio, pdf, document, code, archive
-    const fileType = req.query.fileType; // video, document, image, audio, other
-    const category = req.query.category;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 24));
+    const { cursor, page: rawPage, filter: rawFilter, folderId, fileCategory, fileType, category, q, search } = req.query;
+    const filterType = rawFilter || 'my-drive'; // my-drive, starred, recent, this-week, this-month, trash
 
     const query = {};
+
+    // Search query support
+    const searchTerm = (q || search || '').trim();
+    if (searchTerm) {
+      query.$or = [
+        { title: { $regex: searchTerm, $options: 'i' } },
+        { description: { $regex: searchTerm, $options: 'i' } },
+        { category: { $regex: searchTerm, $options: 'i' } },
+      ];
+    }
 
     if (filterType === 'trash') {
       query.isTrashed = true;
@@ -88,6 +92,16 @@ exports.listMedia = async (req, res) => {
         query.isStarred = true;
       } else if (filterType === 'recent') {
         // recent shows all files without folder constraints
+      } else if (filterType === 'this-week') {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(startOfWeek.getDate() - today.getDay());
+        query.createdAt = { $gte: startOfWeek };
+      } else if (filterType === 'this-month') {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        query.createdAt = { $gte: startOfMonth };
       } else if (category && category !== 'All') {
         // category view shows all files in that category across folders unless a specific folderId is given
         if (folderId && folderId !== 'null' && folderId !== 'root') {
@@ -147,6 +161,8 @@ exports.listMedia = async (req, res) => {
           locked: true,
           message: `Category "${cleanCat}" is locked. Unlock with biometric or PIN passcode.`,
           items: [],
+          nextCursor: null,
+          hasMore: false,
           total: 0,
         });
       }
@@ -167,16 +183,26 @@ exports.listMedia = async (req, res) => {
       }
     }
 
-    let sort = { isFolder: -1, createdAt: -1 };
-    if (req.query.sort === 'name_asc') sort = { isFolder: -1, title: 1 };
-    if (req.query.sort === 'name_desc') sort = { isFolder: -1, title: -1 };
-    if (req.query.sort === 'oldest') sort = { isFolder: -1, createdAt: 1 };
-    if (req.query.sort === 'size_desc') sort = { isFolder: -1, fileSizeBytes: -1 };
+    // Cursor-based filter
+    if (cursor) {
+      query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+    }
 
-    const [items, total] = await Promise.all([
-      Media.find(query).sort(sort).skip(skip).limit(limit).lean(),
+    let sort = { isFolder: -1, createdAt: -1, _id: -1 };
+    if (req.query.sort === 'name_asc') sort = { isFolder: -1, title: 1, _id: -1 };
+    if (req.query.sort === 'name_desc') sort = { isFolder: -1, title: -1, _id: -1 };
+    if (req.query.sort === 'oldest') sort = { isFolder: -1, createdAt: 1, _id: 1 };
+    if (req.query.sort === 'size_desc') sort = { isFolder: -1, fileSizeBytes: -1, _id: -1 };
+
+    // Fetch limit + 1 items to determine hasMore
+    const [rawItems, total] = await Promise.all([
+      Media.find(query).sort(sort).limit(limit + 1).lean(),
       Media.countDocuments(query),
     ]);
+
+    const hasMore = rawItems.length > limit;
+    const items = hasMore ? rawItems.slice(0, limit) : rawItems;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]._id.toString() : null;
 
     // Build breadcrumbs if inside a folder
     let breadcrumbs = [{ id: 'root', title: 'My Drive' }];
@@ -199,9 +225,9 @@ exports.listMedia = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.json({
       items: formattedItems,
-      page,
+      nextCursor,
+      hasMore,
       limit,
-      totalPages: Math.ceil(total / limit),
       total,
       breadcrumbs,
     });
@@ -679,9 +705,10 @@ exports.listFolders = async (req, res) => {
  */
 exports.searchMedia = async (req, res) => {
   try {
-    const { q, fileCategory, fileType } = req.query;
+    const { q, fileCategory, fileType, cursor } = req.query;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 24));
     if (!q || !q.trim()) {
-      return res.json({ items: [] });
+      return res.json({ items: [], nextCursor: null, hasMore: false, total: 0 });
     }
 
     const filter = {
@@ -699,9 +726,26 @@ exports.searchMedia = async (req, res) => {
     if (fileType && fileType !== 'all') {
       filter.fileType = fileType;
     }
+    if (cursor) {
+      filter._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+    }
 
-    const items = await Media.find(filter).sort({ isFolder: -1, createdAt: -1 }).limit(100).lean();
-    res.json({ items: items.map(ensureFileType) });
+    const [rawItems, total] = await Promise.all([
+      Media.find(filter).sort({ isFolder: -1, createdAt: -1, _id: -1 }).limit(limit + 1).lean(),
+      Media.countDocuments(filter),
+    ]);
+
+    const hasMore = rawItems.length > limit;
+    const items = hasMore ? rawItems.slice(0, limit) : rawItems;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]._id.toString() : null;
+
+    res.json({
+      items: items.map(ensureFileType),
+      nextCursor,
+      hasMore,
+      limit,
+      total,
+    });
   } catch (err) {
     console.error('[searchMedia error]:', err.message);
     res.status(500).json({ message: 'Search failed' });
