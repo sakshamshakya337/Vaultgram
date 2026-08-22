@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Video, Sparkles, Plus, AlertCircle, Check, Zap, Cpu } from 'lucide-react';
+import { X, Upload, Video, Sparkles, Plus, AlertCircle, Check, Zap, Cpu, VolumeX } from 'lucide-react';
 import { api, formatBytes } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { UploadProgressBar } from './UploadProgressBar';
+import { detectVideoAudio } from '../../utils/audioDetector';
 
 export const UploadModal = () => {
   const { isUploadOpen, setIsUploadOpen, categories, setVideos, fetchCategories } = useVideoFeed();
   
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [hasNoAudio, setHasNoAudio] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Trending');
@@ -50,9 +52,15 @@ export const UploadModal = () => {
 
     setFile(selected);
     setError('');
+    setHasNoAudio(false);
     setUploadResult(null);
     const baseName = selected.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
     setTitle(baseName);
+
+    // Detect if the video has audio
+    detectVideoAudio(selected).then(({ hasAudio }) => {
+      setHasNoAudio(!hasAudio);
+    });
 
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     const url = URL.createObjectURL(selected);
@@ -218,6 +226,19 @@ export const UploadModal = () => {
                     <span>
                       <strong>Smart Compression Active:</strong> Exceeds 20MB ({formatBytes(file.size)}). Will be automatically optimized to ≤ 20MB.
                     </span>
+                  </div>
+                )}
+
+                {/* No Audio Warning Badge */}
+                {hasNoAudio && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs animate-fade-in">
+                    <VolumeX className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold text-amber-300">No Audio Track Detected</p>
+                      <p className="text-[11px] text-zinc-300 leading-relaxed">
+                        This video has no sound. You can continue to upload it as a silent video or change the file.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>

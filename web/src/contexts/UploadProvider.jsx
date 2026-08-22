@@ -5,6 +5,8 @@ import {
   MAX_VIDEO_UPLOAD_SIZE_MB,
   MAX_NON_VIDEO_UPLOAD_SIZE_MB,
 } from './UploadContext.js';
+import { detectVideoAudio } from '../utils/audioDetector';
+import { NoAudioWarningModal } from '../components/Upload/NoAudioWarningModal';
 
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 
@@ -63,10 +65,19 @@ export const UploadProvider = ({ children }) => {
     return 'document';
   };
 
+  // No-audio warning prompt state
+  const [noAudioPrompt, setNoAudioPrompt] = useState({
+    isOpen: false,
+    silentFiles: [],
+    acceptedFiles: [],
+    currentIndex: 0,
+    options: {},
+  });
+
   /**
-   * Add files to upload queue with client-side validation
+   * Directly enqueue validated files into the upload queue
    */
-  const addToQueue = useCallback((files, { folderId = null, folderTitle = '', category = 'General' } = {}) => {
+  const enqueueDirectly = useCallback((files, { folderId = null, folderTitle = '', category = 'General' } = {}) => {
     if (!files || files.length === 0) return;
 
     const fileList = Array.from(files);
@@ -75,7 +86,7 @@ export const UploadProvider = ({ children }) => {
       const fileTypeCategory = detectFileTypeCategory(file);
       const isVideo = fileTypeCategory === 'video' || (file.type && file.type.startsWith('video/'));
 
-      // Validate against the original-size limit (200MB default for video, 20MB for non-video)
+      // Validate against original-size limit (200MB video, 20MB non-video)
       const maxLimitBytes = isVideo ? MAX_VIDEO_BYTES : MAX_NON_VIDEO_BYTES;
       const maxLimitMb = isVideo ? MAX_VIDEO_UPLOAD_SIZE_MB : MAX_NON_VIDEO_UPLOAD_SIZE_MB;
       const isTooLarge = file.size > maxLimitBytes;
@@ -112,6 +123,82 @@ export const UploadProvider = ({ children }) => {
     setUploadQueue((prev) => [...prev, ...newItems]);
     setIsTrayOpen(true);
     setIsTrayMinimized(false);
+  }, []);
+
+  /**
+   * Add files to upload queue with audio detection check
+   */
+  const addToQueue = useCallback(async (files, options = {}) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
+
+    // Run client-side audio detection for all video files in parallel
+    const checks = await Promise.all(
+      fileList.map(async (file) => {
+        const audioInfo = await detectVideoAudio(file);
+        return { file, ...audioInfo };
+      })
+    );
+
+    const silentVideos = checks.filter((c) => c.isVideo && !c.hasAudio).map((c) => c.file);
+    const normalFiles = checks.filter((c) => !c.isVideo || c.hasAudio).map((c) => c.file);
+
+    // If any silent videos were found, prompt user with NoAudioWarningModal
+    if (silentVideos.length > 0) {
+      setNoAudioPrompt({
+        isOpen: true,
+        silentFiles: silentVideos,
+        acceptedFiles: normalFiles,
+        currentIndex: 0,
+        options,
+      });
+    } else {
+      enqueueDirectly(fileList, options);
+    }
+  }, [enqueueDirectly]);
+
+  // Audio prompt handlers
+  const handleSkipCurrentNoAudio = useCallback(() => {
+    setNoAudioPrompt((prev) => {
+      const nextIdx = prev.currentIndex + 1;
+      if (nextIdx >= prev.silentFiles.length) {
+        if (prev.acceptedFiles.length > 0) {
+          enqueueDirectly(prev.acceptedFiles, prev.options);
+        }
+        return { isOpen: false, silentFiles: [], acceptedFiles: [], currentIndex: 0, options: {} };
+      }
+      return { ...prev, currentIndex: nextIdx };
+    });
+  }, [enqueueDirectly]);
+
+  const handleUploadCurrentNoAudio = useCallback(() => {
+    setNoAudioPrompt((prev) => {
+      const currentSilent = prev.silentFiles[prev.currentIndex];
+      const newAccepted = [...prev.acceptedFiles, currentSilent];
+      const nextIdx = prev.currentIndex + 1;
+      if (nextIdx >= prev.silentFiles.length) {
+        enqueueDirectly(newAccepted, prev.options);
+        return { isOpen: false, silentFiles: [], acceptedFiles: [], currentIndex: 0, options: {} };
+      }
+      return { ...prev, acceptedFiles: newAccepted, currentIndex: nextIdx };
+    });
+  }, [enqueueDirectly]);
+
+  const handleSkipAllNoAudio = useCallback(() => {
+    if (noAudioPrompt.acceptedFiles.length > 0) {
+      enqueueDirectly(noAudioPrompt.acceptedFiles, noAudioPrompt.options);
+    }
+    setNoAudioPrompt({ isOpen: false, silentFiles: [], acceptedFiles: [], currentIndex: 0, options: {} });
+  }, [noAudioPrompt, enqueueDirectly]);
+
+  const handleUploadAllNoAudio = useCallback(() => {
+    const allFiles = [...noAudioPrompt.acceptedFiles, ...noAudioPrompt.silentFiles];
+    enqueueDirectly(allFiles, noAudioPrompt.options);
+    setNoAudioPrompt({ isOpen: false, silentFiles: [], acceptedFiles: [], currentIndex: 0, options: {} });
+  }, [noAudioPrompt, enqueueDirectly]);
+
+  const handleCancelNoAudio = useCallback(() => {
+    setNoAudioPrompt({ isOpen: false, silentFiles: [], acceptedFiles: [], currentIndex: 0, options: {} });
   }, []);
 
 
@@ -447,6 +534,17 @@ export const UploadProvider = ({ children }) => {
       }}
     >
       {children}
+      {/* No Audio Detection Warning Modal */}
+      <NoAudioWarningModal
+        isOpen={noAudioPrompt.isOpen}
+        silentFiles={noAudioPrompt.silentFiles}
+        currentIndex={noAudioPrompt.currentIndex}
+        onSkipCurrent={handleSkipCurrentNoAudio}
+        onUploadCurrent={handleUploadCurrentNoAudio}
+        onSkipAll={handleSkipAllNoAudio}
+        onUploadAll={handleUploadAllNoAudio}
+        onCancel={handleCancelNoAudio}
+      />
       {/* Hidden global multi-file selector input */}
       <input
         ref={fileInputRef}
