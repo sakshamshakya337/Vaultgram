@@ -17,6 +17,7 @@ import {
   HardDrive,
   Sparkles,
   Info,
+  MoreVertical,
 } from 'lucide-react';
 import { api, formatBytes, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
@@ -47,6 +48,7 @@ export const PhotoViewer = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState(null);
 
@@ -395,8 +397,8 @@ export const PhotoViewer = ({
             </div>
           </div>
 
-          {/* Top Right: Action Buttons */}
-          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+          {/* Desktop Top Right: Action Buttons (>=768px) */}
+          <div className="hidden md:flex items-center gap-2 shrink-0">
             {/* Zoom Toggle */}
             <button
               onClick={() => {
@@ -492,6 +494,127 @@ export const PhotoViewer = ({
             >
               <X className="w-5 h-5" />
             </button>
+          </div>
+
+          {/* Mobile Top Right: Action Buttons (<768px) */}
+          <div className="md:hidden flex items-center gap-1 shrink-0 relative">
+            {/* Like */}
+            <button
+              onClick={() => toggleLike(fileId)}
+              className={`w-9 h-9 rounded-full border flex items-center justify-center transition-transform active:scale-90 cursor-pointer backdrop-blur-md ${
+                isStarred
+                  ? 'bg-rose-500/25 border-rose-500/40 text-rose-400'
+                  : 'bg-white/10 border-white/15 text-zinc-300 hover:text-white'
+              }`}
+              aria-label="Like"
+            >
+              <Heart className={`w-4 h-4 ${isStarred ? 'fill-rose-500' : ''}`} />
+            </button>
+
+            {/* Download */}
+            <a
+              href={downloadUrl}
+              download={currentPhoto.title || 'photo'}
+              className="w-9 h-9 rounded-full bg-white/10 border border-white/15 text-zinc-300 hover:text-white flex items-center justify-center transition-colors backdrop-blur-md cursor-pointer"
+              aria-label="Download"
+            >
+              <Download className="w-4 h-4" />
+            </a>
+
+            {/* More Actions Dropdown Trigger */}
+            <button
+              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+              className={`w-9 h-9 rounded-full border flex items-center justify-center transition-colors backdrop-blur-md cursor-pointer ${
+                isMobileMenuOpen ? 'bg-white/25 border-white/30 text-white' : 'bg-white/10 border-white/15 text-zinc-300'
+              }`}
+              aria-label="More Options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center transition-colors backdrop-blur-md cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Floating Mobile Options Popover */}
+            {isMobileMenuOpen && (
+              <div
+                className="absolute right-0 top-11 w-44 rounded-2xl bg-zinc-900/95 border border-white/15 shadow-2xl p-1.5 flex flex-col gap-1 z-50 animate-fade-in backdrop-blur-2xl text-white"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Zoom Toggle */}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    if (scale > 1) {
+                      setScale(1);
+                      setPan({ x: 0, y: 0 });
+                    } else {
+                      setScale(2.5);
+                    }
+                  }}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  {scale > 1 ? <ZoomOut className="w-3.5 h-3.5 text-cyan-400" /> : <ZoomIn className="w-3.5 h-3.5 text-cyan-400" />}
+                  <span>{scale > 1 ? 'Reset Zoom' : 'Zoom In'}</span>
+                </button>
+
+                {/* Offline Cache */}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    toggleOfflineSave(currentPhoto);
+                  }}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{isCached ? 'Remove Offline' : 'Save Offline'}</span>
+                </button>
+
+                {/* Note */}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setIsNoteModalOpen(true);
+                  }}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  <StickyNote className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{currentPhoto.note ? 'Edit Note' : 'Add Note'}</span>
+                </button>
+
+                {/* Share */}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setIsShareModalOpen(true);
+                  }}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Share Link</span>
+                </button>
+
+                <div className="h-px bg-white/10 my-0.5" />
+
+                {/* Delete */}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setIsDeleteModalOpen(true);
+                  }}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-rose-500/15 text-left text-xs font-semibold text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

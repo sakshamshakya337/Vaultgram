@@ -210,7 +210,7 @@ export const PinKeypad = ({
         <button
           type="button"
           onClick={onCancel}
-          className="mt-2 text-xs text-zinc-500 hover:text-zinc-300 font-semibold cursor-pointer py-1"
+          className="mt-2 text-xs text-zinc-400 hover:text-zinc-200 font-semibold cursor-pointer py-2.5 px-6 min-h-[44px] flex items-center justify-center transition-colors"
         >
           Cancel
         </button>

@@ -176,10 +176,11 @@ export const UploadTray = () => {
                           </span>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="p-1 text-zinc-500 hover:text-rose-400 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
                             title="Cancel upload"
+                            aria-label="Cancel upload"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       )}
@@ -192,10 +193,11 @@ export const UploadTray = () => {
                           </div>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="p-1 text-zinc-500 hover:text-rose-400 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
                             title="Cancel upload"
+                            aria-label="Cancel upload"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       )}
@@ -207,10 +209,11 @@ export const UploadTray = () => {
                           </span>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="p-1 text-zinc-500 hover:text-rose-400 rounded hover:bg-white/10 transition-colors cursor-pointer"
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
                             title="Cancel queued upload"
+                            aria-label="Cancel queued upload"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       )}
@@ -219,18 +222,20 @@ export const UploadTray = () => {
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => retryUpload(item.id)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-[10px] font-bold transition-colors cursor-pointer"
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-[10px] font-bold transition-colors cursor-pointer min-h-[32px]"
                             title="Retry Upload"
+                            aria-label="Retry Upload"
                           >
-                            <RotateCw className="w-3 h-3" />
+                            <RotateCw className="w-3.5 h-3.5" />
                             <span>Retry</span>
                           </button>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="p-1 text-zinc-500 hover:text-white rounded hover:bg-white/10 transition-colors cursor-pointer"
+                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
                             title="Dismiss"
+                            aria-label="Dismiss"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       )}

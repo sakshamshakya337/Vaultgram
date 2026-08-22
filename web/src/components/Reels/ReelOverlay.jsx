@@ -114,7 +114,10 @@ export const ReelOverlay = ({ video, isMuted, onToggleMute, onLike }) => {
         <div className="flex flex-col items-center gap-3.5 pointer-events-auto shrink-0 pb-1">
           {/* Like Button */}
           <button
-            onClick={onLike}
+            onClick={(e) => {
+              e.stopPropagation();
+              onLike();
+            }}
             className="group flex flex-col items-center gap-1 transition-transform active:scale-75 cursor-pointer"
             aria-label="Like video"
           >

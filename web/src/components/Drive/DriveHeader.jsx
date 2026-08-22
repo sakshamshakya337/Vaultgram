@@ -184,19 +184,6 @@ export const DriveHeader = ({
               <Search className="w-4 h-4" />
             </button>
 
-            {/* Mobile Quick + Upload Button */}
-            <button
-              onClick={() => openFilePicker({
-                folderId: currentFolder?._id || null,
-                folderTitle: currentFolder?.title || '',
-                category: selectedCategory,
-              })}
-              className="md:hidden flex items-center gap-1.5 h-9 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-md shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Upload</span>
-            </button>
-
             {/* Desktop Grid / List View Toggle */}
             <div className="hidden md:flex items-center h-9 p-0.5 rounded-xl bg-zinc-900 border border-white/5">
               <button

@@ -17,6 +17,7 @@ import {
   Loader2,
   StickyNote,
   Share2,
+  MoreVertical,
 } from 'lucide-react';
 import { api, formatBytes, formatDuration, formatViews, formatRelativeTime } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
@@ -44,6 +45,7 @@ export const DesktopVideoModal = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState(null);
 
   // Derive the active list of files
@@ -290,7 +292,8 @@ export const DesktopVideoModal = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            {/* Desktop Action Toolbar (>=768px) */}
+            <div className="hidden md:flex items-center gap-2 shrink-0">
               {/* Note / Reminder Button */}
               <button
                 onClick={() => setIsNoteModalOpen(true)}
@@ -371,6 +374,106 @@ export const DesktopVideoModal = ({
               >
                 <X className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* Mobile Action Toolbar (<768px) */}
+            <div className="md:hidden flex items-center gap-1 shrink-0 relative">
+              {/* Like */}
+              <button
+                onClick={() => toggleLike(fileId)}
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-transform active:scale-90 cursor-pointer ${
+                  isStarred
+                    ? 'bg-rose-500/15 border-rose-500/30 text-rose-500'
+                    : 'bg-white/5 border-white/10 text-zinc-400 hover:text-white'
+                }`}
+                aria-label="Like"
+              >
+                <Heart className={`w-4 h-4 ${isStarred ? 'fill-rose-500' : ''}`} />
+              </button>
+
+              {/* Download */}
+              <a
+                href={downloadUrl}
+                download={currentFile.title || 'download'}
+                className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Download"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+
+              {/* More Actions Dropdown Trigger */}
+              <button
+                onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-colors cursor-pointer ${
+                  isMobileMenuOpen ? 'bg-white/15 border-white/20 text-white' : 'bg-white/5 border-white/10 text-zinc-400'
+                }`}
+                aria-label="More Options"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {/* Close Button */}
+              <button
+                onClick={onClose}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-zinc-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Floating Mobile Options Menu Popover */}
+              {isMobileMenuOpen && (
+                <div
+                  className="absolute right-0 top-11 w-44 rounded-2xl bg-zinc-900 border border-white/15 shadow-2xl p-1.5 flex flex-col gap-1 z-50 animate-fade-in backdrop-blur-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsNoteModalOpen(true);
+                    }}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <StickyNote className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{currentFile.note ? 'Edit Note' : 'Add Note'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      toggleOfflineSave(currentFile);
+                    }}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{isOfflineAvailable(fileId) ? 'Remove Offline' : 'Save Offline'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsShareModalOpen(true);
+                    }}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Share Link</span>
+                  </button>
+
+                  <div className="h-px bg-white/10 my-0.5" />
+
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsDeleteModalOpen(true);
+                    }}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-rose-500/15 text-left text-xs font-semibold text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

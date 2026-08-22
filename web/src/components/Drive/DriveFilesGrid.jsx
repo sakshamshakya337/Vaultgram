@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote, Share2, FileText, Image as ImageIcon, Music, Eye } from 'lucide-react';
+import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote, Share2, FileText, Image as ImageIcon, Music, Eye, MoreVertical, X } from 'lucide-react';
 import { api, formatBytes, formatDuration, getFileKind } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
@@ -14,6 +14,7 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [noteTarget, setNoteTarget] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
+  const [mobileMenuFile, setMobileMenuFile] = useState(null);
 
   if (!videos || videos.length === 0) return null;
 
@@ -175,7 +176,8 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                     ) : null}
                   </div>
 
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                  {/* Desktop Action Buttons (Hover) */}
+                  <div className="hidden md:flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                     {/* Add/Edit Note Button */}
                     <button
                       onClick={() => setNoteTarget(video)}
@@ -242,12 +244,138 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
+
+                  {/* Mobile Action Buttons (Touch Friendly) */}
+                  <div className="md:hidden flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => toggleLike(videoId)}
+                      className={`w-7 h-7 rounded-md flex items-center justify-center transition-transform active:scale-75 cursor-pointer ${
+                        isStarred ? 'text-rose-500' : 'text-zinc-400 hover:text-white'
+                      }`}
+                      aria-label="Like"
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${isStarred ? 'fill-rose-500' : ''}`} />
+                    </button>
+                    <button
+                      onClick={() => setMobileMenuFile(video)}
+                      className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-400 hover:text-white active:bg-white/10 transition-colors cursor-pointer"
+                      aria-label="More actions"
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Mobile File Actions Bottom Sheet */}
+      {mobileMenuFile && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end justify-center animate-fade-in"
+          onClick={() => setMobileMenuFile(null)}
+        >
+          <div
+            className="w-full max-w-lg bg-zinc-900 border-t border-white/10 rounded-t-3xl p-5 flex flex-col gap-3 shadow-2xl animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="min-w-0 pr-4">
+                <h4 className="text-sm font-bold text-white truncate">
+                  {mobileMenuFile.title || 'File Actions'}
+                </h4>
+                <p className="text-xs text-cyan-400 font-semibold mt-0.5">
+                  #{mobileMenuFile.category || 'General'}
+                </p>
+              </div>
+              <button
+                onClick={() => setMobileMenuFile(null)}
+                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              {/* Star / Like */}
+              <button
+                onClick={() => {
+                  toggleLike(mobileMenuFile._id || mobileMenuFile.id);
+                  setMobileMenuFile(null);
+                }}
+                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
+              >
+                <Heart className={`w-4 h-4 ${mobileMenuFile.isStarred ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'}`} />
+                <span>{mobileMenuFile.isStarred ? 'Liked' : 'Like'}</span>
+              </button>
+
+              {/* Offline */}
+              <button
+                onClick={() => {
+                  toggleOfflineSave(mobileMenuFile);
+                  setMobileMenuFile(null);
+                }}
+                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
+              >
+                <Cloud className={`w-4 h-4 ${isOfflineAvailable(mobileMenuFile._id || mobileMenuFile.id) ? 'fill-emerald-400 text-emerald-400' : 'text-zinc-400'}`} />
+                <span>{isOfflineAvailable(mobileMenuFile._id || mobileMenuFile.id) ? 'Offline Ready' : 'Save Offline'}</span>
+              </button>
+
+              {/* Note */}
+              <button
+                onClick={() => {
+                  const target = mobileMenuFile;
+                  setMobileMenuFile(null);
+                  setNoteTarget(target);
+                }}
+                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
+              >
+                <StickyNote className={`w-4 h-4 ${mobileMenuFile.note ? 'text-amber-400 fill-amber-400/20' : 'text-zinc-400'}`} />
+                <span>{mobileMenuFile.note ? 'Edit Note' : 'Add Note'}</span>
+              </button>
+
+              {/* Share */}
+              <button
+                onClick={() => {
+                  const target = mobileMenuFile;
+                  setMobileMenuFile(null);
+                  setShareTarget(target);
+                }}
+                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-blue-400" />
+                <span>Share Link</span>
+              </button>
+
+              {/* Download */}
+              <a
+                href={api.stream.getUrl(mobileMenuFile._id || mobileMenuFile.id, true)}
+                download={mobileMenuFile.title || 'download'}
+                onClick={() => setMobileMenuFile(null)}
+                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-cyan-400" />
+                <span>Download</span>
+              </a>
+
+              {/* Delete */}
+              <button
+                onClick={() => {
+                  const target = mobileMenuFile;
+                  setMobileMenuFile(null);
+                  setDeleteTarget(target);
+                }}
+                className="flex items-center gap-3 p-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Share Modal */}
       <ShareModal
