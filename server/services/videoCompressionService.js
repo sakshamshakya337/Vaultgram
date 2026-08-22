@@ -19,7 +19,7 @@ if (ffprobeStatic?.path) {
 // Configurable constants via environment variables
 const MAX_VIDEO_UPLOAD_SIZE_MB = parseInt(process.env.MAX_VIDEO_UPLOAD_SIZE_MB, 10) || 200;
 const MAX_COMPRESSED_VIDEO_SIZE_MB = parseInt(process.env.MAX_COMPRESSED_VIDEO_SIZE_MB, 10) || 20;
-const TARGET_VIDEO_SIZE_MB = parseFloat(process.env.TARGET_VIDEO_SIZE_MB) || 19.0;
+const TARGET_VIDEO_SIZE_MB = parseFloat(process.env.TARGET_VIDEO_SIZE_MB) || 18.0;
 const MAX_VIDEO_DURATION_SECONDS = parseInt(process.env.MAX_VIDEO_DURATION_SECONDS, 10) || 600;
 
 const MAX_TARGET_BYTES = MAX_COMPRESSED_VIDEO_SIZE_MB * 1024 * 1024;
@@ -67,11 +67,13 @@ function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKb
       .output(outputPath)
       .videoCodec('libx264')
       .outputOptions([
-        '-preset veryfast',
+        '-preset ultrafast', // Fast encoding for cloud servers with low RAM
+        '-threads 2', // Limit threads to prevent memory exhaustion on cloud instances
         '-movflags +faststart',
         '-pix_fmt yuv420p',
-        `-maxrate ${Math.floor(videoBitrateKbps * 1.2)}k`,
-        `-bufsize ${Math.floor(videoBitrateKbps * 2)}k`,
+        '-max_muxing_queue_size 1024',
+        `-maxrate ${Math.floor(videoBitrateKbps * 1.15)}k`,
+        `-bufsize ${Math.floor(videoBitrateKbps * 1.5)}k`,
       ])
       .videoBitrate(`${Math.max(150, Math.floor(videoBitrateKbps))}k`);
 
@@ -127,7 +129,8 @@ function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKb
  */
 async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mimeType = 'video/mp4', req = null) {
   const originalSize = inputBuffer.length;
-  const isVideo = mimeType.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts)$/i.test(originalName);
+  const videoExtRegex = /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts|wmv|ogv)$/i;
+  const isVideo = (mimeType && mimeType.startsWith('video/')) || videoExtRegex.test(originalName);
 
   // EARLY SIZE & TYPE CHECK: If not a video or already <= 20MB, skip ALL processing
   if (!isVideo || originalSize <= MAX_TARGET_BYTES) {
@@ -195,7 +198,13 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
     await fs.promises.writeFile(tempInputPath, inputBuffer);
 
     // Probe metadata
-    const metadata = await probeVideo(tempInputPath);
+    let metadata = { duration: 1, width: 1280, height: 720, hasAudio: true };
+    try {
+      metadata = await probeVideo(tempInputPath);
+    } catch (probeErr) {
+      console.warn(`[VideoCompression] Probe note for "${originalName}":`, probeErr.message);
+    }
+
     const duration = Math.max(1, metadata.duration || 1);
 
     if (duration > MAX_VIDEO_DURATION_SECONDS) {
@@ -205,13 +214,11 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
     }
 
     // Dynamic bitrate calculation strategy
-    // Total bits = target_bytes * 8
-    // Total kbps = (target_bytes * 8) / (duration * 1000)
     const calculateBitrates = (targetBytes, audioK = 96) => {
       const totalKbps = (targetBytes * 8) / (duration * 1000);
       const audioKbps = metadata.hasAudio ? audioK : 0;
-      // 8% safety overhead margin for MP4 atom headers & variable GOP
-      const availableVideoKbps = Math.max(120, (totalKbps - audioKbps) * 0.92);
+      // Safety overhead margin for MP4 atom headers & variable GOP
+      const availableVideoKbps = Math.max(120, (totalKbps - audioKbps) * 0.90);
       return {
         videoBitrateKbps: Math.floor(availableVideoKbps),
         audioBitrateKbps: audioKbps,
@@ -220,23 +227,23 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
 
     // Define adaptive progressive compression attempts
     const attempts = [
-      // Attempt 1: Target ~19.0 MB, original resolution (max 1080p), 96k audio
+      // Attempt 1: Target ~18.0 MB, max 1080p (1920px), 96k audio
       {
-        targetBytes: INITIAL_TARGET_BYTES,
+        targetBytes: 18.0 * 1024 * 1024,
         maxWidth: 1920,
         audioK: 96,
         description: 'High Quality (1080p)',
       },
-      // Attempt 2: Target ~16.5 MB, max 720p (1280px), 96k audio
+      // Attempt 2: Target ~16.0 MB, max 720p (1280px), 96k audio
       {
-        targetBytes: 16.5 * 1024 * 1024,
+        targetBytes: 16.0 * 1024 * 1024,
         maxWidth: 1280,
         audioK: 96,
         description: 'Standard Quality (720p)',
       },
-      // Attempt 3: Target ~14.5 MB, max 480p (854px), 64k audio
+      // Attempt 3: Target ~14.0 MB, max 480p (854px), 64k audio
       {
-        targetBytes: 14.5 * 1024 * 1024,
+        targetBytes: 14.0 * 1024 * 1024,
         maxWidth: 854,
         audioK: 64,
         description: 'Optimized Quality (480p)',
@@ -321,15 +328,10 @@ async function compressVideoIfNeeded(inputBuffer, originalName = 'video.mp4', mi
 }
 
 /**
- * Automatically extracts a representative JPEG thumbnail frame from a video buffer
- * 
- * @param {Buffer} inputBuffer - The video buffer
- * @param {string} originalName - Original filename for logging
- * @returns {Promise<Buffer|null>} The generated JPEG thumbnail buffer or null on error
+ * Extracts a high-quality video thumbnail at ~1.0s timestamp
+ * Returns a Buffer of the JPEG thumbnail or null if extraction fails
  */
-async function generateVideoThumbnail(inputBuffer, originalName = 'video.mp4') {
-  if (!inputBuffer || inputBuffer.length === 0) return null;
-
+async function generateVideoThumbnail(videoBuffer, originalName = 'video.mp4') {
   const tempDir = os.tmpdir();
   const fileHash = crypto.randomBytes(6).toString('hex');
   const tempInputPath = path.join(tempDir, `vg_thumb_in_${Date.now()}_${fileHash}.mp4`);
@@ -337,7 +339,7 @@ async function generateVideoThumbnail(inputBuffer, originalName = 'video.mp4') {
   const tempFiles = [tempInputPath, tempOutputPath];
 
   try {
-    await fs.promises.writeFile(tempInputPath, inputBuffer);
+    await fs.promises.writeFile(tempInputPath, videoBuffer);
 
     let duration = 0;
     try {
@@ -345,26 +347,25 @@ async function generateVideoThumbnail(inputBuffer, originalName = 'video.mp4') {
       duration = meta.duration || 0;
     } catch {}
 
-    // Pull from ~1 second mark (or 10% into duration for short clips) to avoid frame 0 blackness
-    const seekSeconds = duration > 2 ? 1.0 : Math.max(0.1, duration * 0.1);
+    const seekTime = duration > 2 ? 1.0 : duration > 0 ? duration / 2 : 0;
 
     await new Promise((resolve, reject) => {
       ffmpeg(tempInputPath)
-        .seekInput(seekSeconds)
-        .frames(1)
-        .outputOptions([
-          "-vf scale='min(iw,480)':-2",
-          "-q:v 3"
-        ])
+        .seekInput(seekTime)
         .output(tempOutputPath)
-        .on('end', () => resolve(tempOutputPath))
-        .on('error', (err) => reject(err))
+        .outputOptions([
+          '-vframes 1',
+          '-q:v 2',
+          "-vf scale='min(iw,640)':-2",
+          '-threads 2',
+        ])
+        .on('end', resolve)
+        .on('error', reject)
         .run();
     });
 
     if (fs.existsSync(tempOutputPath)) {
       const thumbBuffer = await fs.promises.readFile(tempOutputPath);
-      console.log(`[generateVideoThumbnail] Successfully extracted thumbnail for "${originalName}" (${(thumbBuffer.length / 1024).toFixed(1)} KB)`);
       return thumbBuffer;
     }
 
