@@ -19,7 +19,7 @@ import {
   Loader2,
   Infinity as InfinityIcon,
 } from 'lucide-react';
-import { api, formatBytes, formatDuration } from '../../services/api';
+import { api, API_BASE_URL, formatBytes, formatDuration } from '../../services/api';
 
 export const ShareFolderPage = ({ token: propToken }) => {
   const token = propToken || window.location.pathname.replace(/^\/share\/folder\//, '').split('/')[0];
@@ -31,6 +31,14 @@ export const ShareFolderPage = ({ token: propToken }) => {
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
 
+  // Helper to ensure URL points to absolute backend
+  const toAbsoluteUrl = (relPath) => {
+    if (!relPath) return '';
+    if (relPath.startsWith('http://') || relPath.startsWith('https://')) return relPath;
+    const cleanPath = relPath.startsWith('/') ? relPath : `/${relPath}`;
+    return `${API_BASE_URL}${cleanPath}`;
+  };
+
   useEffect(() => {
     let isMounted = true;
     const fetchFolderData = async () => {
@@ -39,7 +47,24 @@ export const ShareFolderPage = ({ token: propToken }) => {
         setError('');
         const res = await api.share.getFolderInfo(token);
         if (isMounted) {
-          setData(res);
+          const normalizedFiles = (res.files || []).map((f) => {
+            const streamUrl = toAbsoluteUrl(
+              f.streamUrl || `/share/folder/${token}/file/${f._id || f.id}/stream`
+            );
+            const downloadUrl = toAbsoluteUrl(
+              f.downloadUrl || `/share/folder/${token}/file/${f._id || f.id}/download`
+            );
+            return {
+              ...f,
+              streamUrl,
+              downloadUrl,
+            };
+          });
+
+          setData({
+            ...res,
+            files: normalizedFiles,
+          });
         }
       } catch (err) {
         if (isMounted) {
@@ -92,6 +117,51 @@ export const ShareFolderPage = ({ token: propToken }) => {
     return () => clearInterval(interval);
   }, [data?.expiresAt]);
 
+  // Single file download helper with Content-Disposition / Blob fallback
+  const downloadSingleFile = async (file) => {
+    try {
+      const fileUrl = toAbsoluteUrl(file.downloadUrl);
+      const response = await fetch(fileUrl, {
+        method: 'GET',
+        headers: { 'bypass-tunnel-reminder': 'true' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      // Extract filename from response header
+      const disposition = response.headers.get('Content-Disposition') || '';
+      let targetFilename = file.title || 'shared-file';
+      const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      if (filenameMatch && filenameMatch[1]) {
+        targetFilename = decodeURIComponent(filenameMatch[1].replace(/["']/g, ''));
+      } else if (file.extension && !targetFilename.toLowerCase().endsWith(`.${file.extension.toLowerCase()}`)) {
+        targetFilename = `${targetFilename}.${file.extension}`;
+      }
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = targetFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.warn('Direct blob download fallback to native a-click:', file.title, err);
+      const fallbackUrl = toAbsoluteUrl(file.downloadUrl);
+      const link = document.createElement('a');
+      link.href = fallbackUrl;
+      link.download = file.title || 'shared-file';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Download All Files Sequentially
   const handleDownloadAll = async () => {
     if (!data?.files || data.files.length === 0 || downloadingAll) return;
@@ -101,19 +171,10 @@ export const ShareFolderPage = ({ token: propToken }) => {
     const total = data.files.length;
     for (let i = 0; i < total; i++) {
       const file = data.files[i];
-      try {
-        const link = document.createElement('a');
-        link.href = file.downloadUrl;
-        link.setAttribute('download', file.title || 'shared-file');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (err) {
-        console.warn('Download error for file:', file.title, err);
-      }
+      await downloadSingleFile(file);
       setDownloadProgress(Math.round(((i + 1) / total) * 100));
-      // Small pause between file triggers for browser stability
-      await new Promise((r) => setTimeout(r, 600));
+      // 500ms delay between downloads so browser doesn't block multi-downloads
+      await new Promise((r) => setTimeout(r, 500));
     }
 
     setTimeout(() => {
@@ -235,7 +296,7 @@ export const ShareFolderPage = ({ token: propToken }) => {
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
-                      <span>Download All Files</span>
+                      <span>Download All ({data.totalFiles})</span>
                     </>
                   )}
                 </button>
@@ -302,15 +363,16 @@ export const ShareFolderPage = ({ token: propToken }) => {
                         )}
 
                         {/* Quick Download Button on card */}
-                        <a
-                          href={file.downloadUrl}
-                          download={file.title}
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute top-2 right-2 w-8 h-8 rounded-xl bg-black/70 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:text-cyan-400 hover:bg-black transition-colors shadow-md opacity-0 group-hover:opacity-100 z-10"
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadSingleFile(file);
+                          }}
+                          className="absolute top-2 right-2 w-8 h-8 rounded-xl bg-black/70 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:text-cyan-400 hover:bg-black transition-colors shadow-md opacity-0 group-hover:opacity-100 z-10 cursor-pointer"
                           title="Download file"
                         >
                           <Download className="w-4 h-4" />
-                        </a>
+                        </button>
                       </div>
 
                       {/* File Details */}
@@ -364,14 +426,13 @@ export const ShareFolderPage = ({ token: propToken }) => {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <a
-                  href={activePreviewFile.downloadUrl}
-                  download={activePreviewFile.title}
+                <button
+                  onClick={() => downloadSingleFile(activePreviewFile)}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download</span>
-                </a>
+                </button>
                 <button
                   onClick={() => setActivePreviewFile(null)}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-zinc-300 hover:text-white transition-colors cursor-pointer"
@@ -411,13 +472,12 @@ export const ShareFolderPage = ({ token: propToken }) => {
                     <FileText className="w-8 h-8" />
                   </div>
                   <p className="text-xs text-zinc-400 font-mono">Document preview not supported</p>
-                  <a
-                    href={activePreviewFile.downloadUrl}
-                    download={activePreviewFile.title}
-                    className="mt-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold"
+                  <button
+                    onClick={() => downloadSingleFile(activePreviewFile)}
+                    className="mt-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold cursor-pointer"
                   >
                     Download to View
-                  </a>
+                  </button>
                 </div>
               )}
             </div>
