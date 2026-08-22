@@ -289,6 +289,11 @@ exports.uploadMedia = async (req, res) => {
     let originalFormat = '';
     let servedFormat = '';
     let isConverted = false;
+    let finalBuffer = uploadedFile.buffer;
+    let finalSize = uploadedFile.size;
+    let isCompressed = false;
+    let compressionRatio = 0;
+    let compressedMeta = {};
 
     // ─── Apple HEIC / HEIF Auto-Conversion to Universal JPEG ───────────────────
     if (isHeicFormat(uploadedFile.originalname, uploadedFile.mimetype)) {
