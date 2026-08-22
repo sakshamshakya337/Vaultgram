@@ -5,7 +5,7 @@ import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { UploadProgressBar } from './UploadProgressBar';
 
 export const UploadModal = () => {
-  const { isUploadOpen, setIsUploadOpen, categories, fetchVideos, fetchCategories } = useVideoFeed();
+  const { isUploadOpen, setIsUploadOpen, categories, setVideos, fetchCategories } = useVideoFeed();
   
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -107,9 +107,15 @@ export const UploadModal = () => {
 
       setUploadResult(res);
       setIsSuccess(true);
+      if (res && (res._id || res.id)) {
+        setVideos((prev) => {
+          const exists = prev.some((v) => (v._id || v.id) === (res._id || res.id));
+          if (exists) return prev;
+          return [res, ...prev];
+        });
+      }
       setTimeout(async () => {
         await fetchCategories();
-        await fetchVideos(finalCategory);
         handleClose();
       }, 1500);
     } catch (err) {

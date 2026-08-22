@@ -99,13 +99,39 @@ export const DriveLayout = () => {
     return () => observer.disconnect();
   }, [loadMore, loadingDrive, loadingMore, hasMore]);
 
-  // Real-time automatic refresh when any queued upload completes
+  // Real-time automatic in-place state update when any queued upload completes (zero reload / zero refetch)
   useEffect(() => {
-    const unregister = registerOnUploadSuccess(() => {
-      loadDriveItems();
+    const unregister = registerOnUploadSuccess((newDoc) => {
+      if (!newDoc || !newDoc._id) return;
+
+      // 1. Match folder
+      const targetFolderId = currentFolder?._id || currentFolder?.id || null;
+      const docFolderId = newDoc.folderId || newDoc.parentFolderId || null;
+      const isSameFolder =
+        (targetFolderId === null && (!docFolderId || docFolderId === 'root')) ||
+        (targetFolderId && String(targetFolderId) === String(docFolderId));
+
+      // 2. Match category filter
+      const cleanSelected = String(selectedCategory || 'All').replace(/^#/, '').toLowerCase().trim();
+      const cleanDocCat = String(newDoc.category || '').replace(/^#/, '').toLowerCase().trim();
+      const isSameCategory = cleanSelected === 'all' || cleanSelected === cleanDocCat;
+
+      // 3. Match current view navigation
+      const matchesNav =
+        currentNav === 'all' ||
+        currentNav === 'recent' ||
+        (currentNav === 'starred' && newDoc.isStarred);
+
+      if (isSameFolder && isSameCategory && matchesNav) {
+        setDriveItems((prev) => {
+          const exists = prev.some((it) => (it._id || it.id) === (newDoc._id || newDoc.id));
+          if (exists) return prev;
+          return [newDoc, ...prev];
+        });
+      }
     });
     return unregister;
-  }, [registerOnUploadSuccess, loadDriveItems]);
+  }, [registerOnUploadSuccess, currentFolder, selectedCategory, currentNav, setDriveItems]);
 
   // Separate folders and files
   const folders = useMemo(() => {
