@@ -7,7 +7,8 @@ import {
   FolderOpen,
   Edit2,
   Trash2,
-  Shield
+  Shield,
+  Share2,
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
@@ -20,6 +21,7 @@ export const DriveFolderGrid = ({
   onOpenCategory,
   onRenameFolder,
   onDeleteFolder,
+  onShareFolder,
 }) => {
   const {
     lockedCategories,
@@ -158,6 +160,19 @@ export const DriveFolderGrid = ({
                               )}
                             </button>
 
+                            {onShareFolder && (
+                              <button
+                                className="flex w-full items-center space-x-2 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                                onClick={() => {
+                                  onShareFolder({ category: title, isFolder: true });
+                                  setActiveMenuId(null);
+                                }}
+                              >
+                                <Share2 className="h-3.5 w-3.5 text-cyan-400" />
+                                <span>Share Folder</span>
+                              </button>
+                            )}
+
                             {onRenameFolder && (
                               <button
                                 className="flex w-full items-center space-x-2 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
@@ -221,23 +236,38 @@ export const DriveFolderGrid = ({
                         <Folder className="w-4 h-4 fill-cyan-400/20 text-cyan-400" />
                       </div>
 
-                      <button
-                        onClick={(e) => handleToggleLock(e, cat)}
-                        className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                          locked
-                            ? unlockedSession
-                              ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                            : 'opacity-0 group-hover:opacity-100 bg-white/5 text-zinc-500 hover:text-white border-white/5'
-                        }`}
-                        title={locked ? 'Unlocked (Click to remove lock)' : 'Lock category with PIN'}
-                      >
-                        {locked ? (
-                          unlockedSession ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />
-                        ) : (
-                          <Lock className="w-3.5 h-3.5" />
+                      <div className="flex items-center gap-1">
+                        {onShareFolder && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onShareFolder({ category: cat, isFolder: true });
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg border border-white/5 bg-white/5 text-zinc-400 hover:text-cyan-400 transition-all cursor-pointer"
+                            title="Share Folder Link"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
-                      </button>
+
+                        <button
+                          onClick={(e) => handleToggleLock(e, cat)}
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                            locked
+                              ? unlockedSession
+                                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                              : 'opacity-0 group-hover:opacity-100 bg-white/5 text-zinc-500 hover:text-white border-white/5'
+                          }`}
+                          title={locked ? 'Unlocked (Click to remove lock)' : 'Lock category with PIN'}
+                        >
+                          {locked ? (
+                            unlockedSession ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />
+                          ) : (
+                            <Lock className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="mt-2 min-w-0">

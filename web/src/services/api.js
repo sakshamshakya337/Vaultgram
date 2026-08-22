@@ -510,9 +510,17 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ durationHours }),
       }),
+    createFolder: (category, durationHours = 24) =>
+      request(`/share/category/${encodeURIComponent(category)}`, {
+        method: 'POST',
+        body: JSON.stringify({ durationHours }),
+      }),
     getInfo: (token) => request(`/share/${token}/info`),
+    getFolderInfo: (token) => request(`/share/folder/${token}`),
     getStreamUrl: (token) => `${BASE_URL}/share/${token}/stream`,
     getDownloadUrl: (token) => `${BASE_URL}/share/${token}/download`,
+    getFolderFileStreamUrl: (token, fileId) => `${BASE_URL}/share/folder/${token}/file/${fileId}/stream`,
+    getFolderFileDownloadUrl: (token, fileId) => `${BASE_URL}/share/folder/${token}/file/${fileId}/download`,
     revoke: (token) =>
       request(`/share/${token}`, {
         method: 'DELETE',

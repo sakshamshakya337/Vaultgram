@@ -4,11 +4,28 @@ const crypto = require('crypto');
 
 const shareLinkSchema = new mongoose.Schema(
   {
+    scope: {
+      type: String,
+      enum: ['file', 'folder'],
+      default: 'file',
+      index: true,
+    },
     fileId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Media',
-      required: [true, 'File ID is required'],
+      required: false,
       index: true,
+    },
+    category: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
+    folderTitle: {
+      type: String,
+      default: null,
+      trim: true,
     },
     token: {
       type: String,
@@ -19,7 +36,7 @@ const shareLinkSchema = new mongoose.Schema(
     },
     expiresAt: {
       type: Date,
-      required: [true, 'Expiration date is required'],
+      default: null, // null means never expires
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -34,7 +51,7 @@ const shareLinkSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Expire TTL index (automatically delete expired links from mongo after expiry)
+// Expire TTL index (automatically delete expired links where expiresAt is a Date)
 shareLinkSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('ShareLink', shareLinkSchema);

@@ -51,9 +51,16 @@ router.post('/:id/trash', optionalAuth, trashOrDelete);
 router.post('/:id/restore', optionalAuth, restoreTrash);
 router.delete('/trash/empty', optionalAuth, emptyTrash);
 
+const {
+  createShareLink,
+  createFolderShareLink,
+} = require('../controllers/shareController');
+
 // ─── Listing, Search, Upload & Direct Delete ─────────────────────────────────
 router.get('/', optionalAuth, listMedia);
 router.get('/search', optionalAuth, searchMedia);
+router.post('/category/:category/share', optionalAuth, createFolderShareLink);
+router.post('/:id/share', optionalAuth, createShareLink);
 router.get('/:id/download', optionalAuth, downloadFile);
 router.get('/:id/thumbnail', optionalAuth, getVideoThumbnail);
 router.get('/:id', optionalAuth, getMedia);

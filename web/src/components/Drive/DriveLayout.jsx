@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload, Loader2 } from 'lucide-react';
+import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload, Loader2, Share2 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
@@ -13,6 +13,7 @@ import { DesktopVideoModal } from './DesktopVideoModal';
 import { PhotoViewer } from './PhotoViewer';
 import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
+import { ShareModal } from './ShareModal';
 import { TimelineView } from './TimelineView';
 import { TrashView } from './TrashView';
 import { CameraCaptureModal } from '../Upload/CameraCaptureModal';
@@ -51,6 +52,7 @@ export const DriveLayout = () => {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isVoiceMemoOpen, setIsVoiceMemoOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState(null);
+  const [shareFolderTarget, setShareFolderTarget] = useState(null);
   const sentinelRef = useRef(null);
 
   // Memoized query parameters for unified cursor pagination
@@ -353,6 +355,7 @@ export const DriveLayout = () => {
                   onOpenCategory={handleOpenCategory}
                   onRenameFolder={(folder) => setRenameTarget(folder)}
                   onDeleteFolder={handleDeleteFolder}
+                  onShareFolder={(target) => setShareFolderTarget(target)}
                 />
               )
             )}
@@ -385,14 +388,27 @@ export const DriveLayout = () => {
                   </span>
                 </div>
 
-                {currentFolder && (
-                  <button
-                    onClick={handleResetToRoot}
-                    className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
-                  >
-                    ← Back to My Drive
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {selectedCategory !== 'All' && currentNav === 'all' && (
+                    <button
+                      onClick={() => setShareFolderTarget({ category: selectedCategory })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 text-xs font-semibold transition-colors cursor-pointer"
+                      title={`Share #${selectedCategory} folder`}
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Share Folder</span>
+                    </button>
+                  )}
+
+                  {currentFolder && (
+                    <button
+                      onClick={handleResetToRoot}
+                      className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
+                    >
+                      ← Back to My Drive
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Skeletons when initial loading or network is slow */}
@@ -590,6 +606,14 @@ export const DriveLayout = () => {
         onClose={() => setIsVoiceMemoOpen(false)}
         folderId={currentFolder?._id || null}
         folderTitle={currentFolder?.title || ''}
+      />
+
+      {/* Share Folder / Category Modal */}
+      <ShareModal
+        isOpen={!!shareFolderTarget}
+        isFolder={true}
+        category={shareFolderTarget?.category}
+        onClose={() => setShareFolderTarget(null)}
       />
     </div>
   );

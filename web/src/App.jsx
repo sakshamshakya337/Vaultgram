@@ -16,6 +16,7 @@ import { CategoryPinModal } from './components/PIN/CategoryPinModal';
 import { SetPinModal } from './components/PIN/SetPinModal';
 import { SettingsModal } from './components/Settings/SettingsModal';
 import { SharePlayerPage } from './components/Share/SharePlayerPage';
+import { ShareFolderPage } from './components/Share/ShareFolderPage';
 import { useAuth } from './contexts/useAuth';
 import { useUploadQueue } from './contexts/useUploadQueue';
 import { AuthScreen } from './components/Auth/AuthScreen';
@@ -27,7 +28,12 @@ const StreamVaultApp = () => {
 
   // Check if current URL is a public share link
   const path = window.location.pathname;
-  if (path.startsWith('/share/')) {
+  if (path.startsWith('/share/folder/')) {
+    const token = path.replace(/^\/share\/folder\//, '').split('/')[0];
+    if (token) {
+      return <ShareFolderPage token={token} />;
+    }
+  } else if (path.startsWith('/share/')) {
     const token = path.replace(/^\/share\//, '').split('/')[0];
     if (token) {
       return <SharePlayerPage token={token} />;
