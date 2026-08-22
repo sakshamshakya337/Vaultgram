@@ -52,6 +52,43 @@ function detectFileCategory(filename = '', mimetype = '') {
   return 'other';
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Execute Telegram API calls with automatic HTTP 429 rate limit backoff and transient retry
+ */
+async function executeWithTelegramRetry(apiCallFn, operationName = 'Telegram API', maxRetries = 3) {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    try {
+      return await apiCallFn();
+    } catch (err) {
+      attempt++;
+      const statusCode = err.response?.status || err.response?.data?.error_code;
+      const tgData = err.response?.data;
+      const is429 = statusCode === 429 || tgData?.error_code === 429;
+
+      if (is429 && attempt <= maxRetries) {
+        const retryAfterSec = Number(tgData?.parameters?.retry_after) || 3;
+        const waitMs = (retryAfterSec * 1000) + 300;
+        console.warn(`[${operationName}] Telegram 429 rate limit hit. Waiting ${retryAfterSec}s before attempt ${attempt}/${maxRetries}...`);
+        await sleep(waitMs);
+        continue;
+      }
+
+      // If temporary network abort/timeout or 5xx server error, backoff and retry
+      if ((err.code === 'ECONNABORTED' || statusCode >= 500) && attempt <= maxRetries) {
+        const backoffMs = attempt * 2000;
+        console.warn(`[${operationName}] Temporary Telegram error (${err.message}). Retrying in ${backoffMs / 1000}s (attempt ${attempt}/${maxRetries})...`);
+        await sleep(backoffMs);
+        continue;
+      }
+
+      throw err;
+    }
+  }
+}
+
 /**
  * Uploads video to Telegram with streaming support
  */
@@ -74,15 +111,15 @@ async function uploadVideoToTelegram(fileBuffer, filename, mimetype = 'video/mp4
   form.append('caption', `🎬 StreamVault Video: ${safeFilename}`);
   form.append('supports_streaming', 'true');
 
-  const { data } = await axios.post(
-    `${TELEGRAM_API_BASE()}/sendVideo`,
-    form,
-    {
-      headers: form.getHeaders(),
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      timeout: 180000,
-    }
+  const { data } = await executeWithTelegramRetry(
+    () =>
+      axios.post(`${TELEGRAM_API_BASE()}/sendVideo`, form, {
+        headers: form.getHeaders(),
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 180000,
+      }),
+    'sendVideo'
   );
 
   if (!data.ok || !data.result) {
@@ -128,15 +165,15 @@ async function uploadDocumentToTelegram(fileBuffer, filename, mimetype = 'applic
   }
   form.append('caption', `📁 StreamVault File: ${safeFilename}`);
 
-  const { data } = await axios.post(
-    `${TELEGRAM_API_BASE()}/sendDocument`,
-    form,
-    {
-      headers: form.getHeaders(),
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      timeout: 180000,
-    }
+  const { data } = await executeWithTelegramRetry(
+    () =>
+      axios.post(`${TELEGRAM_API_BASE()}/sendDocument`, form, {
+        headers: form.getHeaders(),
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 180000,
+      }),
+    'sendDocument'
   );
 
   if (!data.ok || !data.result) {
@@ -181,9 +218,13 @@ async function uploadMediaToTelegram(fileBuffer, filename, mimetype = '', thumbB
 async function resolveFileUrl(fileId) {
   if (!fileId) throw new Error('fileId is missing');
 
-  const { data } = await axios.get(`${TELEGRAM_API_BASE()}/getFile`, {
-    params: { file_id: fileId },
-  });
+  const { data } = await executeWithTelegramRetry(
+    () =>
+      axios.get(`${TELEGRAM_API_BASE()}/getFile`, {
+        params: { file_id: fileId },
+      }),
+    'getFile'
+  );
 
   if (data.ok && data.result?.file_path) {
     return `${TELEGRAM_FILE_BASE()}/${data.result.file_path}`;
@@ -210,10 +251,14 @@ async function deleteVideoFromTelegram(messageId) {
   }
 
   try {
-    const { data } = await axios.post(`${TELEGRAM_API_BASE()}/deleteMessage`, {
-      chat_id: chatId,
-      message_id: messageId,
-    });
+    const { data } = await executeWithTelegramRetry(
+      () =>
+        axios.post(`${TELEGRAM_API_BASE()}/deleteMessage`, {
+          chat_id: chatId,
+          message_id: messageId,
+        }),
+      'deleteMessage'
+    );
 
     if (data.ok) {
       console.log(`[deleteVideoFromTelegram] Successfully deleted Telegram message ${messageId} from channel ${chatId}`);

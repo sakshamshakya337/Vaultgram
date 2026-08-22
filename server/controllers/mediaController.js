@@ -395,10 +395,12 @@ exports.uploadMedia = async (req, res) => {
       finalThumbnail = `data:image/jpeg;base64,${activeThumbBuffer.toString('base64')}`;
       try {
         const thumbUpload = await uploadDocumentToTelegram(activeThumbBuffer, `${path.parse(uploadFilename).name}_thumb.jpg`, 'image/jpeg');
-        thumbnailFileId = thumbUpload.fileId || '';
+        thumbnailFileId = thumbUpload?.fileId || '';
       } catch (tUploadErr) {
-        console.warn('[uploadMedia] Telegram thumbnail upload note:', tUploadErr.message);
+        console.warn('[uploadMedia] Telegram thumbnail upload note (continuing with base64 thumbnail):', tUploadErr.message);
       }
+      // Add a 1.2s delay between standalone thumbnail upload and main payload upload to prevent chat flood
+      await new Promise((r) => setTimeout(r, 1200));
     }
 
     // 1. Upload to Telegram Cloud
