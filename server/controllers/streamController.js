@@ -104,8 +104,104 @@ exports.streamMedia = async (req, res) => {
       });
     }
 
+const MIME_EXTENSION_MAP = {
+  // Images
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg',
+  'image/bmp': 'bmp',
+  'image/avif': 'avif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'image/x-icon': 'ico',
+  'image/tiff': 'tiff',
+
+  // Videos
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'video/x-matroska': 'mkv',
+  'video/x-msvideo': 'avi',
+  'video/3gpp': '3gp',
+  'video/ogg': 'ogv',
+
+  // Audio
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/wav': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/m4a': 'm4a',
+  'audio/aac': 'aac',
+  'audio/flac': 'flac',
+  'audio/webm': 'weba',
+
+  // Documents & Archives
+  'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'application/json': 'json',
+  'application/zip': 'zip',
+  'application/x-zip-compressed': 'zip',
+  'application/x-rar-compressed': 'rar',
+  'application/x-7z-compressed': '7z',
+  'application/x-tar': 'tar',
+  'application/gzip': 'gz',
+};
+
+function resolveFileExtension(item, contentType) {
+  // 1. From item.extension (if explicitly stored)
+  if (item.extension) {
+    const clean = String(item.extension).toLowerCase().replace(/^\./, '').trim();
+    if (clean && clean.length <= 8) return clean;
+  }
+
+  // 2. From Content-Type / MIME
+  const effectiveMime = (contentType || item.mimeType || '').toLowerCase().split(';')[0].trim();
+  if (MIME_EXTENSION_MAP[effectiveMime]) {
+    return MIME_EXTENSION_MAP[effectiveMime];
+  }
+
+  // 3. From item.fileType / item.fileCategory fallbacks
+  const cat = (item.fileCategory || item.mediaType || item.fileType || '').toLowerCase();
+  if (cat === 'video') return 'mp4';
+  if (cat === 'image') return 'jpg';
+  if (cat === 'audio') return 'mp3';
+  if (cat === 'pdf') return 'pdf';
+  if (cat === 'document') return 'pdf';
+
+  return 'bin';
+}
+
+function getSanitizedFilename(rawTitle, extension) {
+  let title = (rawTitle || 'file').trim();
+
+  // Strip invalid characters across Windows/macOS/Linux: \ / : * ? " < > | and control characters
+  title = title.replace(/[\\/:*?"<>|\x00-\x1F]/g, '_').trim();
+
+  // If title already ends with the target extension (case-insensitive), keep it
+  const extRegex = new RegExp(`\\.${extension}$`, 'i');
+  if (extRegex.test(title)) {
+    return title;
+  }
+
+  // If title already ends with a 2-6 char extension, keep it
+  if (/\.[a-zA-Z0-9]{2,6}$/.test(title)) {
+    return title;
+  }
+
+  return `${title || 'file'}.${extension}`;
+}
+
     const isDownload = req.query.download === '1';
-    const safeFilename = encodeURIComponent(item.title || 'file');
 
     // Dynamic origin matching for streaming media
     const reqOrigin = req.headers.origin;
@@ -175,11 +271,14 @@ exports.streamMedia = async (req, res) => {
       'Content-Type': contentType,
     };
 
-    if (isDownload) {
-      responseHeaders['Content-Disposition'] = `attachment; filename="${safeFilename}"`;
-    } else {
-      responseHeaders['Content-Disposition'] = `inline; filename="${safeFilename}"`;
-    }
+    // Construct filename and RFC-compliant Content-Disposition
+    const targetExt = resolveFileExtension(item, contentType);
+    const sanitizedFilename = getSanitizedFilename(item.title, targetExt);
+    const asciiFilename = sanitizedFilename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '');
+    const utf8Filename = encodeURIComponent(sanitizedFilename);
+    const dispositionType = isDownload ? 'attachment' : 'inline';
+
+    responseHeaders['Content-Disposition'] = `${dispositionType}; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`;
 
     if (tgResponse.headers['content-length']) {
       responseHeaders['Content-Length'] = tgResponse.headers['content-length'];

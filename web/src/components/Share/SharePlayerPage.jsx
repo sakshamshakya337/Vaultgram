@@ -86,9 +86,9 @@ export const SharePlayerPage = ({ token }) => {
     : (file?.thumbnail || '');
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
+    <div className="h-[100dvh] bg-zinc-950 text-white flex flex-col justify-between overflow-hidden selection:bg-cyan-500 selection:text-black">
       {/* Top Header */}
-      <header className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-zinc-900/40 backdrop-blur-xl shrink-0">
+      <header className="px-4 md:px-6 py-3 md:py-4 border-b border-white/10 flex items-center justify-between bg-zinc-900/60 backdrop-blur-xl shrink-0 z-20">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center p-0.5 shadow-lg shadow-cyan-500/20">
             <div className="w-full h-full bg-zinc-950 rounded-[10px] flex items-center justify-center">
@@ -112,7 +112,7 @@ export const SharePlayerPage = ({ token }) => {
       </header>
 
       {/* Main Content Body */}
-      <main className="flex-1 flex items-center justify-center p-4 md:p-8">
+      <main className="flex-1 min-h-0 flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-hidden">
         {loading ? (
           <div className="flex flex-col items-center gap-4 text-center">
             <div className="w-12 h-12 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
@@ -137,9 +137,9 @@ export const SharePlayerPage = ({ token }) => {
             </a>
           </div>
         ) : (
-          <div className="w-full max-w-4xl rounded-3xl bg-zinc-900/50 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
-            {/* Player / Preview Display */}
-            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+          <div className="w-full max-w-4xl max-h-full rounded-3xl bg-zinc-900/50 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+            {/* Player / Preview Display (Flexibly shrinks to fit viewport) */}
+            <div className="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden">
               {isVideo ? (
                 <video
                   ref={videoRef}
@@ -148,39 +148,39 @@ export const SharePlayerPage = ({ token }) => {
                   controls
                   autoPlay
                   playsInline
-                  className="w-full h-full object-contain"
+                  className="w-full h-full max-h-[calc(100dvh-15rem)] object-contain"
                 />
               ) : isImage ? (
                 <img
                   src={streamUrl}
                   alt={file.title}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full max-h-[calc(100dvh-15rem)] object-contain"
                 />
               ) : isAudio ? (
-                <div className="flex flex-col items-center gap-4 p-8 text-center">
-                  <div className="w-20 h-20 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                    <Music className="w-10 h-10" />
+                <div className="flex flex-col items-center justify-center gap-4 p-6 text-center w-full">
+                  <div className="w-16 h-16 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shadow-lg">
+                    <Music className="w-8 h-8" />
                   </div>
                   <audio src={streamUrl} controls className="w-full max-w-md" />
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-4 p-8 text-center">
-                  <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <FileText className="w-10 h-10" />
+                <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
+                  <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shadow-lg">
+                    <FileText className="w-8 h-8" />
                   </div>
                   <p className="text-xs text-zinc-400 font-mono">Document preview not supported</p>
                 </div>
               )}
             </div>
 
-            {/* File Info & Download Footer */}
-            <div className="p-6 bg-zinc-950/80 border-t border-white/10 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="text-base font-bold text-white truncate" title={file.title}>
-                    {file.title || 'Shared Video'}
+            {/* File Info & Download Footer (Always Anchored / Visible) */}
+            <div className="shrink-0 p-3.5 sm:p-5 bg-zinc-950/95 backdrop-blur-xl border-t border-white/10 space-y-2.5">
+              <div className="flex flex-row items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-sm sm:text-base font-bold text-white truncate" title={file.title}>
+                    {file.title || 'Shared File'}
                   </h2>
-                  <div className="flex items-center gap-3 text-xs text-zinc-400 mt-1 font-mono">
+                  <div className="flex items-center gap-2.5 text-xs text-zinc-400 mt-0.5 font-mono">
                     {file.fileSizeBytes ? <span>{formatBytes(file.fileSizeBytes)}</span> : null}
                     {file.duration ? (
                       <>
@@ -203,7 +203,7 @@ export const SharePlayerPage = ({ token }) => {
                 <a
                   href={downloadUrl}
                   download={file.title || 'shared-file'}
-                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all active:scale-95 cursor-pointer shrink-0"
+                  className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all active:scale-95 cursor-pointer shrink-0"
                 >
                   <Download className="w-4 h-4" />
                   <span>Download</span>
@@ -212,9 +212,9 @@ export const SharePlayerPage = ({ token }) => {
 
               {/* Note / Description */}
               {(file.note || file.description) && (
-                <div className="p-3.5 rounded-2xl bg-zinc-900/60 border border-white/5 text-xs text-zinc-300">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-zinc-900/70 border border-white/5 text-xs text-zinc-300 max-h-16 overflow-y-auto">
                   {file.note && (
-                    <p className="text-amber-300 font-semibold mb-1">
+                    <p className="text-amber-300 font-semibold mb-0.5">
                       Note: {file.note}
                     </p>
                   )}
@@ -227,7 +227,7 @@ export const SharePlayerPage = ({ token }) => {
       </main>
 
       {/* Footer */}
-      <footer className="px-6 py-4 border-t border-white/5 text-center text-xs text-zinc-500">
+      <footer className="px-4 md:px-6 py-2.5 md:py-3 border-t border-white/5 text-center text-xs text-zinc-500 shrink-0">
         <p className="flex items-center justify-center gap-1.5 font-mono text-[11px]">
           <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
           <span>Encrypted Cloud Storage Powered by Vaultgram</span>
