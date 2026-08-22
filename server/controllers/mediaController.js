@@ -22,6 +22,12 @@ const {
   generateVideoThumbnail,
   MAX_VIDEO_UPLOAD_SIZE_MB,
 } = require('../services/videoCompressionService');
+const {
+  isHeicFormat,
+  convertHeicToJpeg,
+  generateImageThumbnail,
+  getImageMetadata,
+} = require('../services/imageService');
 
 // Multer memory storage (zero local disk usage)
 const storage = multer.memoryStorage();
@@ -252,18 +258,33 @@ exports.uploadMedia = async (req, res) => {
       return res.status(400).json({ message: 'No file provided for upload' });
     }
 
-    const autoFileType = detectFileType(uploadedFile.originalname, uploadedFile.mimetype);
-    const autoCategory = detectFileCategory(uploadedFile.originalname, uploadedFile.mimetype);
+    let uploadFilename = uploadedFile.originalname;
+    let uploadMimetype = uploadedFile.mimetype;
+    let originalFormat = '';
+    let servedFormat = '';
+    let isConverted = false;
 
-    let finalBuffer = uploadedFile.buffer;
-    let finalSize = uploadedFile.size;
-    let isCompressed = false;
-    let compressionRatio = 0;
-    let compressedMeta = {};
+    // ─── Apple HEIC / HEIF Auto-Conversion to Universal JPEG ───────────────────
+    if (isHeicFormat(uploadedFile.originalname, uploadedFile.mimetype)) {
+      console.log(`[uploadMedia] Detected Apple HEIC/HEIF image: ${uploadedFile.originalname}. Converting to browser-compatible JPEG...`);
+      try {
+        const convertedJpegBuffer = await convertHeicToJpeg(uploadedFile.buffer);
+        finalBuffer = convertedJpegBuffer;
+        finalSize = convertedJpegBuffer.length;
+        uploadFilename = `${path.parse(uploadedFile.originalname).name}.jpg`;
+        uploadMimetype = 'image/jpeg';
+        originalFormat = 'heic';
+        servedFormat = 'jpeg';
+        isConverted = true;
+        console.log(`[uploadMedia] Successfully converted HEIC (${(uploadedFile.size / 1024).toFixed(1)} KB) to JPEG (${(finalSize / 1024).toFixed(1)} KB)`);
+      } catch (convErr) {
+        console.error('[uploadMedia] HEIC conversion error:', convErr.message);
+      }
+    }
 
-    const MAX_COMPRESSED_VIDEO_SIZE_MB = parseInt(process.env.MAX_COMPRESSED_VIDEO_SIZE_MB, 10) || 20;
-    const MAX_TARGET_BYTES = MAX_COMPRESSED_VIDEO_SIZE_MB * 1024 * 1024;
-    const isVideo = autoFileType === 'video' || uploadedFile.mimetype.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts)$/i.test(uploadedFile.originalname);
+    const autoFileType = isConverted ? 'image' : detectFileType(uploadFilename, uploadMimetype);
+    const autoCategory = isConverted ? 'image' : detectFileCategory(uploadFilename, uploadMimetype);
+    const isImage = autoFileType === 'image' || autoCategory === 'image' || (uploadMimetype && uploadMimetype.startsWith('image/'));
 
     // ─── Automatic Video Compression to <= 20MB ONLY when exceeding 20MB ──────
     if (isVideo) {
@@ -295,8 +316,8 @@ exports.uploadMedia = async (req, res) => {
     } else {
       // For non-video files (images, documents), enforce Telegram standard 20MB limit
       const MAX_HOSTED_TELEGRAM_SIZE = 20 * 1024 * 1024;
-      if (uploadedFile.size > MAX_HOSTED_TELEGRAM_SIZE) {
-        const sizeMb = (uploadedFile.size / (1024 * 1024)).toFixed(1);
+      if (finalSize > MAX_HOSTED_TELEGRAM_SIZE) {
+        const sizeMb = (finalSize / (1024 * 1024)).toFixed(1);
         return res.status(413).json({
           error: 'FILE_TOO_LARGE_FOR_HOSTED_API',
           message: `Non-video files over 20MB (${sizeMb} MB) are not supported on Telegram hosted Bot API. Please upload files under 20MB.`,
@@ -314,9 +335,24 @@ exports.uploadMedia = async (req, res) => {
     // Automatic thumbnail generation for video files if no custom thumbnail was provided
     if (!activeThumbBuffer && isVideo) {
       try {
-        activeThumbBuffer = await generateVideoThumbnail(finalBuffer, uploadedFile.originalname);
+        activeThumbBuffer = await generateVideoThumbnail(finalBuffer, uploadFilename);
       } catch (thumbErr) {
         console.warn('[uploadMedia] Video thumbnail extraction note:', thumbErr.message);
+      }
+    }
+
+    // Automatic thumbnail & metadata extraction for image files (WebP, PNG, JPEG, converted HEIC)
+    if (isImage) {
+      try {
+        const meta = await getImageMetadata(finalBuffer);
+        if (meta.width) compressedMeta.width = meta.width;
+        if (meta.height) compressedMeta.height = meta.height;
+
+        if (!activeThumbBuffer) {
+          activeThumbBuffer = await generateImageThumbnail(finalBuffer);
+        }
+      } catch (imgThumbErr) {
+        console.warn('[uploadMedia] Image thumbnail generation note:', imgThumbErr.message);
       }
     }
 
@@ -326,7 +362,7 @@ exports.uploadMedia = async (req, res) => {
     if (activeThumbBuffer) {
       finalThumbnail = `data:image/jpeg;base64,${activeThumbBuffer.toString('base64')}`;
       try {
-        const thumbUpload = await uploadDocumentToTelegram(activeThumbBuffer, `${path.parse(uploadedFile.originalname).name}_thumb.jpg`, 'image/jpeg');
+        const thumbUpload = await uploadDocumentToTelegram(activeThumbBuffer, `${path.parse(uploadFilename).name}_thumb.jpg`, 'image/jpeg');
         thumbnailFileId = thumbUpload.fileId || '';
       } catch (tUploadErr) {
         console.warn('[uploadMedia] Telegram thumbnail upload note:', tUploadErr.message);
@@ -347,8 +383,8 @@ exports.uploadMedia = async (req, res) => {
       extension,
     } = await uploadMediaToTelegram(
       finalBuffer,
-      uploadedFile.originalname,
-      uploadedFile.mimetype,
+      uploadFilename,
+      uploadMimetype,
       activeThumbBuffer
     );
 
@@ -362,8 +398,11 @@ exports.uploadMedia = async (req, res) => {
       fileType: fileType || autoFileType,
       mediaType: mediaType || autoCategory,
       fileCategory: fileCategory || autoCategory,
-      extension: extension || path.extname(uploadedFile.originalname).replace('.', ''),
-      mimeType: uploadedFile.mimetype || '',
+      extension: extension || path.extname(uploadFilename).replace('.', ''),
+      originalFormat: originalFormat || (isHeicFormat(uploadedFile.originalname, uploadedFile.mimetype) ? 'heic' : ''),
+      servedFormat: servedFormat || (isConverted ? 'jpeg' : ''),
+      isConverted: isConverted,
+      mimeType: uploadMimetype || '',
       thumbnail: finalThumbnail,
       thumbnailFileId: thumbnailFileId,
       telegramFileId: fileId,

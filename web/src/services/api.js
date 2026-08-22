@@ -431,12 +431,15 @@ export const api = {
   drive: {
     list: async (params = {}) => {
       const queryParams = new URLSearchParams();
+      if (params.page) queryParams.set('page', params.page);
       if (params.folderId) queryParams.set('folderId', params.folderId);
       if (params.category && params.category !== 'All') queryParams.set('category', params.category);
       if (params.fileCategory && params.fileCategory !== 'all') queryParams.set('fileCategory', params.fileCategory);
+      if (params.fileType && params.fileType !== 'all') queryParams.set('fileType', params.fileType);
       if (params.filter) queryParams.set('filter', params.filter);
       if (params.sort) queryParams.set('sort', params.sort);
-      if (params.limit) queryParams.set('limit', params.limit || '100');
+      if (params.limit) queryParams.set('limit', params.limit || '24');
+      if (params.search) queryParams.set('q', params.search);
       if (params.unlockedCategories) queryParams.set('unlockedCategories', params.unlockedCategories);
 
       return request(`/videos?${queryParams.toString()}`);
@@ -575,7 +578,7 @@ export function getFileKind(file) {
     fileType === 'image' ||
     fileCategory === 'image' ||
     mime.startsWith('image/') ||
-    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff'].includes(ext);
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff', 'heic', 'heif'].includes(ext);
 
   const isAudio =
     fileType === 'audio' ||

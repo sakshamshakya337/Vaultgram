@@ -130,21 +130,40 @@ exports.streamMedia = async (req, res) => {
       'Cache-Control': 'public, max-age=86400',
     };
 
-    // Fallback & guarantee valid video/audio mime types for browser <video> tags
+    const isImage =
+      item.fileCategory === 'image' ||
+      item.mediaType === 'image' ||
+      item.fileType === 'image' ||
+      (item.mimeType && item.mimeType.startsWith('image/')) ||
+      ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'avif', 'heic', 'heif', 'ico', 'tiff'].includes((item.extension || '').toLowerCase().replace('.', ''));
+
+    // Fallback & guarantee valid mime types for browsers
     let contentType = tgResponse.headers['content-type'];
-    if (!contentType || contentType === 'application/octet-stream' || contentType === 'text/plain') {
+    const ext = (item.extension || '').toLowerCase().replace('.', '');
+
+    if (!contentType || contentType === 'application/octet-stream' || contentType === 'text/plain' || (isImage && !contentType.startsWith('image/'))) {
       if (isVideo) {
-        const ext = (item.extension || '').toLowerCase().replace('.', '');
         if (ext === 'webm') contentType = 'video/webm';
         else if (ext === 'mov') contentType = 'video/quicktime';
         else if (ext === 'ogg' || ext === 'ogv') contentType = 'video/ogg';
         else contentType = item.mimeType || 'video/mp4';
       } else if (isAudio) {
-        const ext = (item.extension || '').toLowerCase().replace('.', '');
         if (ext === 'mp3') contentType = 'audio/mpeg';
         else if (ext === 'wav') contentType = 'audio/wav';
         else if (ext === 'ogg' || ext === 'oga') contentType = 'audio/ogg';
         else contentType = item.mimeType || 'audio/mpeg';
+      } else if (isImage) {
+        if (ext === 'webp') contentType = 'image/webp';
+        else if (ext === 'png') contentType = 'image/png';
+        else if (ext === 'gif') contentType = 'image/gif';
+        else if (ext === 'svg') contentType = 'image/svg+xml';
+        else if (ext === 'avif') contentType = 'image/avif';
+        else if (ext === 'bmp') contentType = 'image/bmp';
+        else if (ext === 'ico') contentType = 'image/x-icon';
+        else if (ext === 'heic' || ext === 'heif') contentType = item.servedFormat === 'jpeg' ? 'image/jpeg' : 'image/heic';
+        else contentType = item.mimeType && item.mimeType.startsWith('image/') ? item.mimeType : 'image/jpeg';
+      } else if (ext === 'pdf' || item.fileCategory === 'pdf' || item.mimeType === 'application/pdf') {
+        contentType = 'application/pdf';
       } else {
         contentType = item.mimeType || 'application/octet-stream';
       }
@@ -158,6 +177,8 @@ exports.streamMedia = async (req, res) => {
 
     if (isDownload) {
       responseHeaders['Content-Disposition'] = `attachment; filename="${safeFilename}"`;
+    } else {
+      responseHeaders['Content-Disposition'] = `inline; filename="${safeFilename}"`;
     }
 
     if (tgResponse.headers['content-length']) {

@@ -45,6 +45,18 @@ const mediaSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    originalFormat: {
+      type: String,
+      default: '',
+    },
+    servedFormat: {
+      type: String,
+      default: '',
+    },
+    isConverted: {
+      type: Boolean,
+      default: false,
+    },
     mimeType: {
       type: String,
       default: '',

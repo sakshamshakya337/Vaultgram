@@ -13,7 +13,10 @@ function detectFileType(filename = '', mimetype = '') {
   if (mimetype.startsWith('video/') || ['mp4', 'mkv', 'mov', 'webm', 'avi', '3gp', 'flv', 'wmv', 'm4v', 'ts'].includes(ext)) {
     return 'video';
   }
-  if (mimetype.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'avif', 'ico', 'tiff'].includes(ext)) {
+  if (
+    mimetype.startsWith('image/') ||
+    ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'avif', 'heic', 'heif', 'ico', 'tiff', 'apng', 'jfif', 'pjpeg', 'pjp'].includes(ext)
+  ) {
     return 'image';
   }
   if (mimetype.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'wma', 'opus'].includes(ext)) {

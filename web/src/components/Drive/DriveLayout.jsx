@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload, Loader2 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
@@ -46,9 +46,15 @@ export const DriveLayout = () => {
   const [modalPreviewState, setModalPreviewState] = useState(null); // { items: [], index: 0 }
   const [photoViewerState, setPhotoViewerState] = useState(null); // { items: [], index: 0 }
 
-  // Drive state
+  // Drive state & auto-pagination
   const [driveItems, setDriveItems] = useState([]);
   const [loadingDrive, setLoadingDrive] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 24;
+  const sentinelRef = useRef(null);
 
   // Modals
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
@@ -56,41 +62,89 @@ export const DriveLayout = () => {
   const [isVoiceMemoOpen, setIsVoiceMemoOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState(null);
 
-  // Load drive items (folders and files)
-  const loadDriveItems = useCallback(async () => {
-    setLoadingDrive(true);
+  // Load drive items with pagination support
+  const loadDriveItems = useCallback(async (pageToLoad = 1, isAppend = false) => {
+    if (isAppend) {
+      setLoadingMore(true);
+    } else {
+      setLoadingDrive(true);
+    }
+
     try {
       const isScopedView = selectedCategory !== 'All' || !!currentFolder;
       const unlockedCats = isScopedView
         ? Array.from(sessionUnlockedCategories || []).join(',')
         : undefined;
 
+      const params = {
+        page: pageToLoad,
+        limit: PAGE_SIZE,
+        unlockedCategories: unlockedCats,
+      };
+
       if (searchQuery.trim()) {
-        const res = await api.drive.list({ limit: 100, unlockedCategories: unlockedCats });
-        const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
-        setDriveItems(items);
+        params.search = searchQuery.trim();
       } else {
-        const res = await api.drive.list({
-          folderId: currentFolder?._id || null,
-          category: selectedCategory !== 'All' ? selectedCategory : undefined,
-          filter: currentNav,
-          limit: 100,
-          unlockedCategories: unlockedCats,
+        params.folderId = currentFolder?._id || null;
+        if (selectedCategory !== 'All') {
+          params.category = selectedCategory;
+        }
+        params.filter = currentNav;
+      }
+
+      const res = await api.drive.list(params);
+      const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
+      const totalPagesRes = res?.totalPages || Math.ceil((res?.total || items.length) / PAGE_SIZE) || 1;
+
+      setPage(pageToLoad);
+      setTotalPages(totalPagesRes);
+      setTotalCount(res?.total ?? items.length);
+
+      if (isAppend) {
+        setDriveItems((prev) => {
+          const existingIds = new Set(prev.map((it) => it._id || it.id));
+          const newUnique = items.filter((it) => !existingIds.has(it._id || it.id));
+          return [...prev, ...newUnique];
         });
-        const items = res?.items || res?.videos || (Array.isArray(res) ? res : []);
+      } else {
         setDriveItems(items);
       }
     } catch (err) {
       console.warn('Drive items fetch error:', err.message);
-      setDriveItems([]);
+      if (!isAppend) setDriveItems([]);
     } finally {
       setLoadingDrive(false);
+      setLoadingMore(false);
     }
   }, [currentFolder, currentNav, searchQuery, selectedCategory, sessionUnlockedCategories]);
 
   useEffect(() => {
-    loadDriveItems();
+    loadDriveItems(1, false);
   }, [loadDriveItems]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!loadingDrive && !loadingMore && page < totalPages) {
+      loadDriveItems(page + 1, true);
+    }
+  }, [loadingDrive, loadingMore, page, totalPages, loadDriveItems]);
+
+  // Automatic Infinite Scroll with IntersectionObserver
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loadingDrive && !loadingMore && page < totalPages) {
+          handleLoadMore();
+        }
+      },
+      { threshold: 0.1, rootMargin: '300px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [handleLoadMore, loadingDrive, loadingMore, page, totalPages]);
 
   // Real-time automatic refresh when any queued upload completes
   useEffect(() => {
@@ -470,6 +524,21 @@ export const DriveLayout = () => {
                   />
                 )
               )}
+
+              {/* Infinite Scroll Sentinel & Loading Indicator */}
+              <div ref={sentinelRef} className="py-6 flex flex-col items-center justify-center min-h-[48px]">
+                {loadingMore && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/80 border border-white/10 text-cyan-400 text-xs font-semibold shadow-lg backdrop-blur-md animate-pulse">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Loading more files...</span>
+                  </div>
+                )}
+                {!loadingMore && page >= totalPages && files.length > PAGE_SIZE && (
+                  <span className="text-[11px] font-mono text-zinc-600">
+                    All {totalCount || files.length} files loaded
+                  </span>
+                )}
+              </div>
             </div>
           </main>
         )}
