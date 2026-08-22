@@ -25,8 +25,8 @@ import { usePaginatedList } from '../../hooks/usePaginatedList';
 
 export const DriveLayout = () => {
   const {
-    currentCategory: selectedCategory,
-    setCurrentCategory: setSelectedCategory,
+    selectedCategory = 'All',
+    setSelectedCategory,
     categories,
     categoryLockTarget,
     setCategoryLockTarget,
@@ -55,14 +55,14 @@ export const DriveLayout = () => {
 
   // Memoized query parameters for unified cursor pagination
   const queryParams = useMemo(() => {
-    const isScopedView = selectedCategory !== 'All' || !!currentFolder;
+    const isScopedView = (selectedCategory && selectedCategory !== 'All') || !!currentFolder;
     const unlockedCats = isScopedView
       ? Array.from(sessionUnlockedCategories || []).join(',')
       : undefined;
 
     return {
       folderId: currentFolder?._id || null,
-      category: selectedCategory !== 'All' ? selectedCategory : undefined,
+      category: selectedCategory && selectedCategory !== 'All' ? selectedCategory : undefined,
       filter: currentNav,
       search: searchQuery.trim() || undefined,
       unlockedCategories: unlockedCats,
@@ -123,15 +123,15 @@ export const DriveLayout = () => {
 
     if (effectiveLocked.length > 0) {
       list = list.filter((v) => {
-        const cat = (v.category || '').replace(/^#/, '').toLowerCase().trim();
+        const cat = (v?.category || '').replace(/^#/, '').toLowerCase().trim();
         const isCatLocked = effectiveLocked.some(
-          (lc) => lc.replace(/^#/, '').toLowerCase().trim() === cat
+          (lc) => (typeof lc === 'string' ? lc : lc?.category || '').replace(/^#/, '').toLowerCase().trim() === cat
         );
         if (!isCatLocked) return true;
 
         // In aggregate / home view (selectedCategory === 'All' and no currentFolder),
         // locked categories are ALWAYS completely excluded, even if unlocked in another context.
-        if (selectedCategory === 'All' && !currentFolder) {
+        if ((!selectedCategory || selectedCategory === 'All') && !currentFolder) {
           return false;
         }
 
@@ -141,10 +141,10 @@ export const DriveLayout = () => {
     }
 
     // If viewing a category filter
-    if (selectedCategory !== 'All' && currentNav === 'all') {
-      const cleanSelected = selectedCategory.replace(/^#/, '').toLowerCase().trim();
+    if (selectedCategory && selectedCategory !== 'All' && currentNav === 'all') {
+      const cleanSelected = String(selectedCategory || '').replace(/^#/, '').toLowerCase().trim();
       list = list.filter(
-        (v) => (v.category || '').replace(/^#/, '').toLowerCase().trim() === cleanSelected
+        (v) => (v?.category || '').replace(/^#/, '').toLowerCase().trim() === cleanSelected
       );
     }
 
@@ -178,13 +178,13 @@ export const DriveLayout = () => {
   // Handle opening custom folder with PIN check
   const handleOpenFolder = (folder) => {
     const title = folder.title || '';
-    const folderId = folder._id || folder.id;
+    const folderId = folder._id || folder.id || '';
     const isLocked =
-      (lockedCategories || []).some((lc) => lc.toLowerCase() === title.toLowerCase()) ||
-      (lockedCategories || []).some((lc) => lc.toLowerCase() === folderId.toLowerCase());
+      (lockedCategories || []).some((lc) => (typeof lc === 'string' ? lc : lc?.category || '').toLowerCase() === title.toLowerCase()) ||
+      (lockedCategories || []).some((lc) => (typeof lc === 'string' ? lc : lc?.category || '').toLowerCase() === String(folderId).toLowerCase());
     const isUnlockedSession =
       sessionUnlockedCategories?.has(title.toLowerCase()) ||
-      sessionUnlockedCategories?.has(folderId.toLowerCase());
+      sessionUnlockedCategories?.has(String(folderId).toLowerCase());
 
     if (isLocked && !isUnlockedSession && hasPin) {
       setCategoryLockTarget(title);
