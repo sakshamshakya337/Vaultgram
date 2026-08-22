@@ -21,6 +21,8 @@ const {
   compressVideoIfNeeded,
   generateVideoThumbnail,
   MAX_VIDEO_UPLOAD_SIZE_MB,
+  MAX_COMPRESSED_VIDEO_SIZE_MB,
+  MAX_TARGET_BYTES,
 } = require('../services/videoCompressionService');
 const {
   isHeicFormat,
