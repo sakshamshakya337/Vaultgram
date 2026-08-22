@@ -1,17 +1,32 @@
 'use strict';
 const router = require('express').Router();
+const cors = require('cors');
 const {
   createShareLink,
   getShareInfo,
+  streamSharedMedia,
+  downloadSharedMedia,
   revokeShareLink,
 } = require('../controllers/shareController');
-const { protect, optionalAuth } = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/auth');
+const { streamLimiter } = require('../middleware/rateLimiter');
 
-// Public route: Retrieve shared file info by token
-router.get('/:token/info', getShareInfo);
+const publicShareCors = cors({
+  origin: '*',
+  methods: ['GET', 'HEAD', 'OPTIONS', 'POST', 'DELETE'],
+  allowedHeaders: ['Range', 'Authorization', 'Content-Type', 'bypass-tunnel-reminder'],
+  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Type', 'Content-Disposition'],
+});
+
+router.options('*', publicShareCors, (_req, res) => res.sendStatus(204));
+
+// Public routes: Retrieve shared file info, stream, and download
+router.get('/:token/info', publicShareCors, getShareInfo);
+router.get('/:token/stream', publicShareCors, streamLimiter, streamSharedMedia);
+router.get('/:token/download', publicShareCors, streamLimiter, downloadSharedMedia);
 
 // Protected routes: Create & Revoke share links
-router.post('/create/:id', optionalAuth, createShareLink);
-router.delete('/:token', optionalAuth, revokeShareLink);
+router.post('/create/:id', publicShareCors, optionalAuth, createShareLink);
+router.delete('/:token', publicShareCors, optionalAuth, revokeShareLink);
 
 module.exports = router;

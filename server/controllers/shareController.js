@@ -55,6 +55,8 @@ exports.createShareLink = async (req, res) => {
   }
 };
 
+const { streamMedia } = require('./streamController');
+
 /**
  * GET /api/v1/share/:token/info
  * Retrieve file metadata for a public time-limited share link
@@ -99,13 +101,82 @@ exports.getShareInfo = async (req, res) => {
         duration: file.duration,
         thumbnail: file.thumbnail,
         thumbnailFileId: file.thumbnailFileId,
-        streamUrl: `/api/v1/stream/${file._id}`,
+        streamUrl: `/api/v1/share/${link.token}/stream`,
+        downloadUrl: `/api/v1/share/${link.token}/download`,
         createdAt: file.createdAt,
       },
     });
   } catch (err) {
     console.error('[getShareInfo error]:', err.message);
     res.status(500).json({ message: 'Failed to retrieve shared file' });
+  }
+};
+
+/**
+ * GET /api/v1/share/:token/stream
+ * Public streaming endpoint for shared files with Range request support
+ */
+exports.streamSharedMedia = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const link = await ShareLink.findOne({ token }).populate('fileId');
+
+    if (!link) {
+      return res.status(404).json({ message: 'Share link not found or has expired' });
+    }
+
+    if (new Date(link.expiresAt) < new Date()) {
+      await ShareLink.deleteOne({ _id: link._id }).catch(() => {});
+      return res.status(410).json({ message: 'This share link has expired' });
+    }
+
+    const file = link.fileId;
+    if (!file || file.isTrashed) {
+      return res.status(404).json({ message: 'Shared file no longer exists' });
+    }
+
+    req.params.id = file._id.toString();
+    req.query.download = '0';
+    return streamMedia(req, res);
+  } catch (err) {
+    console.error('[streamSharedMedia error]:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Failed to stream shared file' });
+    }
+  }
+};
+
+/**
+ * GET /api/v1/share/:token/download
+ * Public download endpoint for shared files with Content-Disposition: attachment
+ */
+exports.downloadSharedMedia = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const link = await ShareLink.findOne({ token }).populate('fileId');
+
+    if (!link) {
+      return res.status(404).json({ message: 'Share link not found or has expired' });
+    }
+
+    if (new Date(link.expiresAt) < new Date()) {
+      await ShareLink.deleteOne({ _id: link._id }).catch(() => {});
+      return res.status(410).json({ message: 'This share link has expired' });
+    }
+
+    const file = link.fileId;
+    if (!file || file.isTrashed) {
+      return res.status(404).json({ message: 'Shared file no longer exists' });
+    }
+
+    req.params.id = file._id.toString();
+    req.query.download = '1';
+    return streamMedia(req, res);
+  } catch (err) {
+    console.error('[downloadSharedMedia error]:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Failed to download shared file' });
+    }
   }
 };
 

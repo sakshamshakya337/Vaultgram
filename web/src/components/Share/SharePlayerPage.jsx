@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Download, Clock, Eye, AlertCircle, Sparkles, HardDrive, ShieldCheck, FileText, Music, Image as ImageIcon } from 'lucide-react';
-import { api, formatBytes, formatDuration, formatViews } from '../../services/api';
+import { api, API_BASE_URL, formatBytes, formatDuration, formatViews } from '../../services/api';
 
 export const SharePlayerPage = ({ token }) => {
   const [data, setData] = useState(null);
@@ -72,6 +72,19 @@ export const SharePlayerPage = ({ token }) => {
   const isImage = file?.fileType === 'image';
   const isAudio = file?.fileType === 'audio';
 
+  // Guarantee absolute backend URLs so Vercel SPA rewrite never intercepts stream/download requests
+  const streamUrl = file?.streamUrl
+    ? (file.streamUrl.startsWith('http') ? file.streamUrl : `${API_BASE_URL}${file.streamUrl}`)
+    : api.share.getStreamUrl(token);
+
+  const downloadUrl = file?.downloadUrl
+    ? (file.downloadUrl.startsWith('http') ? file.downloadUrl : `${API_BASE_URL}${file.downloadUrl}`)
+    : api.share.getDownloadUrl(token);
+
+  const posterUrl = file?.thumbnail?.startsWith('/api')
+    ? `${API_BASE_URL}${file.thumbnail}`
+    : (file?.thumbnail || '');
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
       {/* Top Header */}
@@ -130,8 +143,8 @@ export const SharePlayerPage = ({ token }) => {
               {isVideo ? (
                 <video
                   ref={videoRef}
-                  src={file.streamUrl}
-                  poster={file.thumbnail || ''}
+                  src={streamUrl}
+                  poster={posterUrl}
                   controls
                   autoPlay
                   playsInline
@@ -139,7 +152,7 @@ export const SharePlayerPage = ({ token }) => {
                 />
               ) : isImage ? (
                 <img
-                  src={file.streamUrl}
+                  src={streamUrl}
                   alt={file.title}
                   className="w-full h-full object-contain"
                 />
@@ -148,7 +161,7 @@ export const SharePlayerPage = ({ token }) => {
                   <div className="w-20 h-20 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
                     <Music className="w-10 h-10" />
                   </div>
-                  <audio src={file.streamUrl} controls className="w-full max-w-md" />
+                  <audio src={streamUrl} controls className="w-full max-w-md" />
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-4 p-8 text-center">
@@ -188,7 +201,7 @@ export const SharePlayerPage = ({ token }) => {
                 </div>
 
                 <a
-                  href={`${file.streamUrl}?download=1`}
+                  href={downloadUrl}
                   download={file.title || 'shared-file'}
                   className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all active:scale-95 cursor-pointer shrink-0"
                 >

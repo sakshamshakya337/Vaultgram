@@ -511,6 +511,8 @@ export const api = {
         body: JSON.stringify({ durationHours }),
       }),
     getInfo: (token) => request(`/share/${token}/info`),
+    getStreamUrl: (token) => `${BASE_URL}/share/${token}/stream`,
+    getDownloadUrl: (token) => `${BASE_URL}/share/${token}/download`,
     revoke: (token) =>
       request(`/share/${token}`, {
         method: 'DELETE',
