@@ -163,6 +163,8 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, []);
 
+  const REELS_CHUNK_SIZE = 6;
+
   // Fetch initial videos for category with generation tracking and PIN check
   const fetchVideos = useCallback(
     async (cat = selectedCategory, forceUnlock = false) => {
@@ -190,7 +192,7 @@ export const VideoFeedProvider = ({ children }) => {
           : Array.from(sessionUnlockedCategories).join(',');
         const res = await api.videos.getFeed({
           category: cat,
-          limit: 10,
+          limit: REELS_CHUNK_SIZE,
           unlockedCategories: unlockedCats,
         });
 
@@ -233,7 +235,7 @@ export const VideoFeedProvider = ({ children }) => {
       const res = await api.videos.getFeed({
         category: targetCategory,
         cursor: targetCursor,
-        limit: 10,
+        limit: REELS_CHUNK_SIZE,
         unlockedCategories: unlockedCats,
       });
 

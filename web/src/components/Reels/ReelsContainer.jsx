@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/useAuth';
 import { ReelCard } from './ReelCard';
 import { TapToUnmuteHint } from './TapToUnmuteHint';
 import { ReelSkeleton } from '../Skeletons/ReelSkeleton';
-import { Video, Sparkles, Plus, RefreshCw, Lock, Shield } from 'lucide-react';
+import { Video, Sparkles, Plus, RefreshCw, Lock, Shield, Loader2, CheckCircle2 } from 'lucide-react';
 
 export const ReelsContainer = () => {
   const containerRef = useRef(null);
@@ -12,6 +12,9 @@ export const ReelsContainer = () => {
   const {
     videos,
     loading,
+    loadingMore,
+    hasMore,
+    loadMoreVideos,
     error,
     selectedCategory,
     activeVideoIndex,
@@ -53,6 +56,15 @@ export const ReelsContainer = () => {
       observer.disconnect();
     };
   }, [videos, setActiveVideoIndex]);
+
+  // Scroll listener for pagination near bottom of scroll container
+  const handleContainerScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el || loadingMore || !hasMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight * 1.5) {
+      loadMoreVideos();
+    }
+  }, [loadingMore, hasMore, loadMoreVideos]);
 
   // Keyboard navigation for desktop users
   useEffect(() => {
@@ -167,9 +179,10 @@ export const ReelsContainer = () => {
       {/* Session Unmute Floating Hint */}
       <TapToUnmuteHint />
 
-      {/* Main Snap Feed */}
+      {/* Main Snap Feed with chunked pagination */}
       <div
         ref={containerRef}
+        onScroll={handleContainerScroll}
         className="w-full h-full overflow-y-scroll snap-y-mandatory no-scrollbar"
       >
         {videos.map((video, idx) => (
@@ -185,6 +198,14 @@ export const ReelsContainer = () => {
             />
           </div>
         ))}
+
+        {/* Loading More Spinner item in snap scroll */}
+        {loadingMore && (
+          <div className="reel-snap-item snap-start w-full h-full shrink-0 flex flex-col items-center justify-center bg-zinc-950 text-center p-6 space-y-3">
+            <div className="w-12 h-12 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+            <p className="text-xs font-mono text-cyan-400">Loading more reels...</p>
+          </div>
+        )}
       </div>
     </div>
   );
