@@ -67,7 +67,7 @@ function runFfmpegPass({ inputPath, outputPath, videoBitrateKbps, audioBitrateKb
       .output(outputPath)
       .videoCodec('libx264')
       .outputOptions([
-        '-preset fast',
+        '-preset veryfast',
         '-movflags +faststart',
         '-pix_fmt yuv420p',
         `-maxrate ${Math.floor(videoBitrateKbps * 1.2)}k`,

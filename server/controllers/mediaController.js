@@ -317,8 +317,14 @@ exports.uploadMedia = async (req, res) => {
 
     const autoFileType = isConverted ? 'image' : detectFileType(uploadFilename, uploadMimetype);
     const autoCategory = isConverted ? 'image' : detectFileCategory(uploadFilename, uploadMimetype);
+    const videoExtRegex = /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts|wmv|ogv)$/i;
     const isImage = autoFileType === 'image' || autoCategory === 'image' || (uploadMimetype && uploadMimetype.startsWith('image/'));
-    const isVideo = autoFileType === 'video' || autoCategory === 'video' || (uploadMimetype && uploadMimetype.startsWith('video/'));
+    const isVideo =
+      autoFileType === 'video' ||
+      autoCategory === 'video' ||
+      (uploadMimetype && uploadMimetype.startsWith('video/')) ||
+      videoExtRegex.test(uploadedFile.originalname) ||
+      videoExtRegex.test(uploadFilename);
 
     // ─── Automatic Video Compression to <= 20MB ONLY when exceeding 20MB ──────
     if (isVideo) {
@@ -335,11 +341,15 @@ exports.uploadMedia = async (req, res) => {
         finalSize = compressionResult.size;
         isCompressed = compressionResult.compressed;
         compressionRatio = compressionResult.compressionPercentage;
+        uploadFilename = `${path.parse(uploadedFile.originalname).name}.mp4`;
+        uploadMimetype = 'video/mp4';
+        servedFormat = 'mp4';
         compressedMeta = {
           duration: compressionResult.duration,
           width: compressionResult.width,
           height: compressionResult.height,
         };
+        console.log(`[uploadMedia] Video compressed successfully: ${(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB -> ${(finalSize / (1024 * 1024)).toFixed(2)} MB (${compressionRatio}% reduction)`);
       } else {
         console.log(`[uploadMedia] Video size (${(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB) is already <= ${MAX_COMPRESSED_VIDEO_SIZE_MB}MB. Skipping FFmpeg compression entirely.`);
         finalBuffer = uploadedFile.buffer;
