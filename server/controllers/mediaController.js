@@ -311,6 +311,7 @@ exports.uploadMedia = async (req, res) => {
     const autoFileType = isConverted ? 'image' : detectFileType(uploadFilename, uploadMimetype);
     const autoCategory = isConverted ? 'image' : detectFileCategory(uploadFilename, uploadMimetype);
     const isImage = autoFileType === 'image' || autoCategory === 'image' || (uploadMimetype && uploadMimetype.startsWith('image/'));
+    const isVideo = autoFileType === 'video' || autoCategory === 'video' || (uploadMimetype && uploadMimetype.startsWith('video/'));
 
     // ─── Automatic Video Compression to <= 20MB ONLY when exceeding 20MB ──────
     if (isVideo) {
