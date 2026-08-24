@@ -22,6 +22,7 @@ export const DriveFolderGrid = ({
   onRenameFolder,
   onDeleteFolder,
   onShareFolder,
+  onFolderContextMenu,
 }) => {
   const {
     lockedCategories,
@@ -92,6 +93,13 @@ export const DriveFolderGrid = ({
                   <div
                     key={folderId}
                     onClick={() => onOpenFolder(folder)}
+                    onContextMenu={(e) => {
+                      if (onFolderContextMenu) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onFolderContextMenu(e, folder, true);
+                      }
+                    }}
                     className="group relative p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 border border-white/5 hover:border-cyan-500/30 shadow-md transition-all duration-200 cursor-pointer flex items-center justify-between"
                   >
                     <div className="flex items-center space-x-3.5 min-w-0 flex-1">
@@ -229,6 +237,13 @@ export const DriveFolderGrid = ({
                   <div
                     key={cat}
                     onClick={() => onOpenCategory(cat)}
+                    onContextMenu={(e) => {
+                      if (onFolderContextMenu) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onFolderContextMenu(e, { title: cat, category: cat, isCategory: true }, true);
+                      }
+                    }}
                     className="group relative p-3.5 rounded-2xl bg-zinc-900/40 hover:bg-zinc-900 border border-white/5 hover:border-cyan-500/30 shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between min-h-[90px]"
                   >
                     <div className="flex items-center justify-between">

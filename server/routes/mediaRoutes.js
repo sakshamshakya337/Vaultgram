@@ -15,6 +15,8 @@ const {
   listFolders,
   renameItem,
   moveItem,
+  batchMove,
+  batchTrash,
   updateNote,
   trashOrDelete,
   restoreTrash,
@@ -41,9 +43,14 @@ router.get('/user/library', optionalAuth, getUserLibrary);
 router.get('/folders', optionalAuth, listFolders);
 router.post('/folder', optionalAuth, createFolder);
 
+// ─── Batch Operations ────────────────────────────────────────────────────────
+router.post('/batch/trash', optionalAuth, batchTrash);
+router.patch('/batch/move', optionalAuth, batchMove);
+
 // ─── Drive File & Folder Operations ──────────────────────────────────────────
 router.patch('/:id/rename', optionalAuth, renameItem);
 router.patch('/:id/move', optionalAuth, moveItem);
+router.patch('/:id', optionalAuth, renameItem); // Alias for updating title
 router.patch('/:id/note', optionalAuth, updateNote);
 router.post('/:id/star', optionalAuth, toggleStar);
 router.post('/:id/like', optionalAuth, toggleStar); // Alias

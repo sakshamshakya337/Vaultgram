@@ -157,10 +157,11 @@ export const DriveHeader = ({
           <div className="hidden md:block flex-1 max-w-md relative mx-2">
             <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
+              id="drive-search-input"
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search files by title or tags..."
+              placeholder="Search files by title or tags... (Press / to search)"
               className="w-full pl-9 pr-8 py-2 rounded-2xl bg-zinc-900/80 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all"
             />
             {searchQuery && (

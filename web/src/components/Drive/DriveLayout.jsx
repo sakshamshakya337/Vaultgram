@@ -24,6 +24,10 @@ import { BottomNav } from '../Navigation/BottomNav';
 import { UploadDropzoneOverlay } from '../Upload/UploadDropzoneOverlay';
 import { DriveFolderSkeleton, DriveGridSkeleton, DriveListSkeleton } from '../Skeletons/DriveSkeleton';
 import { usePaginatedList } from '../../hooks/usePaginatedList';
+import { DriveSelectionBar } from './DriveSelectionBar';
+import { DriveContextMenu } from './DriveContextMenu';
+import { MoveToModal } from './MoveToModal';
+import { BulkDeleteModal } from './BulkDeleteModal';
 
 export const DriveLayout = () => {
   const {
@@ -49,6 +53,17 @@ export const DriveLayout = () => {
   const [modalPreviewState, setModalPreviewState] = useState(null); // { items: [], index: 0 }
   const [photoViewerState, setPhotoViewerState] = useState(null); // { items: [], index: 0 }
   const [docViewerState, setDocViewerState] = useState(null); // { items: [], index: 0 }
+
+  // Multi-Selection & Navigation Focus State
+  const [selectedFileIds, setSelectedFileIds] = useState([]);
+  const [lastSelectedId, setLastSelectedId] = useState(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+
+  // Context Menu & Action Modals State
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, item, isFolder, selectedCount }
+  const [moveToTarget, setMoveToTarget] = useState(null); // { items: [] }
+  const [bulkDeleteTarget, setBulkDeleteTarget] = useState(null); // { ids: [] }
+  const [singleShareTarget, setSingleShareTarget] = useState(null);
 
   // Modals
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
@@ -104,7 +119,7 @@ export const DriveLayout = () => {
     return () => observer.disconnect();
   }, [loadMore, loadingDrive, loadingMore, hasMore]);
 
-  // Real-time automatic in-place state update when any queued upload completes (zero reload / zero refetch)
+  // Real-time automatic in-place state update when any queued upload completes
   useEffect(() => {
     const unregister = registerOnUploadSuccess((newDoc) => {
       if (!newDoc || !newDoc._id) return;
@@ -165,8 +180,6 @@ export const DriveLayout = () => {
         );
         if (!isCatLocked) return true;
 
-        // In aggregate / home view (selectedCategory === 'All' and no currentFolder),
-        // locked categories are ALWAYS completely excluded, even if unlocked in another context.
         if ((!selectedCategory || selectedCategory === 'All') && !currentFolder) {
           return false;
         }
@@ -186,25 +199,23 @@ export const DriveLayout = () => {
 
     // Auto-categorize smart views by date
     if (currentNav === 'this-week') {
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(startOfWeek.getDate() - today.getDay());
-      list = list.filter((v) => new Date(v.createdAt || 0) >= startOfWeek);
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      list = list.filter((v) => new Date(v.createdAt || v.updatedAt) >= oneWeekAgo);
     } else if (currentNav === 'this-month') {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      list = list.filter((v) => new Date(v.createdAt || 0) >= startOfMonth);
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+      list = list.filter((v) => new Date(v.createdAt || v.updatedAt) >= oneMonthAgo);
     }
 
-    // Search query filtering
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter(
         (v) =>
           (v.title || '').toLowerCase().includes(q) ||
+          (v.note || '').toLowerCase().includes(q) ||
           (v.category || '').toLowerCase().includes(q) ||
-          (v.description || '').toLowerCase().includes(q)
+          (v.extension || '').toLowerCase().includes(q)
       );
     }
 
@@ -226,11 +237,13 @@ export const DriveLayout = () => {
       setCategoryLockTarget(title);
     } else {
       setCurrentFolder(folder);
+      setSelectedFileIds([]);
     }
   };
 
   const handleOpenCategory = (cat) => {
     requestCategory(cat);
+    setSelectedFileIds([]);
   };
 
   const handleDeleteFolder = async (folderId) => {
@@ -248,10 +261,133 @@ export const DriveLayout = () => {
     try {
       await api.drive.delete(fileId);
       setDriveItems((prev) => prev.filter((item) => (item._id || item.id) !== fileId));
+      setSelectedFileIds((prev) => prev.filter((id) => id !== fileId));
       loadDriveItems();
     } catch (err) {
       alert(err.message || 'Failed to delete file');
     }
+  };
+
+  // Inline rename handler
+  const handleRenameFile = async (fileId, newTitle) => {
+    try {
+      await api.drive.rename(fileId, newTitle);
+      setDriveItems((prev) =>
+        prev.map((item) =>
+          (item._id === fileId || item.id === fileId) ? { ...item, title: newTitle } : item
+        )
+      );
+    } catch (err) {
+      console.error('[handleRenameFile error]:', err);
+      throw err;
+    }
+  };
+
+  // Multi-Selection Logic
+  const handleToggleSelect = useCallback(
+    (fileId, event, index) => {
+      setSelectedFileIds((prev) => {
+        if (event?.shiftKey && lastSelectedId) {
+          const idx1 = files.findIndex((f) => (f._id || f.id) === lastSelectedId);
+          const idx2 = typeof index === 'number' ? index : files.findIndex((f) => (f._id || f.id) === fileId);
+
+          if (idx1 >= 0 && idx2 >= 0) {
+            const start = Math.min(idx1, idx2);
+            const end = Math.max(idx1, idx2);
+            const rangeIds = files.slice(start, end + 1).map((f) => f._id || f.id);
+            const set = new Set([...prev, ...rangeIds]);
+            return Array.from(set);
+          }
+        }
+
+        if (prev.includes(fileId)) {
+          return prev.filter((id) => id !== fileId);
+        } else {
+          return [...prev, fileId];
+        }
+      });
+      setLastSelectedId(fileId);
+      if (typeof index === 'number') setFocusedIndex(index);
+    },
+    [files, lastSelectedId]
+  );
+
+  const handleToggleSelectAll = useCallback(() => {
+    if (selectedFileIds.length === files.length) {
+      setSelectedFileIds([]);
+    } else {
+      setSelectedFileIds(files.map((f) => f._id || f.id));
+    }
+  }, [selectedFileIds.length, files]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedFileIds([]);
+    setFocusedIndex(-1);
+  }, []);
+
+  // Bulk Actions
+  const handleExecuteBulkDelete = async () => {
+    const ids = bulkDeleteTarget?.ids || selectedFileIds;
+    if (ids.length === 0) return;
+
+    try {
+      await api.drive.batchTrash(ids);
+      setDriveItems((prev) => prev.filter((item) => !ids.includes(item._id || item.id)));
+      setSelectedFileIds([]);
+      setBulkDeleteTarget(null);
+      loadDriveItems();
+    } catch (err) {
+      console.error('[handleExecuteBulkDelete error]:', err);
+      alert(err.message || 'Failed to bulk delete files');
+    }
+  };
+
+  const handleExecuteBulkMove = async ({ ids, destination }) => {
+    loadDriveItems();
+    setSelectedFileIds([]);
+    setMoveToTarget(null);
+  };
+
+  const handleBulkDownload = useCallback(() => {
+    const targetFiles = files.filter((f) => selectedFileIds.includes(f._id || f.id));
+    targetFiles.forEach((file, i) => {
+      setTimeout(() => {
+        const link = document.createElement('a');
+        link.href = api.stream.getUrl(file._id || file.id, true);
+        link.download = file.title || 'file';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }, i * 350);
+    });
+  }, [files, selectedFileIds]);
+
+  const handleBulkShare = useCallback(() => {
+    const targetFiles = files.filter((f) => selectedFileIds.includes(f._id || f.id));
+    if (targetFiles.length === 1) {
+      setSingleShareTarget(targetFiles[0]);
+    } else if (targetFiles.length > 1) {
+      // If all selected files share the same category, offer folder share, otherwise share first
+      setSingleShareTarget(targetFiles[0]);
+    }
+  }, [files, selectedFileIds]);
+
+  // Context Menu Dispatcher
+  const handleContextMenu = (e, item, isFolder = false) => {
+    const itemId = item._id || item.id;
+    if (!isFolder && itemId) {
+      if (!selectedFileIds.includes(itemId)) {
+        setSelectedFileIds([itemId]);
+        setLastSelectedId(itemId);
+      }
+    }
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      item,
+      isFolder,
+      selectedCount: !isFolder && selectedFileIds.includes(itemId) ? selectedFileIds.length : 1,
+    });
   };
 
   const handleSelectFile = useCallback(
@@ -260,7 +396,6 @@ export const DriveLayout = () => {
       const { isImage, isVideo } = getFileKind(file);
 
       if (isImage) {
-        // Filter current context files to ONLY photos/images so swipe transitions between photos
         const imageFiles = files.filter((f) => getFileKind(f).isImage);
         const photoIdx = imageFiles.findIndex(
           (f) => (f._id || f.id) === (file._id || file.id)
@@ -270,7 +405,6 @@ export const DriveLayout = () => {
           index: photoIdx >= 0 ? photoIdx : 0,
         });
       } else if (isVideo) {
-        // Filter current context files to ONLY videos for video player
         const videoFiles = files.filter((f) => getFileKind(f).isVideo);
         const videoIdx = videoFiles.findIndex(
           (f) => (f._id || f.id) === (file._id || file.id)
@@ -280,7 +414,6 @@ export const DriveLayout = () => {
           index: videoIdx >= 0 ? videoIdx : (typeof idx === 'number' ? idx : 0),
         });
       } else {
-        // Documents, PDFs, DOCX, XLSX, CSV, code, and other files
         const docFiles = files.filter((f) => !getFileKind(f).isImage && !getFileKind(f).isVideo);
         const docIdx = docFiles.findIndex(
           (f) => (f._id || f.id) === (file._id || file.id)
@@ -294,11 +427,116 @@ export const DriveLayout = () => {
     [files]
   );
 
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Don't intercept if user is typing in an input or textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName) || e.target?.isContentEditable) {
+        return;
+      }
+
+      // Don't intercept if any full-screen viewer modal is active
+      const isAnyModalOpen =
+        !!modalPreviewState ||
+        !!photoViewerState ||
+        !!docViewerState ||
+        isNewFolderOpen ||
+        !!renameTarget ||
+        !!shareFolderTarget ||
+        isCameraOpen ||
+        isVoiceMemoOpen ||
+        !!moveToTarget ||
+        !!bulkDeleteTarget ||
+        !!singleShareTarget;
+
+      if (isAnyModalOpen) return;
+
+      // 1. "/" focuses search input
+      if (e.key === '/') {
+        e.preventDefault();
+        const searchEl = document.getElementById('drive-search-input');
+        if (searchEl) {
+          searchEl.focus();
+          searchEl.select();
+        }
+        return;
+      }
+
+      // 2. Escape clears selection / context menu
+      if (e.key === 'Escape') {
+        if (contextMenu) {
+          setContextMenu(null);
+        } else if (selectedFileIds.length > 0) {
+          setSelectedFileIds([]);
+          setFocusedIndex(-1);
+        }
+        return;
+      }
+
+      // 3. Delete or Backspace triggers bulk delete confirmation
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFileIds.length > 0) {
+        e.preventDefault();
+        setBulkDeleteTarget({ ids: selectedFileIds });
+        return;
+      }
+
+      // 4. Arrow navigation
+      if (files.length === 0) return;
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev < files.length - 1 ? prev + 1 : 0));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setFocusedIndex((prev) => (prev > 0 ? prev - 1 : files.length - 1));
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const step = viewMode === 'grid' ? 4 : 1;
+        setFocusedIndex((prev) => Math.min(files.length - 1, Math.max(0, prev + step)));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const step = viewMode === 'grid' ? 4 : 1;
+        setFocusedIndex((prev) => Math.max(0, prev - step));
+      } else if (e.key === 'Enter' && focusedIndex >= 0 && files[focusedIndex]) {
+        e.preventDefault();
+        handleSelectFile(files[focusedIndex], focusedIndex);
+      } else if (e.key === ' ' && focusedIndex >= 0 && files[focusedIndex]) {
+        e.preventDefault();
+        const fId = files[focusedIndex]._id || files[focusedIndex].id;
+        handleToggleSelect(fId, e, focusedIndex);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    modalPreviewState,
+    photoViewerState,
+    docViewerState,
+    isNewFolderOpen,
+    renameTarget,
+    shareFolderTarget,
+    isCameraOpen,
+    isVoiceMemoOpen,
+    moveToTarget,
+    bulkDeleteTarget,
+    singleShareTarget,
+    contextMenu,
+    selectedFileIds,
+    files,
+    focusedIndex,
+    viewMode,
+    handleSelectFile,
+    handleToggleSelect,
+  ]);
+
   const handleResetToRoot = () => {
     setCurrentNav('all');
     setCurrentFolder(null);
     setSelectedCategory('All');
     setSearchQuery('');
+    setSelectedFileIds([]);
+    setFocusedIndex(-1);
   };
 
   const isAtRoot = currentNav === 'all' && !currentFolder && selectedCategory === 'All' && !searchQuery.trim();
@@ -330,22 +568,26 @@ export const DriveLayout = () => {
       <div className="hidden md:flex shrink-0 h-full">
         <DriveSidebar
           currentNav={currentNav}
-          currentFolder={currentFolder}
           onSelectNav={(nav) => {
             setCurrentNav(nav);
             setCurrentFolder(null);
+            setSelectedFileIds([]);
+            setFocusedIndex(-1);
             if (nav !== 'all') {
               setSelectedCategory('All');
             }
           }}
+          selectedCategory={selectedCategory}
+          currentFolder={currentFolder}
+          onResetToRoot={handleResetToRoot}
+          onOpenCategory={handleOpenCategory}
           onOpenNewFolder={() => setIsNewFolderOpen(true)}
-          onOpenCamera={() => setIsCameraOpen(true)}
           onOpenVoiceMemo={() => setIsVoiceMemoOpen(true)}
         />
       </div>
 
-      {/* 2. Main Drive Layout Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0 bg-zinc-950/40 relative">
+      {/* 2. Main Drive Workspace */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-zinc-950/40 relative">
         {/* Top Header Bar */}
         {currentNav !== 'reels' ? (
           <DriveHeader
@@ -380,6 +622,26 @@ export const DriveLayout = () => {
           </div>
         ) : (
           <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-8 pb-28 md:pb-8 no-scrollbar">
+            {/* Multi-Selection Action Toolbar Overlay */}
+            {selectedFileIds.length > 0 && (
+              <div className="sticky top-0 z-30 mb-4">
+                <DriveSelectionBar
+                  selectedCount={selectedFileIds.length}
+                  totalCount={files.length}
+                  isAllSelected={selectedFileIds.length === files.length && files.length > 0}
+                  onToggleSelectAll={handleToggleSelectAll}
+                  onBulkDelete={() => setBulkDeleteTarget({ ids: selectedFileIds })}
+                  onBulkMove={() => {
+                    const targetItems = files.filter((f) => selectedFileIds.includes(f._id || f.id));
+                    setMoveToTarget({ items: targetItems });
+                  }}
+                  onBulkShare={handleBulkShare}
+                  onBulkDownload={handleBulkDownload}
+                  onClearSelection={handleClearSelection}
+                />
+              </div>
+            )}
+
             {/* FOLDERS SECTION */}
             {isAtRoot && (
               loadingDrive && folders.length === 0 ? (
@@ -393,6 +655,9 @@ export const DriveLayout = () => {
                   onRenameFolder={(folder) => setRenameTarget(folder)}
                   onDeleteFolder={handleDeleteFolder}
                   onShareFolder={(target) => setShareFolderTarget(target)}
+                  onFolderContextMenu={(e, folder, isCat) => {
+                    handleContextMenu(e, folder, true);
+                  }}
                 />
               )
             )}
@@ -547,12 +812,26 @@ export const DriveLayout = () => {
                     videos={files}
                     onSelectVideo={handleSelectFile}
                     onDeleteVideo={handleDeleteFile}
+                    selectedFileIds={selectedFileIds}
+                    onToggleSelect={handleToggleSelect}
+                    focusedIndex={focusedIndex}
+                    onContextMenu={handleContextMenu}
+                    onRenameVideo={handleRenameFile}
+                    onMoveVideo={(file) => setMoveToTarget({ items: [file] })}
+                    onShareVideo={(file) => setSingleShareTarget(file)}
                   />
                 ) : (
                   <DriveFilesList
                     videos={files}
                     onSelectVideo={handleSelectFile}
                     onDeleteVideo={handleDeleteFile}
+                    selectedFileIds={selectedFileIds}
+                    onToggleSelect={handleToggleSelect}
+                    focusedIndex={focusedIndex}
+                    onContextMenu={handleContextMenu}
+                    onRenameVideo={handleRenameFile}
+                    onMoveVideo={(file) => setMoveToTarget({ items: [file] })}
+                    onShareVideo={(file) => setSingleShareTarget(file)}
                   />
                 )
               )}
@@ -582,12 +861,110 @@ export const DriveLayout = () => {
           onSelectNav={(nav) => {
             setCurrentNav(nav);
             setCurrentFolder(null);
+            setSelectedFileIds([]);
+            setFocusedIndex(-1);
             if (nav !== 'all') {
               setSelectedCategory('All');
             }
           }}
         />
       </div>
+
+      {/* Floating Right-Click Context Menu */}
+      {contextMenu && (
+        <DriveContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          item={contextMenu.item}
+          isFolder={contextMenu.isFolder}
+          selectedCount={contextMenu.selectedCount}
+          onClose={() => setContextMenu(null)}
+          onOpen={(target) => {
+            if (contextMenu.isFolder) {
+              if (target.isCategory) handleOpenCategory(target.category);
+              else handleOpenFolder(target);
+            } else {
+              handleSelectFile(target);
+            }
+          }}
+          onRename={(target) => {
+            if (contextMenu.isFolder) {
+              setRenameTarget(target);
+            } else {
+              // Trigger single rename modal or edit mode
+              setRenameTarget(target);
+            }
+          }}
+          onMove={(target) => {
+            const targetItems = selectedFileIds.length > 1
+              ? files.filter((f) => selectedFileIds.includes(f._id || f.id))
+              : [target];
+            setMoveToTarget({ items: targetItems });
+          }}
+          onShare={(target) => {
+            if (contextMenu.isFolder) {
+              setShareFolderTarget({ category: target.title || target.category, isFolder: true });
+            } else {
+              setSingleShareTarget(target);
+            }
+          }}
+          onDownload={(target) => {
+            if (selectedFileIds.length > 1) {
+              handleBulkDownload();
+            } else {
+              const link = document.createElement('a');
+              link.href = api.stream.getUrl(target._id || target.id, true);
+              link.download = target.title || 'file';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          }}
+          onDelete={(target) => {
+            if (contextMenu.isFolder) {
+              handleDeleteFolder(target._id || target.id);
+            } else if (selectedFileIds.length > 1) {
+              setBulkDeleteTarget({ ids: selectedFileIds });
+            } else {
+              handleDeleteFile(target._id || target.id);
+            }
+          }}
+        />
+      )}
+
+      {/* Move to... Folder/Category Picker Modal */}
+      {moveToTarget && (
+        <MoveToModal
+          isOpen={!!moveToTarget}
+          onClose={() => setMoveToTarget(null)}
+          targetItems={moveToTarget.items}
+          folders={folders}
+          categories={categoryFoldersList}
+          currentFolder={currentFolder}
+          currentCategory={selectedCategory}
+          onMoveSuccess={handleExecuteBulkMove}
+        />
+      )}
+
+      {/* Bulk Delete Modal */}
+      {bulkDeleteTarget && (
+        <BulkDeleteModal
+          isOpen={!!bulkDeleteTarget}
+          onClose={() => setBulkDeleteTarget(null)}
+          count={bulkDeleteTarget.ids.length}
+          onConfirm={handleExecuteBulkDelete}
+          isPermanent={currentNav === 'trash'}
+        />
+      )}
+
+      {/* Single File Share Modal */}
+      {singleShareTarget && (
+        <ShareModal
+          isOpen={!!singleShareTarget}
+          onClose={() => setSingleShareTarget(null)}
+          target={singleShareTarget}
+        />
+      )}
 
       {/* Desktop Video/Media Playback Modal with Prev/Next Navigation */}
       <DesktopVideoModal
@@ -651,20 +1028,20 @@ export const DriveLayout = () => {
         category={selectedCategory}
       />
 
-      {/* Quick Voice Memo Recording Modal */}
+      {/* In-App Voice Recording Modal */}
       <VoiceMemoModal
         isOpen={isVoiceMemoOpen}
         onClose={() => setIsVoiceMemoOpen(false)}
         folderId={currentFolder?._id || null}
         folderTitle={currentFolder?.title || ''}
+        category={selectedCategory}
       />
 
-      {/* Share Folder / Category Modal */}
+      {/* Category / Folder Share Modal */}
       <ShareModal
         isOpen={!!shareFolderTarget}
-        isFolder={true}
-        category={shareFolderTarget?.category}
         onClose={() => setShareFolderTarget(null)}
+        target={shareFolderTarget}
       />
     </div>
   );

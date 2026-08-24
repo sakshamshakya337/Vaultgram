@@ -509,12 +509,21 @@ exports.renameItem = async (req, res) => {
  */
 exports.moveItem = async (req, res) => {
   try {
-    const { targetFolderId } = req.body;
+    const { targetFolderId, category, newCategory } = req.body;
     const parentId = targetFolderId && targetFolderId !== 'root' && targetFolderId !== 'null' ? targetFolderId : null;
+    const effectiveCategory = (newCategory || category || '').trim();
+
+    const updateFields = {};
+    if (targetFolderId !== undefined) {
+      updateFields.folderId = parentId;
+    }
+    if (effectiveCategory) {
+      updateFields.category = effectiveCategory.replace(/^#/, '');
+    }
 
     const item = await Media.findByIdAndUpdate(
       req.params.id,
-      { folderId: parentId },
+      updateFields,
       { new: true }
     );
 
@@ -523,6 +532,69 @@ exports.moveItem = async (req, res) => {
   } catch (err) {
     console.error('[moveItem error]:', err.message);
     res.status(500).json({ message: 'Failed to move item' });
+  }
+};
+
+/**
+ * PATCH /api/v1/media/batch/move
+ */
+exports.batchMove = async (req, res) => {
+  try {
+    const { ids, targetFolderId, category, newCategory } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids array is required' });
+    }
+
+    const parentId = targetFolderId && targetFolderId !== 'root' && targetFolderId !== 'null' ? targetFolderId : null;
+    const effectiveCategory = (newCategory || category || '').trim();
+
+    const updateFields = {};
+    if (targetFolderId !== undefined) {
+      updateFields.folderId = parentId;
+    }
+    if (effectiveCategory) {
+      updateFields.category = effectiveCategory.replace(/^#/, '');
+    }
+
+    await Media.updateMany(
+      { _id: { $in: ids } },
+      { $set: updateFields }
+    );
+
+    res.json({
+      success: true,
+      message: `Successfully moved ${ids.length} items`,
+      movedCount: ids.length,
+    });
+  } catch (err) {
+    console.error('[batchMove error]:', err.message);
+    res.status(500).json({ message: 'Failed to batch move items' });
+  }
+};
+
+/**
+ * POST /api/v1/media/batch/trash
+ */
+exports.batchTrash = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids array is required' });
+    }
+
+    await Media.updateMany(
+      { _id: { $in: ids } },
+      { $set: { isTrashed: true, trashedAt: new Date() } }
+    );
+
+    res.json({
+      success: true,
+      message: `Successfully moved ${ids.length} items to trash`,
+      trashedCount: ids.length,
+    });
+  } catch (err) {
+    console.error('[batchTrash error]:', err.message);
+    res.status(500).json({ message: 'Failed to batch trash items' });
   }
 };
 

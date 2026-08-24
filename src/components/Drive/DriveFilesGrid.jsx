@@ -1,5 +1,25 @@
-import React, { useState } from 'react';
-import { Play, Heart, Download, Trash2, Video, Cloud, Loader2, StickyNote, Share2, FileText, Image as ImageIcon, Music, Eye, MoreVertical, X } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Play,
+  Heart,
+  Download,
+  Trash2,
+  Video,
+  Cloud,
+  Loader2,
+  StickyNote,
+  Share2,
+  FileText,
+  Image as ImageIcon,
+  Music,
+  Eye,
+  CheckSquare,
+  Square,
+  Edit2,
+  FolderSymlink,
+  MoreVertical,
+  X
+} from 'lucide-react';
 import { api, formatBytes, formatDuration, getFileKind } from '../../services/api';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useOfflineMedia } from '../../contexts/useOfflineMedia';
@@ -7,7 +27,18 @@ import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { NoteEditModal } from './NoteEditModal';
 import { ShareModal } from './ShareModal';
 
-export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
+export const DriveFilesGrid = ({
+  videos,
+  onSelectVideo,
+  onDeleteVideo,
+  selectedFileIds = [],
+  onToggleSelect,
+  focusedIndex = -1,
+  onContextMenu,
+  onRenameVideo,
+  onMoveVideo,
+  onShareVideo,
+}) => {
   const { toggleLike } = useVideoFeed();
   const { isOfflineAvailable, toggleOfflineSave, isCaching } = useOfflineMedia();
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -16,7 +47,48 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
   const [shareTarget, setShareTarget] = useState(null);
   const [mobileMenuFile, setMobileMenuFile] = useState(null);
 
+  // Inline rename state
+  const [editingId, setEditingId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const editInputRef = useRef(null);
+
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingId]);
+
   if (!videos || videos.length === 0) return null;
+
+  const handleStartRename = (e, video) => {
+    e.stopPropagation();
+    setEditingId(video._id || video.id);
+    setEditingTitle(video.title || '');
+  };
+
+  const handleSaveRename = async (video) => {
+    const vId = video._id || video.id;
+    const cleanTitle = editingTitle.trim();
+
+    if (!cleanTitle || cleanTitle === video.title) {
+      setEditingId(null);
+      return;
+    }
+
+    try {
+      if (onRenameVideo) {
+        await onRenameVideo(vId, cleanTitle);
+      } else {
+        await api.drive.rename(vId, cleanTitle);
+      }
+    } catch (err) {
+      console.error('[handleSaveRename error]:', err);
+      alert(err.message || 'Failed to rename file');
+    } finally {
+      setEditingId(null);
+    }
+  };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
@@ -35,11 +107,16 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
     }
   };
 
+  const hasActiveSelection = selectedFileIds.length > 0;
+
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
         {videos.map((video, index) => {
           const videoId = video._id || video.id;
+          const isSelected = selectedFileIds.includes(videoId);
+          const isFocused = focusedIndex === index;
+          const isEditing = editingId === videoId;
           const isStarred = !!video.isStarred;
           const isOffline = isOfflineAvailable(videoId);
           const caching = isCaching(videoId);
@@ -49,9 +126,57 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
           return (
             <div
               key={videoId}
-              onClick={() => onSelectVideo(video, index)}
-              className="group relative rounded-2xl bg-zinc-900/50 hover:bg-zinc-900 border border-white/5 hover:border-cyan-500/30 overflow-hidden shadow-lg transition-all duration-200 cursor-pointer flex flex-col"
+              onClick={(e) => {
+                // If user clicks while in editing mode, don't open
+                if (isEditing) return;
+                if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                  e.preventDefault();
+                  onToggleSelect?.(videoId, e, index);
+                } else {
+                  onSelectVideo(video, index);
+                }
+              }}
+              onContextMenu={(e) => {
+                if (onContextMenu) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onContextMenu(e, video);
+                }
+              }}
+              className={`group relative rounded-2xl border overflow-hidden shadow-lg transition-all duration-200 cursor-pointer flex flex-col ${
+                isSelected
+                  ? 'bg-cyan-950/40 border-cyan-500 ring-2 ring-cyan-500/30'
+                  : isFocused
+                  ? 'bg-zinc-900 border-cyan-500/60 ring-2 ring-cyan-500/20'
+                  : 'bg-zinc-900/50 hover:bg-zinc-900 border-white/5 hover:border-cyan-500/30'
+              }`}
             >
+              {/* Selection Checkbox (Top-Left Corner) */}
+              <div
+                className={`absolute top-2.5 left-2.5 z-20 transition-all ${
+                  isSelected || hasActiveSelection ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSelect?.(videoId, e, index);
+                }}
+              >
+                <button
+                  className={`w-6 h-6 rounded-lg flex items-center justify-center backdrop-blur-md transition-all shadow-md cursor-pointer ${
+                    isSelected
+                      ? 'bg-cyan-500 text-black border border-cyan-400'
+                      : 'bg-zinc-900/80 text-white/60 hover:text-white border border-white/20 hover:bg-zinc-800'
+                  }`}
+                  title={isSelected ? 'Deselect file' : 'Select file'}
+                >
+                  {isSelected ? (
+                    <CheckSquare className="w-4 h-4 fill-cyan-500 stroke-black stroke-[2.5]" />
+                  ) : (
+                    <Square className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+
               {/* Thumbnail / Media Preview Area */}
               <div className="relative w-full aspect-video bg-zinc-950 flex items-center justify-center overflow-hidden">
                 {isImage ? (
@@ -108,7 +233,7 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
 
                 {/* Offline Available Badge */}
                 {isOffline && (
-                  <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/90 text-black text-[10px] font-bold shadow-md backdrop-blur-md">
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/90 text-black text-[10px] font-bold shadow-md backdrop-blur-md">
                     <span>Offline</span>
                   </div>
                 )}
@@ -127,8 +252,8 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                   </div>
                 )}
 
-                {/* Hover Action Overlay: Play for Video/Audio, Eye for Image, FileText/Open for Document */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                {/* Hover Action Overlay */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                   <div className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform ${
                     isVideo || isAudio
                       ? 'bg-cyan-500 text-black shadow-cyan-500/40'
@@ -150,9 +275,46 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
               {/* File Metadata Card Body */}
               <div className="p-3.5 flex flex-col justify-between flex-1 gap-2">
                 <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors truncate" title={video.title}>
-                    {video.title || 'Untitled Video'}
-                  </h4>
+                  {/* Inline Editable Title or Title Display */}
+                  {isEditing ? (
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        ref={editInputRef}
+                        type="text"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onBlur={() => handleSaveRename(video)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveRename(video);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setEditingId(null);
+                          }
+                        }}
+                        className="w-full px-2 py-1 rounded-lg bg-zinc-950 border border-cyan-500 text-white text-xs font-bold focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between group/title">
+                      <h4
+                        onDoubleClick={(e) => handleStartRename(e, video)}
+                        className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors truncate select-text"
+                        title={`${video.title} (Double-click to rename)`}
+                      >
+                        {video.title || 'Untitled'}
+                      </h4>
+                      <button
+                        onClick={(e) => handleStartRename(e, video)}
+                        className="opacity-0 group-hover/title:opacity-100 p-1 text-zinc-500 hover:text-cyan-400 transition-opacity ml-1 shrink-0"
+                        title="Rename file"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-1.5 mt-1">
                     <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
                       #{video.category || 'General'}
@@ -226,11 +388,22 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                       <Download className="w-3.5 h-3.5" />
                     </a>
 
+                    {/* Move Button */}
+                    {onMoveVideo && (
+                      <button
+                        onClick={() => onMoveVideo(video)}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:text-purple-400 hover:bg-white/10 transition-colors cursor-pointer"
+                        title="Move to..."
+                      >
+                        <FolderSymlink className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
                     {/* Share Button */}
                     <button
-                      onClick={() => setShareTarget(video)}
+                      onClick={() => (onShareVideo ? onShareVideo(video) : setShareTarget(video))}
                       className="w-6 h-6 rounded-md flex items-center justify-center text-zinc-400 hover:text-cyan-400 hover:bg-white/10 transition-colors cursor-pointer"
-                      title="Share Time-Limited Link"
+                      title="Share File"
                     >
                       <Share2 className="w-3.5 h-3.5" />
                     </button>
@@ -248,20 +421,10 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
                   {/* Mobile Action Buttons (Touch Friendly) */}
                   <div className="md:hidden flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={() => toggleLike(videoId)}
-                      className={`w-7 h-7 rounded-md flex items-center justify-center transition-transform active:scale-75 cursor-pointer ${
-                        isStarred ? 'text-rose-500' : 'text-zinc-400 hover:text-white'
-                      }`}
-                      aria-label="Like"
-                    >
-                      <Heart className={`w-3.5 h-3.5 ${isStarred ? 'fill-rose-500' : ''}`} />
-                    </button>
-                    <button
                       onClick={() => setMobileMenuFile(video)}
-                      className="w-7 h-7 rounded-md flex items-center justify-center text-zinc-400 hover:text-white active:bg-white/10 transition-colors cursor-pointer"
-                      aria-label="More actions"
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                     >
-                      <MoreVertical className="w-3.5 h-3.5" />
+                      <MoreVertical className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -271,139 +434,27 @@ export const DriveFilesGrid = ({ videos, onSelectVideo, onDeleteVideo }) => {
         })}
       </div>
 
-      {/* Mobile File Actions Bottom Sheet */}
-      {mobileMenuFile && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end justify-center animate-fade-in"
-          onClick={() => setMobileMenuFile(null)}
-        >
-          <div
-            className="w-full max-w-lg bg-zinc-900 border-t border-white/10 rounded-t-3xl p-5 flex flex-col gap-3 shadow-2xl animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="min-w-0 pr-4">
-                <h4 className="text-sm font-bold text-white truncate">
-                  {mobileMenuFile.title || 'File Actions'}
-                </h4>
-                <p className="text-xs text-cyan-400 font-semibold mt-0.5">
-                  #{mobileMenuFile.category || 'General'}
-                </p>
-              </div>
-              <button
-                onClick={() => setMobileMenuFile(null)}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              {/* Star / Like */}
-              <button
-                onClick={() => {
-                  toggleLike(mobileMenuFile._id || mobileMenuFile.id);
-                  setMobileMenuFile(null);
-                }}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
-              >
-                <Heart className={`w-4 h-4 ${mobileMenuFile.isStarred ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'}`} />
-                <span>{mobileMenuFile.isStarred ? 'Liked' : 'Like'}</span>
-              </button>
-
-              {/* Offline */}
-              <button
-                onClick={() => {
-                  toggleOfflineSave(mobileMenuFile);
-                  setMobileMenuFile(null);
-                }}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
-              >
-                <Cloud className={`w-4 h-4 ${isOfflineAvailable(mobileMenuFile._id || mobileMenuFile.id) ? 'fill-emerald-400 text-emerald-400' : 'text-zinc-400'}`} />
-                <span>{isOfflineAvailable(mobileMenuFile._id || mobileMenuFile.id) ? 'Offline Ready' : 'Save Offline'}</span>
-              </button>
-
-              {/* Note */}
-              <button
-                onClick={() => {
-                  const target = mobileMenuFile;
-                  setMobileMenuFile(null);
-                  setNoteTarget(target);
-                }}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
-              >
-                <StickyNote className={`w-4 h-4 ${mobileMenuFile.note ? 'text-amber-400 fill-amber-400/20' : 'text-zinc-400'}`} />
-                <span>{mobileMenuFile.note ? 'Edit Note' : 'Add Note'}</span>
-              </button>
-
-              {/* Share */}
-              <button
-                onClick={() => {
-                  const target = mobileMenuFile;
-                  setMobileMenuFile(null);
-                  setShareTarget(target);
-                }}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
-              >
-                <Share2 className="w-4 h-4 text-blue-400" />
-                <span>Share Link</span>
-              </button>
-
-              {/* Download */}
-              <a
-                href={api.stream.getUrl(mobileMenuFile._id || mobileMenuFile.id, true)}
-                download={mobileMenuFile.title || 'download'}
-                onClick={() => setMobileMenuFile(null)}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/5 transition-colors cursor-pointer"
-              >
-                <Download className="w-4 h-4 text-cyan-400" />
-                <span>Download</span>
-              </a>
-
-              {/* Delete */}
-              <button
-                onClick={() => {
-                  const target = mobileMenuFile;
-                  setMobileMenuFile(null);
-                  setDeleteTarget(target);
-                }}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4 text-rose-400" />
-                <span>Delete</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Share Modal */}
-      <ShareModal
-        isOpen={!!shareTarget}
-        file={shareTarget}
-        onClose={() => setShareTarget(null)}
+      {/* Delete Single Item Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        videoTitle={deleteTarget?.title}
+        onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
       />
 
       {/* Note Edit Modal */}
       <NoteEditModal
         isOpen={!!noteTarget}
-        file={noteTarget}
         onClose={() => setNoteTarget(null)}
-        onNoteUpdated={(id, newNote) => {
-          const item = videos.find((v) => (v._id || v.id) === id);
-          if (item) item.note = newNote;
-        }}
+        video={noteTarget}
       />
 
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        title="Delete File"
-        itemName={deleteTarget?.title || 'this file'}
-        itemType="file"
-        loading={isDeleting}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteTarget(null)}
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={!!shareTarget}
+        onClose={() => setShareTarget(null)}
+        target={shareTarget}
       />
     </>
   );

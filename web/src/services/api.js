@@ -466,10 +466,22 @@ export const api = {
         body: JSON.stringify({ note }),
       }),
 
-    move: (id, targetFolderId) =>
+    move: (id, targetFolderId, newCategory = null) =>
       request(`/videos/${id}/move`, {
         method: 'PATCH',
-        body: JSON.stringify({ targetFolderId }),
+        body: JSON.stringify({ targetFolderId, newCategory }),
+      }),
+
+    batchMove: (ids, targetFolderId = null, newCategory = null) =>
+      request('/videos/batch/move', {
+        method: 'PATCH',
+        body: JSON.stringify({ ids, targetFolderId, newCategory }),
+      }),
+
+    batchTrash: (ids) =>
+      request('/videos/batch/trash', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
       }),
 
     trash: (id) =>
