@@ -11,12 +11,22 @@ import {
   Check,
   AlertCircle,
   Fingerprint,
-  Smartphone
+  Smartphone,
+  Sun,
+  Moon,
+  Cloud,
+  HardDrive,
+  Trash2
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
+import { useTheme } from '../../contexts/useTheme';
+import { useOfflineMedia } from '../../contexts/useOfflineMedia';
+import { formatBytes } from '../../services/api';
 
 export const SettingsModal = () => {
+  const { theme, toggleTheme, setTheme } = useTheme();
+  const { storageUsed, clearCache, offlineList } = useOfflineMedia();
   const {
     user,
     isAuthenticated,
@@ -172,17 +182,104 @@ export const SettingsModal = () => {
                 </div>
               </div>
               <button
-                onClick={() => {
-                  logout();
-                  setIsSettingsOpen(false);
+                onClick={async () => {
+                  try {
+                    await logout();
+                  } finally {
+                    setIsSettingsOpen(false);
+                  }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-sm"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Sign Out</span>
               </button>
             </div>
           )}
+
+          {/* Theme & Appearance Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  {theme === 'dark' ? <Moon className="w-4 h-4 text-cyan-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
+                  <span>Appearance & Theme</span>
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Choose your interface display preference
+                </p>
+              </div>
+            </div>
+
+            <div className="p-1.5 rounded-2xl bg-zinc-900/60 border border-white/5 grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => setTheme('dark')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-semibold text-xs transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Moon className="w-4 h-4" />
+                <span>Dark Mode</span>
+              </button>
+              <button
+                onClick={() => setTheme('light')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-semibold text-xs transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Sun className="w-4 h-4" />
+                <span>Light Mode</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Offline Storage Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Cloud className="w-4 h-4 text-cyan-400" />
+                  <span>Offline Storage</span>
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Saved videos available without internet
+                </p>
+              </div>
+              <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                {offlineList.length} {offlineList.length === 1 ? 'video' : 'videos'} ({formatBytes(storageUsed)})
+              </span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-white">Device Cache Storage</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  {storageUsed > 0
+                    ? `${formatBytes(storageUsed)} currently cached on this device.`
+                    : 'No videos currently saved offline.'}
+                </p>
+              </div>
+
+              {storageUsed > 0 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('Clear all offline cached videos to free up storage?')) {
+                      clearCache();
+                      showSuccess('Offline cache cleared');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear Cache</span>
+                </button>
+              )}
+            </div>
+          </div>
 
           {/* App-Level PIN Lock Section */}
           <div className="space-y-3">

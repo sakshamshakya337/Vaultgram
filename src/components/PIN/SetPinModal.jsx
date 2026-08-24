@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { PinKeypad } from './PinKeypad';
 
 export const SetPinModal = () => {

@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { ReelCard } from './ReelCard';
 import { TapToUnmuteHint } from './TapToUnmuteHint';
-import { Video, Sparkles, Plus, RefreshCw, Lock, Shield } from 'lucide-react';
+import { ReelSkeleton } from '../Skeletons/ReelSkeleton';
+import { Video, Sparkles, Plus, RefreshCw, Lock, Shield, Loader2, CheckCircle2 } from 'lucide-react';
 
 export const ReelsContainer = () => {
   const containerRef = useRef(null);
@@ -11,6 +12,9 @@ export const ReelsContainer = () => {
   const {
     videos,
     loading,
+    loadingMore,
+    hasMore,
+    loadMoreVideos,
     error,
     selectedCategory,
     activeVideoIndex,
@@ -30,7 +34,7 @@ export const ReelsContainer = () => {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.8) {
-            const indexAttr = entry.target.getAttribute('data-index');
+            const indexAttr = entry.target.getAttribute('data-reel-index');
             if (indexAttr !== null) {
               const idx = parseInt(indexAttr, 10);
               setActiveVideoIndex(idx);
@@ -40,11 +44,11 @@ export const ReelsContainer = () => {
       },
       {
         root: container,
-        threshold: [0.8], // 80% visibility threshold
+        threshold: [0.8],
       }
     );
 
-    const children = container.querySelectorAll('.snap-item');
+    const children = container.querySelectorAll('.reel-snap-item');
     children.forEach((child) => observer.observe(child));
 
     return () => {
@@ -52,6 +56,15 @@ export const ReelsContainer = () => {
       observer.disconnect();
     };
   }, [videos, setActiveVideoIndex]);
+
+  // Scroll listener for pagination near bottom of scroll container
+  const handleContainerScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el || loadingMore || !hasMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight * 1.5) {
+      loadMoreVideos();
+    }
+  }, [loadingMore, hasMore, loadMoreVideos]);
 
   // Keyboard navigation for desktop users
   useEffect(() => {
@@ -62,12 +75,12 @@ export const ReelsContainer = () => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         const nextIndex = Math.min(videos.length - 1, activeVideoIndex + 1);
-        const target = container.querySelector(`[data-index="${nextIndex}"]`);
+        const target = container.querySelector(`[data-reel-index="${nextIndex}"]`);
         if (target) target.scrollIntoView({ behavior: 'smooth' });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         const prevIndex = Math.max(0, activeVideoIndex - 1);
-        const target = container.querySelector(`[data-index="${prevIndex}"]`);
+        const target = container.querySelector(`[data-reel-index="${prevIndex}"]`);
         if (target) target.scrollIntoView({ behavior: 'smooth' });
       }
     };
@@ -126,16 +139,7 @@ export const ReelsContainer = () => {
   }
 
   if (loading && videos.length === 0) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-950 p-6 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4 animate-spin">
-          <RefreshCw className="w-6 h-6" />
-        </div>
-        <p className="text-sm font-semibold text-zinc-400 animate-pulse">
-          Loading StreamVault feed...
-        </p>
-      </div>
-    );
+    return <ReelSkeleton />;
   }
 
   if (videos.length === 0 && !loading) {
@@ -175,19 +179,33 @@ export const ReelsContainer = () => {
       {/* Session Unmute Floating Hint */}
       <TapToUnmuteHint />
 
-      {/* Main Snap Feed */}
+      {/* Main Snap Feed with chunked pagination */}
       <div
         ref={containerRef}
+        onScroll={handleContainerScroll}
         className="w-full h-full overflow-y-scroll snap-y-mandatory no-scrollbar"
       >
         {videos.map((video, idx) => (
-          <ReelCard
+          <div
             key={video._id || video.id || idx}
-            video={video}
-            index={idx}
-            isActive={idx === activeVideoIndex}
-          />
+            className="reel-snap-item snap-start w-full h-full shrink-0"
+            data-reel-index={idx}
+          >
+            <ReelCard
+              video={video}
+              index={idx}
+              isActive={idx === activeVideoIndex}
+            />
+          </div>
         ))}
+
+        {/* Loading More Spinner item in snap scroll */}
+        {loadingMore && (
+          <div className="reel-snap-item snap-start w-full h-full shrink-0 flex flex-col items-center justify-center bg-zinc-950 text-center p-6 space-y-3">
+            <div className="w-12 h-12 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+            <p className="text-xs font-mono text-cyan-400">Loading more reels...</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Delete, Lock, Check, Fingerprint } from 'lucide-react';
 
 export const PinKeypad = ({
@@ -15,28 +15,61 @@ export const PinKeypad = ({
 }) => {
   const [pin, setPin] = useState('');
 
-  const handleDigit = (digit) => {
+  const handleDigit = useCallback((digit) => {
     if (loading || rateLimitCountdown) return;
-    if (pin.length < 6) {
-      const nextPin = pin + digit;
-      setPin(nextPin);
-    }
-  };
+    setPin((prev) => {
+      if (prev.length < 6) {
+        return prev + digit;
+      }
+      return prev;
+    });
+  }, [loading, rateLimitCountdown]);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     if (loading || rateLimitCountdown) return;
     setPin((prev) => prev.slice(0, -1));
-  };
+  }, [loading, rateLimitCountdown]);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setPin('');
-  };
+  }, []);
 
-  const handleVerify = () => {
-    if (pin.length >= 4 && onSubmit) {
+  const handleVerify = useCallback(() => {
+    if (pin.length >= 4 && onSubmit && !loading && !rateLimitCountdown) {
       onSubmit(pin, handleClear);
     }
-  };
+  }, [pin, onSubmit, handleClear, loading, rateLimitCountdown]);
+
+  // Global Keyboard Listener for Physical Keyboard / Numpad
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Do not intercept if user is typing inside an input/textarea
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) {
+        return;
+      }
+
+      // Check numbers 0-9 (covers standard row numbers and numpad)
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handleDigit(e.key);
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        handleDelete();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        handleVerify();
+      } else if (e.key === 'Escape') {
+        if (onCancel) {
+          e.preventDefault();
+          onCancel();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleDigit, handleDelete, handleVerify, onCancel]);
 
   return (
     <div className="flex flex-col items-center justify-center p-4 w-full max-w-xs mx-auto text-center select-none">
@@ -177,7 +210,7 @@ export const PinKeypad = ({
         <button
           type="button"
           onClick={onCancel}
-          className="mt-2 text-xs text-zinc-500 hover:text-zinc-300 font-semibold cursor-pointer py-1"
+          className="mt-2 text-xs text-zinc-400 hover:text-zinc-200 font-semibold cursor-pointer py-2.5 px-6 min-h-[44px] flex items-center justify-center transition-colors"
         >
           Cancel
         </button>

@@ -29,6 +29,7 @@ export const DriveLayout = () => {
     selectedCategory = 'All',
     setSelectedCategory,
     categories,
+    fetchCategories,
     categoryLockTarget,
     setCategoryLockTarget,
     sessionUnlockedCategories,
@@ -106,6 +107,11 @@ export const DriveLayout = () => {
     const unregister = registerOnUploadSuccess((newDoc) => {
       if (!newDoc || !newDoc._id) return;
 
+      // Refresh categories list whenever a new item is uploaded
+      if (fetchCategories) {
+        fetchCategories();
+      }
+
       // 1. Match folder
       const targetFolderId = currentFolder?._id || currentFolder?.id || null;
       const docFolderId = newDoc.folderId || newDoc.parentFolderId || null;
@@ -133,7 +139,7 @@ export const DriveLayout = () => {
       }
     });
     return unregister;
-  }, [registerOnUploadSuccess, currentFolder, selectedCategory, currentNav, setDriveItems]);
+  }, [registerOnUploadSuccess, fetchCategories, currentFolder, selectedCategory, currentNav, setDriveItems]);
 
   // Separate folders and files
   const folders = useMemo(() => {
@@ -282,7 +288,24 @@ export const DriveLayout = () => {
   };
 
   const isAtRoot = currentNav === 'all' && !currentFolder && selectedCategory === 'All' && !searchQuery.trim();
-  const categoryFoldersList = categories.filter((c) => c !== 'All');
+  const categoryFoldersList = useMemo(() => {
+    const set = new Set();
+    (categories || []).forEach((c) => {
+      const clean = (c || '').replace(/^#/, '').trim();
+      if (clean && clean.toLowerCase() !== 'all' && clean.toLowerCase() !== 'general') {
+        set.add(clean);
+      }
+    });
+    (driveItems || []).forEach((item) => {
+      if (item?.category && typeof item.category === 'string') {
+        const clean = item.category.replace(/^#/, '').trim();
+        if (clean && clean.toLowerCase() !== 'all' && clean.toLowerCase() !== 'general') {
+          set.add(clean);
+        }
+      }
+    });
+    return Array.from(set);
+  }, [categories, driveItems]);
 
   return (
     <div className="flex w-screen h-screen bg-black text-white overflow-hidden select-none font-sans relative">

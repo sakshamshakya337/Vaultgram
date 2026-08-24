@@ -14,15 +14,24 @@ import {
   Cloud,
   Shield,
   Upload,
-  Download
+  Download,
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  Camera,
+  Mic
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
+import { useUploadQueue } from '../../contexts/useUploadQueue';
 
 export const DriveSidebar = ({
   currentNav,
+  currentFolder,
   onSelectNav,
   onOpenNewFolder,
+  onOpenCamera,
+  onOpenVoiceMemo,
 }) => {
   const {
     categories,
@@ -36,6 +45,7 @@ export const DriveSidebar = ({
   } = useVideoFeed();
 
   const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
+  const { openFilePicker } = useUploadQueue();
   const [showNewMenu, setShowNewMenu] = useState(false);
 
   const handleQuickLockToggle = async (e, cat) => {
@@ -81,12 +91,38 @@ export const DriveSidebar = ({
               <button
                 onClick={() => {
                   setShowNewMenu(false);
-                  setIsUploadOpen(true);
+                  openFilePicker({
+                    folderId: currentFolder?._id || null,
+                    folderTitle: currentFolder?.title || '',
+                    category: selectedCategory,
+                  });
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <Upload className="w-4 h-4 text-cyan-400" />
-                <span>Upload Media</span>
+                <span>Upload Files</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowNewMenu(false);
+                  if (onOpenCamera) onOpenCamera();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <Camera className="w-4 h-4 text-emerald-400" />
+                <span>Capture / Record</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowNewMenu(false);
+                  if (onOpenVoiceMemo) onOpenVoiceMemo();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <Mic className="w-4 h-4 text-purple-400" />
+                <span>Voice Memo</span>
               </button>
 
               <button
@@ -111,9 +147,6 @@ export const DriveSidebar = ({
           <button
             onClick={() => {
               onSelectNav('reels');
-              if (hasPin && !sessionUnlockedReels) {
-                setCategoryLockTarget('Reels');
-              }
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'reels'
@@ -170,6 +203,42 @@ export const DriveSidebar = ({
           </button>
 
           <button
+            onClick={() => onSelectNav('timeline')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'timeline'
+                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>Timeline</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('this-week')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'this-week'
+                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            <span>This Week</span>
+          </button>
+
+          <button
+            onClick={() => onSelectNav('this-month')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'this-month'
+                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <CalendarRange className="w-4 h-4" />
+            <span>This Month</span>
+          </button>
+
+          <button
             onClick={() => onSelectNav('trash')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'trash'
@@ -209,7 +278,7 @@ export const DriveSidebar = ({
                   }}
                   className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer group ${
                     isSelected
-                      ? 'bg-white/10 text-white font-bold border border-white/15'
+                      ? 'bg-cyan-500/15 text-cyan-400 font-bold border border-cyan-500/30 shadow-sm'
                       : 'text-zinc-400 hover:text-white hover:bg-white/5'
                   }`}
                 >

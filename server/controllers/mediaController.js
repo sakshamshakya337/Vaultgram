@@ -951,11 +951,14 @@ exports.getCategories = async (req, res) => {
     });
 
     const standardCategories = ['Trending', 'Music', 'Gaming', 'Tech', 'Comedy', 'Entertainment', 'Tutorials'];
-    const set = new Set([...standardCategories]);
+    const set = new Set(standardCategories);
 
     distinct.forEach((c) => {
       if (c && typeof c === 'string' && c.trim()) {
-        set.add(c.trim());
+        const clean = c.trim().replace(/^#/, '');
+        if (clean && clean.toLowerCase() !== 'all' && clean.toLowerCase() !== 'general') {
+          set.add(clean);
+        }
       }
     });
 

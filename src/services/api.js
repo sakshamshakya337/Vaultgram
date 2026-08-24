@@ -180,9 +180,7 @@ export function uploadWithProgress(formData, onProgress) {
     const token = getAccessToken();
 
     const endpoint = `${BASE_URL}/videos/upload`;
-    const url = token
-      ? `${endpoint}?token=${encodeURIComponent(token)}`
-      : endpoint;
+    const url = endpoint;
 
     xhr.open('POST', url);
     xhr.setRequestHeader('bypass-tunnel-reminder', 'true');
@@ -203,23 +201,28 @@ export function uploadWithProgress(formData, onProgress) {
       if (xhr.status >= 200 && xhr.status < 300) {
         if (onProgress) onProgress(100);
         try {
-          const json = JSON.parse(xhr.responseText);
-          resolve(json);
+          const res = JSON.parse(xhr.responseText);
+          resolve(res);
         } catch {
-          resolve(xhr.responseText);
+          resolve({ message: 'Upload succeeded' });
         }
       } else {
+        let errMessage = `Upload failed (${xhr.status})`;
         try {
           const json = JSON.parse(xhr.responseText);
-          reject(new Error(json.message || `Upload failed (${xhr.status})`));
-        } catch {
-          reject(new Error(`Upload failed with status ${xhr.status}`));
+          if (json.message) errMessage = json.message;
+        } catch {}
+        if (xhr.status === 413) {
+          errMessage = 'File exceeds maximum upload limit.';
+        } else if (xhr.status === 0 || xhr.status === 502 || xhr.status === 503 || xhr.status === 504) {
+          errMessage = "Can't reach the server — check your connection or try again shortly";
         }
+        reject(new Error(errMessage));
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error('Network connection error during upload.'));
+      reject(new Error("Can't reach the server — check your connection or try again shortly"));
     };
 
     xhr.ontimeout = () => {
@@ -408,25 +411,39 @@ export const api = {
 
     get: (id) => request(`/videos/${id}`),
 
+    getThumbnailUrl: (id) => (id ? `${BASE_URL}/videos/${id}/thumbnail` : ''),
+
     toggleLike: (id) => request(`/media/${id}/like`, { method: 'POST' }),
 
     upload: (formData, onProgress) => {
       return uploadWithProgress(formData, onProgress);
     },
+
+    updateNote: (id, note) =>
+      request(`/videos/${id}/note`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note }),
+      }),
+
+    delete: (id) => request(`/videos/${id}`, { method: 'DELETE' }),
   },
 
   drive: {
-    list: async (params = {}) => {
+    list: async (params = {}, signal = null) => {
       const queryParams = new URLSearchParams();
+      if (params.cursor) queryParams.set('cursor', params.cursor);
+      if (params.page) queryParams.set('page', params.page);
       if (params.folderId) queryParams.set('folderId', params.folderId);
       if (params.category && params.category !== 'All') queryParams.set('category', params.category);
       if (params.fileCategory && params.fileCategory !== 'all') queryParams.set('fileCategory', params.fileCategory);
+      if (params.fileType && params.fileType !== 'all') queryParams.set('fileType', params.fileType);
       if (params.filter) queryParams.set('filter', params.filter);
       if (params.sort) queryParams.set('sort', params.sort);
-      if (params.limit) queryParams.set('limit', params.limit || '100');
+      if (params.limit) queryParams.set('limit', params.limit || '24');
+      if (params.search || params.q) queryParams.set('q', params.search || params.q);
       if (params.unlockedCategories) queryParams.set('unlockedCategories', params.unlockedCategories);
 
-      return request(`/videos?${queryParams.toString()}`);
+      return request(`/videos?${queryParams.toString()}`, signal ? { signal } : {});
     },
 
     getLibrary: () => request('/videos/user/library'),
@@ -441,6 +458,12 @@ export const api = {
       request(`/videos/${id}/rename`, {
         method: 'PATCH',
         body: JSON.stringify({ title }),
+      }),
+
+    updateNote: (id, note) =>
+      request(`/videos/${id}/note`, {
+        method: 'PATCH',
+        body: JSON.stringify({ note }),
       }),
 
     move: (id, targetFolderId) =>
@@ -463,6 +486,11 @@ export const api = {
       request(`/videos/${id}`, {
         method: 'DELETE',
       }),
+
+    emptyTrash: () =>
+      request('/videos/trash/empty', {
+        method: 'DELETE',
+      }),
   },
 
   stream: {
@@ -474,6 +502,29 @@ export const api = {
       if (download) params.push('download=1');
       return params.length > 0 ? `${base}?${params.join('&')}` : base;
     },
+  },
+
+  share: {
+    create: (fileId, durationHours = 24) =>
+      request(`/share/create/${fileId}`, {
+        method: 'POST',
+        body: JSON.stringify({ durationHours }),
+      }),
+    createFolder: (category, durationHours = 24) =>
+      request(`/share/category/${encodeURIComponent(category)}`, {
+        method: 'POST',
+        body: JSON.stringify({ durationHours }),
+      }),
+    getInfo: (token) => request(`/share/${token}/info`),
+    getFolderInfo: (token) => request(`/share/folder/${token}`),
+    getStreamUrl: (token) => `${BASE_URL}/share/${token}/stream`,
+    getDownloadUrl: (token) => `${BASE_URL}/share/${token}/download`,
+    getFolderFileStreamUrl: (token, fileId) => `${BASE_URL}/share/folder/${token}/file/${fileId}/stream`,
+    getFolderFileDownloadUrl: (token, fileId) => `${BASE_URL}/share/folder/${token}/file/${fileId}/download`,
+    revoke: (token) =>
+      request(`/share/${token}`, {
+        method: 'DELETE',
+      }),
   },
 };
 
@@ -520,6 +571,39 @@ export function formatRelativeTime(dateString) {
   const months = Math.floor(days / 30);
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
+}
+
+export function getFileKind(file) {
+  const mime = (file?.mimeType || '').toLowerCase();
+  const ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
+  const fileCategory = (file?.fileCategory || '').toLowerCase();
+  const fileType = (file?.fileType || '').toLowerCase();
+
+  const isVideo =
+    fileType === 'video' ||
+    fileCategory === 'video' ||
+    mime.startsWith('video/') ||
+    ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'flv', 'ts'].includes(ext);
+
+  const isImage =
+    fileType === 'image' ||
+    fileCategory === 'image' ||
+    mime.startsWith('image/') ||
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff', 'heic', 'heif'].includes(ext);
+
+  const isAudio =
+    fileType === 'audio' ||
+    fileCategory === 'audio' ||
+    mime.startsWith('audio/') ||
+    ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'wma'].includes(ext);
+
+  return {
+    isVideo,
+    isImage,
+    isAudio,
+    isDocument: !isVideo && !isImage && !isAudio,
+    extension: ext ? ext.toUpperCase() : (isVideo ? 'VIDEO' : isImage ? 'IMAGE' : isAudio ? 'AUDIO' : 'DOC'),
+  };
 }
 
 export default api;

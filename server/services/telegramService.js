@@ -84,6 +84,11 @@ async function executeWithTelegramRetry(apiCallFn, operationName = 'Telegram API
         continue;
       }
 
+      if (tgData?.description) {
+        err.message = `Telegram error (${statusCode || 'API'}): ${tgData.description}`;
+        console.error(`[${operationName} Error]:`, err.message);
+      }
+
       throw err;
     }
   }
