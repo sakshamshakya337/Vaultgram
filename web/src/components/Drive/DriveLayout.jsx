@@ -11,6 +11,7 @@ import { DriveFilesGrid } from './DriveFilesGrid';
 import { DriveFilesList } from './DriveFilesList';
 import { DesktopVideoModal } from './DesktopVideoModal';
 import { PhotoViewer } from './PhotoViewer';
+import { DocumentViewerModal } from './DocumentViewerModal';
 import { NewFolderModal } from './NewFolderModal';
 import { RenameModal } from './RenameModal';
 import { ShareModal } from './ShareModal';
@@ -47,6 +48,7 @@ export const DriveLayout = () => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [modalPreviewState, setModalPreviewState] = useState(null); // { items: [], index: 0 }
   const [photoViewerState, setPhotoViewerState] = useState(null); // { items: [], index: 0 }
+  const [docViewerState, setDocViewerState] = useState(null); // { items: [], index: 0 }
 
   // Modals
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
@@ -255,7 +257,7 @@ export const DriveLayout = () => {
   const handleSelectFile = useCallback(
     (file, idx) => {
       if (!file) return;
-      const { isImage } = getFileKind(file);
+      const { isImage, isVideo } = getFileKind(file);
 
       if (isImage) {
         // Filter current context files to ONLY photos/images so swipe transitions between photos
@@ -264,16 +266,28 @@ export const DriveLayout = () => {
           (f) => (f._id || f.id) === (file._id || file.id)
         );
         setPhotoViewerState({
-          items: imageFiles,
+          items: imageFiles.length > 0 ? imageFiles : [file],
           index: photoIdx >= 0 ? photoIdx : 0,
         });
-      } else {
+      } else if (isVideo) {
+        // Filter current context files to ONLY videos for video player
+        const videoFiles = files.filter((f) => getFileKind(f).isVideo);
+        const videoIdx = videoFiles.findIndex(
+          (f) => (f._id || f.id) === (file._id || file.id)
+        );
         setModalPreviewState({
-          items: files,
-          index:
-            typeof idx === 'number'
-              ? idx
-              : files.findIndex((f) => (f._id || f.id) === (file._id || file.id)),
+          items: videoFiles.length > 0 ? videoFiles : [file],
+          index: videoIdx >= 0 ? videoIdx : (typeof idx === 'number' ? idx : 0),
+        });
+      } else {
+        // Documents, PDFs, DOCX, XLSX, CSV, code, and other files
+        const docFiles = files.filter((f) => !getFileKind(f).isImage && !getFileKind(f).isVideo);
+        const docIdx = docFiles.findIndex(
+          (f) => (f._id || f.id) === (file._id || file.id)
+        );
+        setDocViewerState({
+          items: docFiles.length > 0 ? docFiles : [file],
+          index: docIdx >= 0 ? docIdx : 0,
         });
       }
     },
@@ -595,6 +609,20 @@ export const DriveLayout = () => {
             setPhotoViewerState((prev) => (prev ? { ...prev, index: newIdx } : null))
           }
           onClose={() => setPhotoViewerState(null)}
+          onDelete={handleDeleteFile}
+        />
+      )}
+
+      {/* In-App Document / Spreadsheet / PDF Viewer Modal */}
+      {docViewerState && (
+        <DocumentViewerModal
+          document={docViewerState.items[docViewerState.index]}
+          items={docViewerState.items}
+          currentIndex={docViewerState.index}
+          onIndexChange={(newIdx) =>
+            setDocViewerState((prev) => (prev ? { ...prev, index: newIdx } : null))
+          }
+          onClose={() => setDocViewerState(null)}
           onDelete={handleDeleteFile}
         />
       )}

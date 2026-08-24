@@ -805,8 +805,15 @@ exports.downloadFile = async (req, res) => {
       timeout: 180000,
     });
 
-    const safeName = encodeURIComponent(item.title || 'file');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    const isInline = req.query.inline === 'true' || req.query.inline === '1' || req.query.preview === 'true';
+    const rawTitle = item.title || 'file';
+    const ext = item.extension ? `.${item.extension.replace(/^\./, '')}` : '';
+    const safeFilename = rawTitle.endsWith(ext) ? rawTitle : `${rawTitle}${ext}`;
+    const asciiFilename = safeFilename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '');
+    const utf8Filename = encodeURIComponent(safeFilename);
+    const dispositionType = isInline ? 'inline' : 'attachment';
+
+    res.setHeader('Content-Disposition', `${dispositionType}; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`);
     if (item.mimeType) res.setHeader('Content-Type', item.mimeType);
     if (item.fileSizeBytes) res.setHeader('Content-Length', item.fileSizeBytes);
 
