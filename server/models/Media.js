@@ -97,6 +97,15 @@ const mediaSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    originalName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    originalSizeBytes: {
+      type: Number,
+      default: 0,
+    },
     views: {
       type: Number,
       default: 0,
@@ -140,5 +149,6 @@ mediaSchema.index({ isStarred: 1 });
 mediaSchema.index({ fileType: 1 });
 mediaSchema.index({ fileCategory: 1 });
 mediaSchema.index({ createdAt: -1 });
+mediaSchema.index({ originalName: 1, originalSizeBytes: 1 });
 
 module.exports = mongoose.model('Media', mediaSchema);

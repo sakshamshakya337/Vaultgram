@@ -448,6 +448,12 @@ export const api = {
 
     getLibrary: () => request('/videos/user/library'),
 
+    checkDuplicates: (files) =>
+      request('/videos/check-duplicates', {
+        method: 'POST',
+        body: JSON.stringify({ files }),
+      }),
+
     createFolder: (title, parentFolderId = null) =>
       request('/videos/folder', {
         method: 'POST',

@@ -12,7 +12,7 @@ import {
   Music,
   File,
   Loader2,
-  Clock,
+  SkipForward,
   Sparkles,
   Pause,
   Play
@@ -44,6 +44,7 @@ export const UploadTray = () => {
   const totalFiles = uploadQueue.length;
   const completedFiles = uploadQueue.filter((i) => i.status === 'done').length;
   const errorFiles = uploadQueue.filter((i) => i.status === 'error').length;
+  const skippedFiles = uploadQueue.filter((i) => i.status === 'skipped').length;
   const activeItem = uploadQueue.find((i) => i.status === 'uploading' || i.status === 'compressing');
   const queuedFiles = uploadQueue.filter((i) => i.status === 'queued').length;
   const pausedFiles = uploadQueue.filter((i) => i.status === 'paused').length;
@@ -54,12 +55,16 @@ export const UploadTray = () => {
   if (isPaused) {
     headerTitle = `Uploads Paused (${pausedFiles || queuedFiles} remaining)`;
   } else if (inProgress) {
-    const currentNum = completedFiles + errorFiles + (activeItem ? 1 : 0);
+    const currentNum = completedFiles + errorFiles + skippedFiles + (activeItem ? 1 : 0);
     headerTitle = `Uploading ${Math.min(currentNum, totalFiles)} of ${totalFiles}`;
-  } else if (errorFiles > 0 && completedFiles === 0) {
+  } else if (errorFiles > 0 && completedFiles === 0 && skippedFiles === 0) {
     headerTitle = `${errorFiles} ${errorFiles === 1 ? 'upload' : 'uploads'} failed`;
   } else if (errorFiles > 0) {
     headerTitle = `${completedFiles} complete, ${errorFiles} failed`;
+  } else if (skippedFiles > 0 && completedFiles === 0) {
+    headerTitle = `${skippedFiles} ${skippedFiles === 1 ? 'duplicate' : 'duplicates'} skipped`;
+  } else if (skippedFiles > 0) {
+    headerTitle = `${completedFiles} uploaded, ${skippedFiles} skipped`;
   } else {
     headerTitle = `${completedFiles} ${completedFiles === 1 ? 'upload' : 'uploads'} complete`;
   }
@@ -198,6 +203,7 @@ export const UploadTray = () => {
               const isError = item.status === 'error';
               const isQueued = item.status === 'queued';
               const isPausedItem = item.status === 'paused';
+              const isSkipped = item.status === 'skipped';
 
               return (
                 <div
@@ -221,6 +227,11 @@ export const UploadTray = () => {
                             {item.errorMessage}
                           </p>
                         )}
+                        {isSkipped && item.errorMessage && (
+                          <p className="text-[10px] text-amber-400 font-medium truncate mt-0.5" title={item.errorMessage}>
+                            {item.errorMessage}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -229,6 +240,16 @@ export const UploadTray = () => {
                       {isDone && (
                         <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                           <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                      )}
+
+                      {isSkipped && (
+                        <div
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] font-semibold"
+                          title={item.errorMessage || 'Skipped duplicate'}
+                        >
+                          <SkipForward className="w-3 h-3" />
+                          <span>Skipped</span>
                         </div>
                       )}
 
@@ -347,10 +368,11 @@ export const UploadTray = () => {
         )}
 
         {/* Tray Footer */}
-        {!isTrayMinimized && (completedFiles > 0 || errorFiles > 0) && (
+        {!isTrayMinimized && (completedFiles > 0 || errorFiles > 0 || skippedFiles > 0) && (
           <div className="px-4 py-2.5 bg-zinc-950/90 border-t border-white/5 flex items-center justify-between text-xs shrink-0">
             <span className="text-zinc-500 text-[11px] font-mono">
               {completedFiles} of {totalFiles} completed
+              {skippedFiles > 0 ? ` · ${skippedFiles} skipped` : ''}
             </span>
             <div className="flex items-center gap-2">
               {errorFiles > 0 && (
@@ -362,7 +384,7 @@ export const UploadTray = () => {
                   <span>Retry all ({errorFiles})</span>
                 </button>
               )}
-              {completedFiles > 0 && (
+              {(completedFiles > 0 || skippedFiles > 0) && (
                 <button
                   onClick={clearCompleted}
                   className="text-[11px] font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer"

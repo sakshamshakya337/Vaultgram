@@ -17,6 +17,7 @@ const {
   moveItem,
   batchMove,
   batchTrash,
+  checkDuplicates,
   updateNote,
   trashOrDelete,
   restoreTrash,
@@ -46,6 +47,7 @@ router.post('/folder', optionalAuth, createFolder);
 // ─── Batch Operations ────────────────────────────────────────────────────────
 router.post('/batch/trash', optionalAuth, batchTrash);
 router.patch('/batch/move', optionalAuth, batchMove);
+router.post('/check-duplicates', optionalAuth, checkDuplicates);
 
 // ─── Drive File & Folder Operations ──────────────────────────────────────────
 router.patch('/:id/rename', optionalAuth, renameItem);

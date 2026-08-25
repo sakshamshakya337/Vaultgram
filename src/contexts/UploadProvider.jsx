@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getAccessToken, API_BASE_URL } from '../services/api';
+import { getAccessToken, API_BASE_URL, api } from '../services/api';
 import {
   UploadContext,
   MAX_VIDEO_UPLOAD_SIZE_MB,
@@ -13,8 +13,11 @@ const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 const MAX_VIDEO_BYTES = MAX_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024;
 const MAX_NON_VIDEO_BYTES = MAX_NON_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024;
 
+const fileDedupeKey = (name, size) => `${String(name || '').trim().toLowerCase()}::${Number(size) || 0}`;
+
 export const UploadProvider = ({ children }) => {
   const [uploadQueue, setUploadQueue] = useState([]);
+  const uploadQueueRef = useRef([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isTrayOpen, setIsTrayOpen] = useState(false);
@@ -35,6 +38,10 @@ export const UploadProvider = ({ children }) => {
   const onUploadSuccessListenersRef = useRef(new Set());
   const activeXhrRef = useRef(null);
   const currentProcessingIdRef = useRef(null);
+
+  useEffect(() => {
+    uploadQueueRef.current = uploadQueue;
+  }, [uploadQueue]);
 
   const registerOnUploadSuccess = useCallback((callback) => {
     onUploadSuccessListenersRef.current.add(callback);
@@ -76,27 +83,78 @@ export const UploadProvider = ({ children }) => {
   });
 
   /**
-   * Directly enqueue validated files into the upload queue
+   * Directly enqueue validated files into the upload queue.
+   * Skips duplicates in the same batch, already-queued files, and files already in the vault.
    */
-  const enqueueDirectly = useCallback((files, { folderId = null, folderTitle = '', category = 'General' } = {}) => {
+  const enqueueDirectly = useCallback(async (files, { folderId = null, folderTitle = '', category = 'General' } = {}) => {
     if (!files || files.length === 0) return;
 
     const fileList = Array.from(files);
-    const newItems = fileList.map((file) => {
+    const seenInBatch = new Set();
+    const uniqueFiles = [];
+    const skippedFiles = [];
+
+    fileList.forEach((file) => {
+      const key = fileDedupeKey(file.name, file.size);
+      if (seenInBatch.has(key)) {
+        skippedFiles.push({ file, reason: 'Duplicate in this batch' });
+        return;
+      }
+      seenInBatch.add(key);
+      uniqueFiles.push(file);
+    });
+
+    const queueKeys = new Set(
+      (uploadQueueRef.current || [])
+        .filter((item) => item.status !== 'error')
+        .map((item) => fileDedupeKey(item.fileName, item.fileSize))
+    );
+
+    const notInQueue = [];
+    uniqueFiles.forEach((file) => {
+      const key = fileDedupeKey(file.name, file.size);
+      if (queueKeys.has(key)) {
+        skippedFiles.push({ file, reason: 'Already in upload queue' });
+      } else {
+        notInQueue.push(file);
+      }
+    });
+
+    const vaultDupKeys = new Set();
+    const CHUNK = 80;
+    for (let i = 0; i < notInQueue.length; i += CHUNK) {
+      const chunk = notInQueue.slice(i, i + CHUNK);
+      try {
+        const res = await api.drive.checkDuplicates(chunk.map((f) => ({ name: f.name, size: f.size })));
+        (res?.duplicates || []).forEach((d) => vaultDupKeys.add(fileDedupeKey(d.name, d.size)));
+      } catch (err) {
+        console.warn('Vault duplicate check failed:', err.message);
+      }
+    }
+
+    const toUpload = [];
+    notInQueue.forEach((file) => {
+      const key = fileDedupeKey(file.name, file.size);
+      if (vaultDupKeys.has(key)) {
+        skippedFiles.push({ file, reason: 'Already in your vault' });
+      } else {
+        toUpload.push(file);
+      }
+    });
+
+    const buildItem = (file, status, errorMessage) => {
       const id = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const fileTypeCategory = detectFileTypeCategory(file);
       const isVideo = fileTypeCategory === 'video' || (file.type && file.type.startsWith('video/'));
-
-      // Validate against original-size limit (200MB video, 20MB non-video)
       const maxLimitBytes = isVideo ? MAX_VIDEO_BYTES : MAX_NON_VIDEO_BYTES;
       const maxLimitMb = isVideo ? MAX_VIDEO_UPLOAD_SIZE_MB : MAX_NON_VIDEO_UPLOAD_SIZE_MB;
       const isTooLarge = file.size > maxLimitBytes;
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
 
-      let initialStatus = 'queued';
-      let initialError = null;
+      let initialStatus = status;
+      let initialError = errorMessage;
 
-      if (isTooLarge) {
+      if (status !== 'skipped' && isTooLarge) {
         initialStatus = 'error';
         initialError = isVideo
           ? `Video exceeds ${maxLimitMb}MB limit (${sizeMb} MB)`
@@ -110,7 +168,7 @@ export const UploadProvider = ({ children }) => {
         fileSize: file.size,
         fileTypeCategory,
         isVideo,
-        status: initialStatus, // 'queued' | 'uploading' | 'compressing' | 'done' | 'error'
+        status: initialStatus,
         progress: 0,
         errorMessage: initialError,
         category: category || 'General',
@@ -119,7 +177,14 @@ export const UploadProvider = ({ children }) => {
         createdAt: Date.now(),
         result: null,
       };
-    });
+    };
+
+    const newItems = [
+      ...toUpload.map((file) => buildItem(file, 'queued', null)),
+      ...skippedFiles.map(({ file, reason }) => buildItem(file, 'skipped', reason)),
+    ];
+
+    if (newItems.length === 0) return;
 
     setUploadQueue((prev) => [...prev, ...newItems]);
     setIsTrayOpen(true);
@@ -444,7 +509,7 @@ export const UploadProvider = ({ children }) => {
    */
   const clearCompleted = useCallback(() => {
     setUploadQueue((prev) =>
-      prev.filter((item) => item.status === 'queued' || item.status === 'uploading' || item.status === 'compressing')
+      prev.filter((item) => !['done', 'error', 'skipped'].includes(item.status))
     );
   }, []);
 
@@ -500,6 +565,24 @@ export const UploadProvider = ({ children }) => {
       xhr.onload = () => {
         activeXhrRef.current = null;
         currentProcessingIdRef.current = null;
+
+        if (xhr.status === 409) {
+          let skippedMessage = 'Already in your vault — skipped';
+          try {
+            const json = JSON.parse(xhr.responseText);
+            if (json.message) skippedMessage = json.message;
+          } catch {}
+
+          setUploadQueue((prev) =>
+            prev.map((q) =>
+              q.id === item.id
+                ? { ...q, status: 'skipped', progress: 0, errorMessage: skippedMessage }
+                : q
+            )
+          );
+          resolve({ success: false, skipped: true });
+          return;
+        }
 
         if (xhr.status >= 200 && xhr.status < 300) {
           let responseData = null;
@@ -623,6 +706,7 @@ export const UploadProvider = ({ children }) => {
         isTrayMinimized,
         setIsTrayMinimized,
         addToQueue,
+        enqueueFiles: addToQueue,
         promptCategoryForFiles,
         categoryPrompt,
         closeCategoryPrompt,

@@ -50,6 +50,99 @@ exports.uploadMiddleware = upload.fields([
   { name: 'thumbnail', maxCount: 1 },
 ]);
 
+const normalizeUploadTitle = (filename) => {
+  const name = String(filename || '').trim();
+  const stripped = name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim();
+  return stripped || name || 'Untitled File';
+};
+
+const ownerOrLegacyFilter = (req) => {
+  if (!req.user?._id) return null;
+  return {
+    $or: [{ uploadedBy: req.user._id }, { uploadedBy: null }, { uploadedBy: { $exists: false } }],
+  };
+};
+
+const isSameVaultFile = (doc, name, size) => {
+  const nameLc = String(name || '').trim().toLowerCase();
+  const titleLc = normalizeUploadTitle(name).toLowerCase();
+  const sizeNum = Number(size) || 0;
+  const docName = String(doc.originalName || '').trim().toLowerCase();
+  const docTitle = String(doc.title || '').trim().toLowerCase();
+  const nameMatches = (docName && docName === nameLc) || docTitle === nameLc || docTitle === titleLc;
+  if (!nameMatches) return false;
+  const origSize = Number(doc.originalSizeBytes) || 0;
+  const storedSize = Number(doc.fileSizeBytes) || 0;
+  return origSize === sizeNum || storedSize === sizeNum;
+};
+
+const findExistingDuplicate = async (req, originalName, originalSizeBytes) => {
+  const sizeNum = Number(originalSizeBytes) || 0;
+  const name = String(originalName || '').trim();
+  if (!name || !sizeNum) return null;
+
+  const query = {
+    isTrashed: { $ne: true },
+    isFolder: { $ne: true },
+    $or: [{ originalSizeBytes: sizeNum }, { fileSizeBytes: sizeNum }],
+  };
+  const owner = ownerOrLegacyFilter(req);
+  if (owner) {
+    query.$and = [owner];
+  }
+
+  const candidates = await Media.find(query)
+    .select('title originalName originalSizeBytes fileSizeBytes')
+    .lean()
+    .limit(500);
+
+  return candidates.find((doc) => isSameVaultFile(doc, name, sizeNum)) || null;
+};
+
+/**
+ * POST /api/v1/media/check-duplicates
+ * Body: { files: [{ name, size }] }
+ */
+exports.checkDuplicates = async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body?.files) ? req.body.files.slice(0, 80) : [];
+    if (incoming.length === 0) {
+      return res.json({ duplicates: [] });
+    }
+
+    const sizes = [
+      ...new Set(incoming.map((f) => Number(f.size) || 0).filter((s) => s > 0)),
+    ];
+    if (sizes.length === 0) {
+      return res.json({ duplicates: [] });
+    }
+
+    const query = {
+      isTrashed: { $ne: true },
+      isFolder: { $ne: true },
+      $or: [{ originalSizeBytes: { $in: sizes } }, { fileSizeBytes: { $in: sizes } }],
+    };
+    const owner = ownerOrLegacyFilter(req);
+    if (owner) {
+      query.$and = [owner];
+    }
+
+    const existing = await Media.find(query)
+      .select('title originalName originalSizeBytes fileSizeBytes')
+      .lean()
+      .limit(2000);
+
+    const duplicates = incoming
+      .filter((f) => existing.some((doc) => isSameVaultFile(doc, f.name, f.size)))
+      .map((f) => ({ name: f.name, size: f.size }));
+
+    res.json({ duplicates });
+  } catch (err) {
+    console.error('[checkDuplicates error]:', err.message);
+    res.status(500).json({ message: 'Failed to check duplicates' });
+  }
+};
+
 const ensureFileType = (item) => {
   if (!item) return item;
   const copy = { ...item };
@@ -286,6 +379,16 @@ exports.uploadMedia = async (req, res) => {
       return res.status(400).json({ message: 'No file provided for upload' });
     }
 
+    const duplicate = await findExistingDuplicate(req, uploadedFile.originalname, uploadedFile.size);
+    if (duplicate) {
+      return res.status(409).json({
+        error: 'DUPLICATE',
+        skipped: true,
+        message: 'Already in your vault — skipped',
+        existingId: duplicate._id,
+      });
+    }
+
     let uploadFilename = uploadedFile.originalname;
     let uploadMimetype = uploadedFile.mimetype;
     let originalFormat = '';
@@ -457,6 +560,8 @@ exports.uploadMedia = async (req, res) => {
       width: width || compressedMeta.width || 0,
       height: height || compressedMeta.height || 0,
       fileSizeBytes: fileSizeBytes || finalSize || 0,
+      originalName: uploadedFile.originalname || '',
+      originalSizeBytes: uploadedFile.size || 0,
       uploadedBy: req.user?.id || req.user?._id,
     });
 
