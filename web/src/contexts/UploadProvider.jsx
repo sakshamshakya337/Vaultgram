@@ -368,7 +368,7 @@ export const UploadProvider = ({ children }) => {
   }, []);
 
   /**
-   * Retry a failed item
+   * Retry a single failed item
    */
   const retryUpload = useCallback((id) => {
     setUploadQueue((prev) =>
@@ -399,6 +399,43 @@ export const UploadProvider = ({ children }) => {
         return item;
       })
     );
+    setIsPaused(false);
+    setIsTrayOpen(true);
+  }, []);
+
+  /**
+   * Retry all failed items in the queue at once
+   */
+  const retryAllFailed = useCallback(() => {
+    setUploadQueue((prev) =>
+      prev.map((item) => {
+        if (item.status === 'error') {
+          const isVideo = item.isVideo ?? (item.fileTypeCategory === 'video' || (item.file?.type && item.file.type.startsWith('video/')));
+          const maxLimitBytes = isVideo ? MAX_VIDEO_BYTES : MAX_NON_VIDEO_BYTES;
+          const maxLimitMb = isVideo ? MAX_VIDEO_UPLOAD_SIZE_MB : MAX_NON_VIDEO_UPLOAD_SIZE_MB;
+
+          if (item.file?.size > maxLimitBytes) {
+            const sizeMb = (item.file.size / (1024 * 1024)).toFixed(1);
+            return {
+              ...item,
+              status: 'error',
+              errorMessage: isVideo
+                ? `Video exceeds ${maxLimitMb}MB limit (${sizeMb} MB)`
+                : `File exceeds ${maxLimitMb}MB limit (${sizeMb} MB)`,
+              progress: 0,
+            };
+          }
+          return {
+            ...item,
+            status: 'queued',
+            progress: 0,
+            errorMessage: null,
+          };
+        }
+        return item;
+      })
+    );
+    setIsPaused(false);
     setIsTrayOpen(true);
   }, []);
 
@@ -597,6 +634,7 @@ export const UploadProvider = ({ children }) => {
         cancelUpload,
         cancelAllUploads,
         retryUpload,
+        retryAllFailed,
         clearCompleted,
         dismissTray,
         registerOnUploadSuccess,
