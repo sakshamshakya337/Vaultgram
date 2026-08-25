@@ -13,7 +13,22 @@ export const VideoFeedProvider = ({ children }) => {
   const [nextCursor, setNextCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
 
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategoryState] = useState(() => {
+    try {
+      return sessionStorage.getItem('vaultgram_selected_category') || 'All';
+    } catch {
+      return 'All';
+    }
+  });
+
+  const setSelectedCategory = useCallback((cat) => {
+    const val = cat || 'All';
+    setSelectedCategoryState(val);
+    try {
+      sessionStorage.setItem('vaultgram_selected_category', val);
+    } catch {}
+  }, []);
+
   const [categories, setCategories] = useState(['All']);
   const [lockedCategories, setLockedCategories] = useState([]);
 
@@ -25,7 +40,7 @@ export const VideoFeedProvider = ({ children }) => {
   const [sessionUnlockedReels, setSessionUnlockedReels] = useState(false);
 
   // 3-Minute Inactivity Timer for re-locking opened protected folders and Reels
-  const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000;
+  const INACTIVITY_TIMEOUT_MS = 8 * 60 * 1000;
   const lastActivityRef = useRef(Date.now());
   const lastHiddenTimeRef = useRef(null);
 

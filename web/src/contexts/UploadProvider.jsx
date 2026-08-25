@@ -16,6 +16,7 @@ const MAX_NON_VIDEO_BYTES = MAX_NON_VIDEO_UPLOAD_SIZE_MB * 1024 * 1024;
 export const UploadProvider = ({ children }) => {
   const [uploadQueue, setUploadQueue] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [isTrayOpen, setIsTrayOpen] = useState(false);
   const [isTrayMinimized, setIsTrayMinimized] = useState(false);
 
@@ -285,6 +286,70 @@ export const UploadProvider = ({ children }) => {
   }, []);
 
   /**
+   * Pause/Resume all uploads in the queue
+   */
+  const togglePauseUploads = useCallback(() => {
+    setIsPaused((prev) => {
+      const nextPaused = !prev;
+      if (nextPaused) {
+        // Pausing: abort active in-flight transfer if any
+        if (activeXhrRef.current) {
+          try {
+            activeXhrRef.current.abort();
+          } catch (err) {
+            console.warn('Error aborting on pause:', err);
+          }
+          activeXhrRef.current = null;
+        }
+        setUploadQueue((q) =>
+          q.map((item) =>
+            item.status === 'uploading' || item.status === 'compressing'
+              ? { ...item, status: 'paused' }
+              : item
+          )
+        );
+      } else {
+        // Resuming: mark all paused items as queued
+        setUploadQueue((q) =>
+          q.map((item) =>
+            item.status === 'paused'
+              ? { ...item, status: 'queued', progress: 0 }
+              : item
+          )
+        );
+      }
+      return nextPaused;
+    });
+  }, []);
+
+  /**
+   * Pause single item in queue
+   */
+  const pauseUpload = useCallback((id) => {
+    if (currentProcessingIdRef.current === id && activeXhrRef.current) {
+      try {
+        activeXhrRef.current.abort();
+      } catch (err) {
+        console.warn('Error aborting on item pause:', err);
+      }
+      activeXhrRef.current = null;
+    }
+    setUploadQueue((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status: 'paused' } : item))
+    );
+  }, []);
+
+  /**
+   * Resume single item in queue
+   */
+  const resumeUpload = useCallback((id) => {
+    setUploadQueue((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status: 'queued', progress: 0 } : item))
+    );
+    setIsPaused(false);
+  }, []);
+
+  /**
    * Cancel all upload items, abort active in-flight transfers, and reset queue
    */
   const cancelAllUploads = useCallback(() => {
@@ -297,6 +362,7 @@ export const UploadProvider = ({ children }) => {
       activeXhrRef.current = null;
       currentProcessingIdRef.current = null;
     }
+    setIsPaused(false);
     setUploadQueue([]);
     setIsTrayOpen(false);
   }, []);
@@ -492,7 +558,7 @@ export const UploadProvider = ({ children }) => {
    * Picks the next 'queued' item, uploads it, and then continues sequentially.
    */
   useEffect(() => {
-    if (isProcessing) return;
+    if (isProcessing || isPaused) return;
 
     const nextItem = uploadQueue.find((i) => i.status === 'queued');
     if (!nextItem) return;
@@ -507,13 +573,14 @@ export const UploadProvider = ({ children }) => {
     executeFileUpload(nextItem).finally(() => {
       setIsProcessing(false);
     });
-  }, [uploadQueue, isProcessing, executeFileUpload]);
+  }, [uploadQueue, isProcessing, isPaused, executeFileUpload]);
 
   return (
     <UploadContext.Provider
       value={{
         uploadQueue,
         isProcessing,
+        isPaused,
         isTrayOpen,
         setIsTrayOpen,
         isTrayMinimized,
@@ -524,6 +591,9 @@ export const UploadProvider = ({ children }) => {
         closeCategoryPrompt,
         confirmCategoryPrompt,
         openFilePicker,
+        pauseUpload,
+        resumeUpload,
+        togglePauseUploads,
         cancelUpload,
         cancelAllUploads,
         retryUpload,

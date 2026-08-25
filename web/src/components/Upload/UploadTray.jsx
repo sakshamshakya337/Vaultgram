@@ -13,7 +13,9 @@ import {
   File,
   Loader2,
   Clock,
-  Sparkles
+  Sparkles,
+  Pause,
+  Play
 } from 'lucide-react';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
 import { formatBytes } from '../../services/api';
@@ -30,6 +32,10 @@ export const UploadTray = () => {
     retryUpload,
     clearCompleted,
     isProcessing,
+    isPaused,
+    togglePauseUploads,
+    pauseUpload,
+    resumeUpload,
   } = useUploadQueue();
 
   if (!isTrayOpen || uploadQueue.length === 0) return null;
@@ -39,11 +45,14 @@ export const UploadTray = () => {
   const errorFiles = uploadQueue.filter((i) => i.status === 'error').length;
   const activeItem = uploadQueue.find((i) => i.status === 'uploading' || i.status === 'compressing');
   const queuedFiles = uploadQueue.filter((i) => i.status === 'queued').length;
-  const inProgress = isProcessing || !!activeItem || queuedFiles > 0;
+  const pausedFiles = uploadQueue.filter((i) => i.status === 'paused').length;
+  const inProgress = (isProcessing || !!activeItem || queuedFiles > 0) && !isPaused;
 
   // Header Title
   let headerTitle = '';
-  if (inProgress) {
+  if (isPaused) {
+    headerTitle = `Uploads Paused (${pausedFiles || queuedFiles} remaining)`;
+  } else if (inProgress) {
     const currentNum = completedFiles + errorFiles + (activeItem ? 1 : 0);
     headerTitle = `Uploading ${Math.min(currentNum, totalFiles)} of ${totalFiles}`;
   } else if (errorFiles > 0 && completedFiles === 0) {
@@ -72,17 +81,25 @@ export const UploadTray = () => {
     }
   };
 
+  const hasPendingItems = uploadQueue.some(
+    (i) => i.status === 'uploading' || i.status === 'compressing' || i.status === 'queued' || i.status === 'paused'
+  );
+
   return (
     <div
       className={`fixed z-50 transition-all duration-300 ease-in-out select-none
-        bottom-20 inset-x-3 sm:bottom-6 sm:right-6 sm:left-auto sm:w-[380px]
+        bottom-20 inset-x-3 sm:bottom-6 sm:right-6 sm:left-auto sm:w-[390px]
       `}
     >
       <div className="rounded-2xl bg-zinc-900/95 border border-white/10 shadow-2xl backdrop-blur-2xl overflow-hidden flex flex-col text-white">
         {/* Tray Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-zinc-950/80 border-b border-white/10 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            {inProgress ? (
+            {isPaused ? (
+              <div className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                <Pause className="w-3 h-3 fill-amber-400" />
+              </div>
+            ) : inProgress ? (
               <div className="w-5 h-5 rounded-full border-2 border-cyan-400/30 border-t-cyan-400 animate-spin shrink-0" />
             ) : errorFiles > 0 ? (
               <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
@@ -95,7 +112,7 @@ export const UploadTray = () => {
               <span className="text-xs font-bold text-white block truncate">
                 {headerTitle}
               </span>
-              {inProgress && activeItem && (
+              {!isPaused && inProgress && activeItem && (
                 <span className="text-[10px] text-zinc-400 block truncate font-mono">
                   {activeItem.status === 'compressing'
                     ? activeItem.isVideo
@@ -107,10 +124,36 @@ export const UploadTray = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 ml-2">
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            {/* Pause / Resume Button for multi-batch */}
+            {hasPendingItems && (
+              <button
+                onClick={togglePauseUploads}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm ${
+                  isPaused
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                    : 'bg-white/10 text-cyan-300 border border-white/10 hover:bg-white/15'
+                }`}
+                title={isPaused ? 'Resume Uploads' : 'Pause Uploads'}
+                aria-label={isPaused ? 'Resume Uploads' : 'Pause Uploads'}
+              >
+                {isPaused ? (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-amber-300" />
+                    <span className="text-[11px]">Resume</span>
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-3.5 h-3.5 fill-cyan-300" />
+                    <span className="text-[11px]">Pause</span>
+                  </>
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => setIsTrayMinimized((prev) => !prev)}
-              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               title={isTrayMinimized ? 'Expand' : 'Minimize'}
               aria-label={isTrayMinimized ? 'Expand' : 'Minimize'}
             >
@@ -122,7 +165,7 @@ export const UploadTray = () => {
             </button>
             <button
               onClick={dismissTray}
-              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               title="Hide tray (uploads continue in background)"
               aria-label="Hide tray"
             >
@@ -140,6 +183,7 @@ export const UploadTray = () => {
               const isDone = item.status === 'done';
               const isError = item.status === 'error';
               const isQueued = item.status === 'queued';
+              const isPausedItem = item.status === 'paused';
 
               return (
                 <div
@@ -175,10 +219,16 @@ export const UploadTray = () => {
                             {item.progress}%
                           </span>
                           <button
+                            onClick={() => pauseUpload(item.id)}
+                            className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-amber-300 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                            title="Pause this upload"
+                          >
+                            <Pause className="w-3.5 h-3.5 fill-current" />
+                          </button>
+                          <button
                             onClick={() => cancelUpload(item.id)}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
+                            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                             title="Cancel upload"
-                            aria-label="Cancel upload"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -193,9 +243,30 @@ export const UploadTray = () => {
                           </div>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
+                            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                             title="Cancel upload"
-                            aria-label="Cancel upload"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      {isPausedItem && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold text-amber-300 px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                            Paused
+                          </span>
+                          <button
+                            onClick={() => resumeUpload(item.id)}
+                            className="w-7 h-7 flex items-center justify-center text-amber-300 hover:text-amber-200 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                            title="Resume this upload"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-amber-300" />
+                          </button>
+                          <button
+                            onClick={() => cancelUpload(item.id)}
+                            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                            title="Cancel upload"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -209,9 +280,8 @@ export const UploadTray = () => {
                           </span>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
+                            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                             title="Cancel queued upload"
-                            aria-label="Cancel queued upload"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -222,18 +292,16 @@ export const UploadTray = () => {
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => retryUpload(item.id)}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-[10px] font-bold transition-colors cursor-pointer min-h-[32px]"
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-[10px] font-bold transition-colors cursor-pointer min-h-[28px]"
                             title="Retry Upload"
-                            aria-label="Retry Upload"
                           >
                             <RotateCw className="w-3.5 h-3.5" />
                             <span>Retry</span>
                           </button>
                           <button
                             onClick={() => cancelUpload(item.id)}
-                            className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
+                            className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                             title="Dismiss"
-                            aria-label="Dismiss"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -251,48 +319,34 @@ export const UploadTray = () => {
                       />
                     </div>
                   )}
-
-                  {/* Indeterminate Server Compression Bar */}
-                  {isCompressing && (
-                    <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden mt-1">
-                      <div className="h-full w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-500 animate-pulse rounded-full" />
-                    </div>
-                  )}
-
-                  {/* Error Message */}
-                  {isError && item.errorMessage && (
-                    <p className="text-[11px] text-rose-400 font-medium leading-tight mt-0.5 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{item.errorMessage}</span>
-                    </p>
-                  )}
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Footer actions */}
-        {!isTrayMinimized && uploadQueue.length > 0 && (
-          <div className="px-4 py-2.5 bg-zinc-950/60 border-t border-white/5 flex items-center justify-between text-xs shrink-0">
-            <span className="text-zinc-500 text-[11px]">
+        {/* Tray Footer (When Completed) */}
+        {!isTrayMinimized && (completedFiles > 0 || errorFiles > 0) && (
+          <div className="px-4 py-2.5 bg-zinc-950/90 border-t border-white/5 flex items-center justify-between text-xs shrink-0">
+            <span className="text-zinc-500 text-[11px] font-mono">
               {completedFiles} of {totalFiles} completed
             </span>
-            {inProgress ? (
-              <button
-                onClick={cancelAllUploads}
-                className="text-rose-400 hover:text-rose-300 font-semibold cursor-pointer text-[11px] hover:underline"
-              >
-                Cancel All
-              </button>
-            ) : (
+            <div className="flex items-center gap-2">
               <button
                 onClick={clearCompleted}
-                className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer text-[11px]"
+                className="text-[11px] font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
-                Clear Finished
+                Clear completed
               </button>
-            )}
+              {queuedFiles === 0 && !activeItem && (
+                <button
+                  onClick={cancelAllUploads}
+                  className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

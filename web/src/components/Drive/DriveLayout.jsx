@@ -45,9 +45,43 @@ export const DriveLayout = () => {
   const { user, hasPin } = useAuth();
   const { openFilePicker, registerOnUploadSuccess } = useUploadQueue();
 
-  // Navigation & Data
-  const [currentNav, setCurrentNav] = useState('all'); // 'all', 'starred', 'recent', 'this-week', 'this-month', 'trash'
-  const [currentFolder, setCurrentFolder] = useState(null); // null = root
+  // Navigation & Data (Persisted across reload & background uploads)
+  const [currentNav, setCurrentNavState] = useState(() => {
+    try {
+      return sessionStorage.getItem('vaultgram_current_nav') || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+
+  const setCurrentNav = useCallback((nav) => {
+    const val = nav || 'all';
+    setCurrentNavState(val);
+    try {
+      sessionStorage.setItem('vaultgram_current_nav', val);
+    } catch {}
+  }, []);
+
+  const [currentFolder, setCurrentFolderState] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('vaultgram_current_folder');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setCurrentFolder = useCallback((folder) => {
+    setCurrentFolderState(folder);
+    try {
+      if (folder) {
+        sessionStorage.setItem('vaultgram_current_folder', JSON.stringify(folder));
+      } else {
+        sessionStorage.removeItem('vaultgram_current_folder');
+      }
+    } catch {}
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [modalPreviewState, setModalPreviewState] = useState(null); // { items: [], index: 0 }
@@ -534,6 +568,11 @@ export const DriveLayout = () => {
     setCurrentNav('all');
     setCurrentFolder(null);
     setSelectedCategory('All');
+    try {
+      sessionStorage.removeItem('vaultgram_current_folder');
+      sessionStorage.setItem('vaultgram_selected_category', 'All');
+      sessionStorage.setItem('vaultgram_current_nav', 'all');
+    } catch {}
     setSearchQuery('');
     setSelectedFileIds([]);
     setFocusedIndex(-1);
