@@ -24,6 +24,7 @@ import {
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
+import { formatBytes } from '../../services/api';
 
 export const DriveSidebar = ({
   currentNav,
@@ -42,6 +43,7 @@ export const DriveSidebar = ({
     toggleCategoryLock,
     setIsUploadOpen,
     triggerInstall,
+    vaultStats = { totalBytes: 0, totalItems: 0 },
   } = useVideoFeed();
 
   const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
@@ -312,19 +314,20 @@ export const DriveSidebar = ({
 
       {/* Bottom Storage & Settings Area */}
       <div className="p-4 border-t border-white/10 bg-zinc-950/60 space-y-3 shrink-0">
-        {/* Storage Bar */}
+        {/* Storage usage — sum of every uploaded file */}
         <div className="p-3 rounded-2xl bg-zinc-900/60 border border-white/5 space-y-2">
           <div className="flex items-center justify-between text-[11px]">
             <div className="flex items-center gap-1.5 text-zinc-300 font-semibold">
               <Cloud className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Telegram Cloud Vault</span>
+              <span>Uploaded</span>
             </div>
-            <span className="text-[10px] font-mono text-cyan-400 font-bold">Unlimited</span>
+            <span className="text-[11px] font-mono text-cyan-400 font-bold">
+              {formatBytes(vaultStats.totalBytes)}
+            </span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 w-3/4 rounded-full" />
-          </div>
-          <p className="text-[10px] text-zinc-500">Free, encrypted cloud storage</p>
+          <p className="text-[10px] text-zinc-500">
+            {vaultStats.totalItems} {vaultStats.totalItems === 1 ? 'file' : 'files'} in your vault
+          </p>
         </div>
 
         {/* Install Desktop App Option */}

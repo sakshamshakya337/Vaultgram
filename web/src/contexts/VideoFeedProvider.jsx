@@ -158,6 +158,21 @@ export const VideoFeedProvider = ({ children }) => {
     }
   }, [user?.lockedCategories]);
 
+  const [vaultStats, setVaultStats] = useState({ totalBytes: 0, totalItems: 0 });
+
+  const fetchLibraryStats = useCallback(async () => {
+    try {
+      const res = await api.drive.getLibrary();
+      const stats = res?.stats || {};
+      setVaultStats({
+        totalBytes: Number(stats.totalBytes) || 0,
+        totalItems: Number(stats.totalItems) || 0,
+      });
+    } catch (err) {
+      console.warn('Failed to load vault storage stats:', err.message);
+    }
+  }, []);
+
   // Fetch categories and locked status from API
   const fetchCategories = useCallback(async () => {
     try {
@@ -175,8 +190,10 @@ export const VideoFeedProvider = ({ children }) => {
       }
     } catch (err) {
       console.error('Error fetching categories:', err);
+    } finally {
+      fetchLibraryStats();
     }
-  }, []);
+  }, [fetchLibraryStats]);
 
   const REELS_CHUNK_SIZE = 6;
 
@@ -375,12 +392,13 @@ export const VideoFeedProvider = ({ children }) => {
     try {
       await api.videos.delete(id);
       setVideos((prev) => prev.filter((v) => (v._id || v.id) !== id));
+      fetchLibraryStats();
       return { success: true };
     } catch (err) {
       console.error('Failed to delete reel:', err);
       throw err;
     }
-  }, []);
+  }, [fetchLibraryStats]);
 
   const triggerInstall = async () => {
     if (deferredInstallPrompt) {
@@ -417,6 +435,8 @@ export const VideoFeedProvider = ({ children }) => {
         categoryLockTarget,
         setCategoryLockTarget,
         fetchCategories,
+        fetchLibraryStats,
+        vaultStats,
         fetchVideos,
         loadMoreVideos,
         isAudioUnlocked,

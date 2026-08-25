@@ -45,6 +45,7 @@ export const SettingsModal = () => {
     categories,
     lockedCategories,
     toggleCategoryLock,
+    vaultStats = { totalBytes: 0, totalItems: 0 },
   } = useVideoFeed();
 
   const [isRemovingPin, setIsRemovingPin] = useState(false);
@@ -234,6 +235,32 @@ export const SettingsModal = () => {
                 <Sun className="w-4 h-4" />
                 <span>Light Mode</span>
               </button>
+            </div>
+          </div>
+
+          {/* Cloud vault usage */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-cyan-400" />
+                  <span>Cloud Vault</span>
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Total size of files you have uploaded
+                </p>
+              </div>
+              <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                {formatBytes(vaultStats.totalBytes)}
+              </span>
+            </div>
+            <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5">
+              <p className="text-xs font-semibold text-white">
+                {vaultStats.totalItems} {vaultStats.totalItems === 1 ? 'file' : 'files'} uploaded
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                Counted from each file&apos;s size. Trashed items are not included until restored.
+              </p>
             </div>
           </div>
 

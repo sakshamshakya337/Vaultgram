@@ -35,6 +35,7 @@ export const DriveLayout = () => {
     setSelectedCategory,
     categories,
     fetchCategories,
+    fetchLibraryStats,
     categoryLockTarget,
     setCategoryLockTarget,
     sessionUnlockedCategories,
@@ -285,6 +286,7 @@ export const DriveLayout = () => {
       try {
         await api.drive.delete(folderId);
         loadDriveItems();
+        if (fetchLibraryStats) fetchLibraryStats();
       } catch (err) {
         alert(err.message || 'Failed to delete folder');
       }
@@ -297,6 +299,7 @@ export const DriveLayout = () => {
       setDriveItems((prev) => prev.filter((item) => (item._id || item.id) !== fileId));
       setSelectedFileIds((prev) => prev.filter((id) => id !== fileId));
       loadDriveItems();
+      if (fetchLibraryStats) fetchLibraryStats();
     } catch (err) {
       alert(err.message || 'Failed to delete file');
     }
@@ -370,6 +373,7 @@ export const DriveLayout = () => {
       setSelectedFileIds([]);
       setBulkDeleteTarget(null);
       loadDriveItems();
+      if (fetchLibraryStats) fetchLibraryStats();
     } catch (err) {
       console.error('[handleExecuteBulkDelete error]:', err);
       alert(err.message || 'Failed to bulk delete files');
@@ -832,9 +836,18 @@ export const DriveLayout = () => {
                 <TrashView
                   items={files}
                   viewMode={viewMode}
-                  onItemRestored={loadDriveItems}
-                  onItemDeletedPermanently={loadDriveItems}
-                  onTrashEmptied={loadDriveItems}
+                  onItemRestored={() => {
+                    loadDriveItems();
+                    if (fetchLibraryStats) fetchLibraryStats();
+                  }}
+                  onItemDeletedPermanently={() => {
+                    loadDriveItems();
+                    if (fetchLibraryStats) fetchLibraryStats();
+                  }}
+                  onTrashEmptied={() => {
+                    loadDriveItems();
+                    if (fetchLibraryStats) fetchLibraryStats();
+                  }}
                 />
               ) : currentNav === 'timeline' ? (
                 /* Timeline View */

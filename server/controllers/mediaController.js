@@ -898,34 +898,93 @@ exports.downloadFile = async (req, res) => {
 
 /**
  * GET /api/v1/media/user/library
+ * Sums fileSizeBytes for every non-trashed file (folders excluded).
  */
 exports.getUserLibrary = async (req, res) => {
   try {
-    const allFiles = await Media.find({ isTrashed: { $ne: true }, isFolder: { $ne: true } }).lean();
-    const totalBytes = allFiles.reduce((acc, curr) => acc + (curr.fileSizeBytes || 0), 0);
-    const categoryStats = {
-      image: allFiles.filter((i) => (i.fileType === 'image' || i.fileCategory === 'image')).length,
-      video: allFiles.filter((i) => (i.fileType === 'video' || i.fileCategory === 'video')).length,
-      audio: allFiles.filter((i) => (i.fileType === 'audio' || i.fileCategory === 'audio')).length,
-      document: allFiles.filter((i) => (i.fileType === 'document' || i.fileCategory === 'document' || i.fileCategory === 'pdf')).length,
-      archive: allFiles.filter((i) => i.fileCategory === 'archive').length,
-      code: allFiles.filter((i) => i.fileCategory === 'code').length,
-      other: allFiles.filter((i) => (i.fileType === 'other' || i.fileCategory === 'other')).length,
+    const match = {
+      isTrashed: { $ne: true },
+      isFolder: { $ne: true },
     };
 
-    const starredCount = await Media.countDocuments({ isStarred: true, isTrashed: { $ne: true } });
-    const trashCount = await Media.countDocuments({ isTrashed: true });
+    if (req.user?._id) {
+      match.$or = [
+        { uploadedBy: req.user._id },
+        { uploadedBy: null },
+        { uploadedBy: { $exists: false } },
+      ];
+    }
+
+    const [totals] = await Media.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalBytes: { $sum: { $ifNull: ['$fileSizeBytes', 0] } },
+          totalItems: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const categoryStats = {
+      image: 0,
+      video: 0,
+      audio: 0,
+      document: 0,
+      archive: 0,
+      code: 0,
+      other: 0,
+    };
+
+    const breakdownRows = await Media.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: {
+            $toLower: {
+              $ifNull: ['$fileType', { $ifNull: ['$fileCategory', 'other'] }],
+            },
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    breakdownRows.forEach((row) => {
+      const key = row._id === 'pdf' ? 'document' : row._id;
+      if (Object.prototype.hasOwnProperty.call(categoryStats, key)) {
+        categoryStats[key] += row.count;
+      } else {
+        categoryStats.other += row.count;
+      }
+    });
+
+    const starredMatch = { isStarred: true, isTrashed: { $ne: true } };
+    const trashMatch = { isTrashed: true };
+    if (req.user?._id) {
+      const ownerOrLegacy = [
+        { uploadedBy: req.user._id },
+        { uploadedBy: null },
+        { uploadedBy: { $exists: false } },
+      ];
+      starredMatch.$or = ownerOrLegacy;
+      trashMatch.$or = ownerOrLegacy;
+    }
+
+    const starredCount = await Media.countDocuments(starredMatch);
+    const trashCount = await Media.countDocuments(trashMatch);
 
     res.json({
       stats: {
-        totalItems: allFiles.length,
-        totalBytes,
+        totalItems: totals?.totalItems || 0,
+        totalBytes: totals?.totalBytes || 0,
         categoryStats,
         starredCount,
         trashCount,
       },
     });
   } catch (err) {
+    console.error('[getUserLibrary error]:', err.message);
     res.status(500).json({ message: 'Failed to load drive library stats' });
   }
 };

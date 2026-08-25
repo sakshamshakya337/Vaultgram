@@ -129,7 +129,7 @@ export const AppLayout = ({ activeTab, setActiveTab, onOpenAuth, children }) => 
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Sparkles size={14} color="#38bdf8" /> Cloud Storage
               </span>
-              <span style={{ color: '#10b981', fontWeight: 'bold' }}>Unlimited</span>
+              <span style={{ color: '#10b981', fontWeight: 'bold' }}>{formatBytes(totalStorageBytes)}</span>
             </div>
             <div className="storage-bar">
               <div className="storage-progress" style={{ width: '45%' }} />
