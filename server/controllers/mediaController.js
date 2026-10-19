@@ -366,6 +366,7 @@ exports.createFolder = async (req, res) => {
  * POST /api/v1/media/upload or /api/v1/videos/upload or /api/v1/files/upload
  */
 exports.uploadMedia = async (req, res) => {
+  const correlationId = req.headers['x-request-id'] || `up_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   try {
     const uploadedFile =
       req.files?.file?.[0] ||
@@ -376,8 +377,11 @@ exports.uploadMedia = async (req, res) => {
     const thumbFile = req.files?.thumbnail?.[0];
 
     if (!uploadedFile) {
-      return res.status(400).json({ message: 'No file provided for upload' });
+      console.warn(`[${correlationId}] [uploadMedia] No file provided in request`);
+      return res.status(400).json({ message: 'No file provided for upload', requestId: correlationId });
     }
+
+    console.log(`[${correlationId}] [uploadMedia] Incoming upload: "${uploadedFile.originalname}" (${uploadedFile.size} bytes, ${uploadedFile.mimetype})`);
 
     const duplicate = await findExistingDuplicate(req, uploadedFile.originalname, uploadedFile.size);
     if (duplicate) {
@@ -509,10 +513,16 @@ exports.uploadMedia = async (req, res) => {
     if (activeThumbBuffer) {
       finalThumbnail = `data:image/jpeg;base64,${activeThumbBuffer.toString('base64')}`;
       try {
-        const thumbUpload = await uploadDocumentToTelegram(activeThumbBuffer, `${path.parse(uploadFilename).name}_thumb.jpg`, 'image/jpeg');
+        const thumbUpload = await uploadDocumentToTelegram(
+          activeThumbBuffer,
+          `${path.parse(uploadFilename).name}_thumb.jpg`,
+          'image/jpeg',
+          null,
+          { correlationId }
+        );
         thumbnailFileId = thumbUpload?.fileId || '';
       } catch (tUploadErr) {
-        console.warn('[uploadMedia] Telegram thumbnail upload note (continuing with base64 thumbnail):', tUploadErr.message);
+        console.warn(`[${correlationId}] [uploadMedia] Telegram thumbnail upload note (continuing with base64 thumbnail):`, tUploadErr.message);
       }
       // Add a 1.2s delay between standalone thumbnail upload and main payload upload to prevent chat flood
       await new Promise((r) => setTimeout(r, 1200));
@@ -534,7 +544,8 @@ exports.uploadMedia = async (req, res) => {
       finalBuffer,
       uploadFilename,
       uploadMimetype,
-      activeThumbBuffer
+      activeThumbBuffer,
+      { correlationId }
     );
 
     // 2. Save document in MongoDB
@@ -577,11 +588,18 @@ exports.uploadMedia = async (req, res) => {
 
     res.status(201).json(resultDoc);
   } catch (err) {
-    console.error('[uploadMedia error]:', err.message);
+    console.error(`[${correlationId}] [uploadMedia error]:`, err.message);
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ message: `File exceeds maximum ${MAX_VIDEO_UPLOAD_SIZE_MB || 200}MB upload limit` });
+      return res.status(400).json({ message: `File exceeds maximum ${MAX_VIDEO_UPLOAD_SIZE_MB || 200}MB upload limit`, requestId: correlationId });
     }
-    res.status(500).json({ message: err.message || 'File upload failed' });
+    const isClientError = err.telegramErrorCode && err.telegramErrorCode >= 400 && err.telegramErrorCode < 500;
+    const statusCode = isClientError ? 400 : 500;
+    res.status(statusCode).json({
+      message: err.message || 'File upload failed',
+      error: err.telegramErrorCode ? `TELEGRAM_${err.telegramErrorCode}` : 'UPLOAD_FAILED',
+      details: err.telegramDescription || err.message,
+      requestId: correlationId,
+    });
   }
 };
 

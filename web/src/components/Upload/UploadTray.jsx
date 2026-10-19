@@ -223,12 +223,12 @@ export const UploadTray = () => {
                           {item.category && !item.folderTitle && <span>• #{item.category}</span>}
                         </div>
                         {isError && item.errorMessage && (
-                          <p className="text-[10px] text-rose-400 font-medium truncate mt-0.5" title={item.errorMessage}>
+                          <p className="text-[10px] text-rose-400 font-medium break-words line-clamp-2 leading-tight mt-0.5" title={item.errorMessage}>
                             {item.errorMessage}
                           </p>
                         )}
                         {isSkipped && item.errorMessage && (
-                          <p className="text-[10px] text-amber-400 font-medium truncate mt-0.5" title={item.errorMessage}>
+                          <p className="text-[10px] text-amber-400 font-medium break-words line-clamp-2 leading-tight mt-0.5" title={item.errorMessage}>
                             {item.errorMessage}
                           </p>
                         )}

@@ -85,6 +85,19 @@ app.get('/api/v1/health', (_req, res) => {
     version: '1.0.0',
   });
 });
+app.get('/api/v1/health/telegram', async (_req, res) => {
+  try {
+    const { testTelegramConnection } = require('./services/telegramService');
+    const result = await testTelegramConnection();
+    res.status(result.ok ? 200 : 502).json({
+      status: result.ok ? 'connected' : 'error',
+      ...result,
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message, timestamp: Date.now() });
+  }
+});
 
 // Enforce DB connectivity for all API routes
 app.use('/api/v1/auth', dbMiddleware, authRoutes);

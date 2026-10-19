@@ -3,7 +3,19 @@
  * TikTok / Instagram-Reels Style Video Streaming PWA
  */
 
-const RAW_API_URL = import.meta.env.VITE_API_BASE_URL || '';
+// Resolve Backend API URL:
+// In production on Vercel or custom domain, default to the verified live Render backend (https://vaultgram.onrender.com).
+// Automatically corrects any obsolete Render service URL (e.g. vaultgram-oz08 or personal-storage-api).
+let RAW_API_URL = (import.meta.env.VITE_API_BASE_URL || '').trim();
+
+if (!RAW_API_URL || RAW_API_URL.includes('vaultgram-oz08.onrender.com') || RAW_API_URL.includes('personal-storage-api.onrender.com')) {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    RAW_API_URL = 'https://vaultgram.onrender.com';
+  } else if (!RAW_API_URL) {
+    RAW_API_URL = 'http://localhost:5000';
+  }
+}
+
 export const API_BASE_URL = RAW_API_URL.replace(/\/+$/, '');
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api/v1` : '/api/v1';
 

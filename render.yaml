@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: streamvault-api
+    name: vaultgram
     runtime: node
     plan: free
     buildCommand: npm install
