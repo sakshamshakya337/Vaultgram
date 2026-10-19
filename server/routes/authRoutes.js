@@ -14,6 +14,7 @@ const {
   getBiometricAuthOptions,
   verifyBiometricAuth,
   removeBiometrics,
+  openPrivateVault,
 } = require('../controllers/authController');
 const { protect, optionalAuth } = require('../middleware/auth');
 const { authLimiter, pinVerifyLimiter } = require('../middleware/rateLimiter');
@@ -25,10 +26,11 @@ router.post('/refresh', refreshToken);
 router.post('/logout', optionalAuth, logout);
 router.get('/me', protect, getMe);
 
-// ─── PIN Lock Endpoints ─────────────────────────────────────────────────────
+// ─── PIN Lock & Private Vault Endpoints ─────────────────────────────────────
 router.post('/pin/set', protect, setPin);
 router.post('/pin/verify', protect, pinVerifyLimiter, verifyPin);
 router.post('/pin/remove', protect, removePin);
+router.post('/vault/open', protect, pinVerifyLimiter, openPrivateVault);
 
 // ─── Biometric WebAuthn Endpoints ───────────────────────────────────────────
 router.post('/biometric/register-options', protect, getBiometricRegisterOptions);

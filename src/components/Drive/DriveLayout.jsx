@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload, Loader2, Share2 } from 'lucide-react';
+import { Video, Plus, Search, Folder, Sparkles, FolderOpen, Heart, Trash2, FolderPlus, Upload, Loader2, Share2, Shield, EyeOff } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
@@ -28,6 +28,7 @@ import { DriveSelectionBar } from './DriveSelectionBar';
 import { DriveContextMenu } from './DriveContextMenu';
 import { MoveToModal } from './MoveToModal';
 import { BulkDeleteModal } from './BulkDeleteModal';
+import { PrivateVaultModal } from '../PIN/PrivateVaultModal';
 
 export const DriveLayout = () => {
   const {
@@ -41,6 +42,9 @@ export const DriveLayout = () => {
     sessionUnlockedCategories,
     requestCategory,
     lockedCategories,
+    isVaultUnlocked,
+    lockVault,
+    setIsPrivateVaultModalOpen,
   } = useVideoFeed();
 
   const { user, hasPin } = useAuth();
@@ -193,11 +197,19 @@ export const DriveLayout = () => {
     return unregister;
   }, [registerOnUploadSuccess, fetchCategories, currentFolder, selectedCategory, currentNav, setDriveItems]);
 
+  useEffect(() => {
+    if (currentNav === 'vault' && !isVaultUnlocked) {
+      if (hasPin) {
+        setIsPrivateVaultModalOpen(true);
+      }
+    }
+  }, [currentNav, isVaultUnlocked, hasPin, setIsPrivateVaultModalOpen]);
+
   // Separate folders and files
   const folders = useMemo(() => {
-    if (currentFolder || currentNav !== 'all') return [];
+    if (currentNav !== 'all' && currentNav !== 'vault') return [];
     return driveItems.filter((item) => item.isFolder);
-  }, [driveItems, currentFolder, currentNav]);
+  }, [driveItems, currentNav]);
 
   const files = useMemo(() => {
     let list = driveItems.filter((item) => !item.isFolder);
@@ -208,6 +220,11 @@ export const DriveLayout = () => {
       : (Array.isArray(user?.lockedCategories) ? user.lockedCategories : []);
 
     if (effectiveLocked.length > 0) {
+      const isCurrentFolderUnlocked = currentFolder && (
+        sessionUnlockedCategories?.has((currentFolder.title || '').toLowerCase()) ||
+        sessionUnlockedCategories?.has(String(currentFolder._id || currentFolder.id || '').toLowerCase())
+      );
+
       list = list.filter((v) => {
         const cat = (v?.category || '').replace(/^#/, '').toLowerCase().trim();
         const isCatLocked = effectiveLocked.some(
@@ -219,7 +236,7 @@ export const DriveLayout = () => {
           return false;
         }
 
-        const isCatUnlocked = sessionUnlockedCategories?.has(cat) || sessionUnlockedCategories?.has(`#${cat}`);
+        const isCatUnlocked = isCurrentFolderUnlocked || sessionUnlockedCategories?.has(cat) || sessionUnlockedCategories?.has(`#${cat}`);
         return isCatUnlocked;
       });
     }
@@ -269,9 +286,20 @@ export const DriveLayout = () => {
       sessionUnlockedCategories?.has(String(folderId).toLowerCase());
 
     if (isLocked && !isUnlockedSession && hasPin) {
-      setCategoryLockTarget(title);
+      setCategoryLockTarget({
+        type: 'folder',
+        folder,
+        title,
+        id: folderId,
+        onSuccess: (unlockedFolder) => {
+          setCurrentFolder(unlockedFolder || folder);
+          setSelectedCategory('All');
+          setSelectedFileIds([]);
+        },
+      });
     } else {
       setCurrentFolder(folder);
+      setSelectedCategory('All');
       setSelectedFileIds([]);
     }
   };
@@ -290,6 +318,50 @@ export const DriveLayout = () => {
       } catch (err) {
         alert(err.message || 'Failed to delete folder');
       }
+    }
+  };
+
+  const handleLockFolder = async (folder) => {
+    try {
+      const fId = folder._id || folder.id;
+      await api.drive.lockFolder(fId);
+      loadDriveItems();
+      if (fetchCategories) fetchCategories();
+    } catch (err) {
+      alert(err.message || 'Failed to lock folder');
+    }
+  };
+
+  const handleUnlockFolder = async (folder) => {
+    try {
+      const fId = folder._id || folder.id;
+      await api.drive.unlockFolder(fId);
+      loadDriveItems();
+      if (fetchCategories) fetchCategories();
+    } catch (err) {
+      alert(err.message || 'Failed to unlock folder');
+    }
+  };
+
+  const handleHideFolder = async (folder) => {
+    try {
+      const fId = folder._id || folder.id;
+      await api.drive.hideFolder(fId);
+      loadDriveItems();
+      if (fetchCategories) fetchCategories();
+    } catch (err) {
+      alert(err.message || 'Failed to hide folder');
+    }
+  };
+
+  const handleUnhideFolder = async (folder) => {
+    try {
+      const fId = folder._id || folder.id;
+      await api.drive.unhideFolder(fId);
+      loadDriveItems();
+      if (fetchCategories) fetchCategories();
+    } catch (err) {
+      alert(err.message || 'Failed to unhide folder');
     }
   };
 
@@ -582,7 +654,7 @@ export const DriveLayout = () => {
     setFocusedIndex(-1);
   };
 
-  const isAtRoot = currentNav === 'all' && !currentFolder && selectedCategory === 'All' && !searchQuery.trim();
+  const isAtRoot = (currentNav === 'all' || currentNav === 'vault') && !currentFolder && selectedCategory === 'All' && !searchQuery.trim();
   const categoryFoldersList = useMemo(() => {
     const set = new Set();
     (categories || []).forEach((c) => {
@@ -665,6 +737,59 @@ export const DriveLayout = () => {
           </div>
         ) : (
           <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-8 pb-28 md:pb-8 no-scrollbar">
+            {/* Private Vault Top Session Banner */}
+            {currentNav === 'vault' && isVaultUnlocked && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-900 border border-purple-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+                    <EyeOff className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Private Vault Active</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                        ENCRYPTED SESSION
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Hidden folders & files are visible only while this session is active
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    lockVault();
+                    setCurrentNav('all');
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                  title="Lock Vault immediately"
+                >
+                  <span>Lock Vault</span>
+                </button>
+              </div>
+            )}
+
+            {/* Private Vault Locked State */}
+            {currentNav === 'vault' && !isVaultUnlocked ? (
+              <div className="p-8 md:p-12 rounded-3xl bg-zinc-900/40 border border-purple-500/20 flex flex-col items-center justify-center text-center space-y-4 my-8">
+                <div className="w-16 h-16 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                  <Shield className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-white mb-1">Private Vault is Locked</h4>
+                  <p className="text-xs text-zinc-400 max-w-sm leading-relaxed">
+                    Enter your privacy passcode or use biometric authentication to view your hidden folders and private files.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsPrivateVaultModalOpen(true)}
+                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                >
+                  Unlock Private Vault
+                </button>
+              </div>
+            ) : (
+              <>
             {/* Multi-Selection Action Toolbar Overlay */}
             {selectedFileIds.length > 0 && (
               <div className="sticky top-0 z-30 mb-4">
@@ -686,13 +811,13 @@ export const DriveLayout = () => {
             )}
 
             {/* FOLDERS SECTION */}
-            {isAtRoot && (
+            {isAtRoot ? (
               loadingDrive && folders.length === 0 ? (
                 <DriveFolderSkeleton count={6} />
               ) : (
                 <DriveFolderGrid
                   folders={folders}
-                  categoryFolders={categoryFoldersList}
+                  categoryFolders={currentNav === 'vault' ? [] : categoryFoldersList}
                   onOpenFolder={handleOpenFolder}
                   onOpenCategory={handleOpenCategory}
                   onRenameFolder={(folder) => setRenameTarget(folder)}
@@ -701,6 +826,29 @@ export const DriveLayout = () => {
                   onFolderContextMenu={(e, folder, isCat) => {
                     handleContextMenu(e, folder, true);
                   }}
+                  onLockFolder={handleLockFolder}
+                  onUnlockFolder={handleUnlockFolder}
+                  onHideFolder={handleHideFolder}
+                  onUnhideFolder={handleUnhideFolder}
+                />
+              )
+            ) : (
+              (currentNav === 'all' || currentNav === 'vault') && folders.length > 0 && (
+                <DriveFolderGrid
+                  folders={folders}
+                  categoryFolders={[]}
+                  onOpenFolder={handleOpenFolder}
+                  onOpenCategory={handleOpenCategory}
+                  onRenameFolder={(folder) => setRenameTarget(folder)}
+                  onDeleteFolder={handleDeleteFolder}
+                  onShareFolder={(target) => setShareFolderTarget(target)}
+                  onFolderContextMenu={(e, folder, isCat) => {
+                    handleContextMenu(e, folder, true);
+                  }}
+                  onLockFolder={handleLockFolder}
+                  onUnlockFolder={handleUnlockFolder}
+                  onHideFolder={handleHideFolder}
+                  onUnhideFolder={handleUnhideFolder}
                 />
               )
             )}
@@ -724,6 +872,8 @@ export const DriveLayout = () => {
                       ? 'Recent Uploads'
                       : currentNav === 'trash'
                       ? 'Trash'
+                      : currentNav === 'vault'
+                      ? 'Private Vault Files'
                       : selectedCategory === 'All'
                       ? 'All Files'
                       : `#${selectedCategory} Files`}
@@ -903,6 +1053,8 @@ export const DriveLayout = () => {
                 )}
               </div>
             </div>
+            </>
+            )}
           </main>
         )}
 
@@ -981,6 +1133,10 @@ export const DriveLayout = () => {
               handleDeleteFile(target._id || target.id);
             }
           }}
+          onLockFolder={handleLockFolder}
+          onUnlockFolder={handleUnlockFolder}
+          onHideFolder={handleHideFolder}
+          onUnhideFolder={handleUnhideFolder}
         />
       )}
 
@@ -1062,6 +1218,7 @@ export const DriveLayout = () => {
         onClose={() => setIsNewFolderOpen(false)}
         currentFolderId={currentFolder?._id || null}
         onFolderCreated={loadDriveItems}
+        isVaultView={currentNav === 'vault'}
       />
 
       {/* Rename Modal */}
@@ -1095,6 +1252,9 @@ export const DriveLayout = () => {
         onClose={() => setShareFolderTarget(null)}
         target={shareFolderTarget}
       />
+
+      {/* Dedicated Private Vault Authentication Modal */}
+      <PrivateVaultModal />
     </div>
   );
 };

@@ -104,15 +104,42 @@ export const removeStoredUser = () => {
   } catch {}
 };
 
+let currentVaultToken = null;
+let vaultExpiresAt = null;
+
+export const getVaultToken = () => {
+  if (vaultExpiresAt && Date.now() > vaultExpiresAt) {
+    currentVaultToken = null;
+    vaultExpiresAt = null;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('vault:expired'));
+    }
+    return null;
+  }
+  return currentVaultToken;
+};
+
+export const setVaultToken = (token, expiresInSeconds = 900) => {
+  currentVaultToken = token;
+  vaultExpiresAt = token ? Date.now() + expiresInSeconds * 1000 : null;
+};
+
+export const clearVaultToken = () => {
+  currentVaultToken = null;
+  vaultExpiresAt = null;
+};
+
 let refreshPromise = null;
 
 async function request(path, options = {}) {
   const token = getAccessToken();
+  const vaultToken = getVaultToken();
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers = {
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(vaultToken ? { 'x-vault-token': vaultToken } : {}),
     'bypass-tunnel-reminder': 'true',
     ...(options.headers || {}),
   };
@@ -308,6 +335,7 @@ export const api = {
         }
       } catch {}
       clearAccessToken();
+      clearVaultToken();
       removeStoredRefreshToken();
       removeStoredUser();
     },
@@ -331,6 +359,12 @@ export const api = {
         body: JSON.stringify({ pin }),
       }),
 
+    openVault: (pin) =>
+      request('/auth/vault/open', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+
     // Biometric WebAuthn APIs
     biometric: {
       getRegisterOptions: () => request('/auth/biometric/register-options', { method: 'POST' }),
@@ -340,10 +374,10 @@ export const api = {
           body: JSON.stringify({ response, deviceLabel }),
         }),
       getAuthOptions: () => request('/auth/biometric/auth-options', { method: 'POST' }),
-      verifyAuth: (response) =>
+      verifyAuth: (response, forVault = false) =>
         request('/auth/biometric/auth-verify', {
           method: 'POST',
-          body: JSON.stringify({ response }),
+          body: JSON.stringify({ response, forVault }),
         }),
       remove: () => request('/auth/biometric/remove', { method: 'POST' }),
     },
@@ -466,11 +500,37 @@ export const api = {
         body: JSON.stringify({ files }),
       }),
 
-    createFolder: (title, parentFolderId = null) =>
+    createFolder: (title, parentFolderId = null, isLocked = false, isHidden = false) =>
       request('/videos/folder', {
         method: 'POST',
-        body: JSON.stringify({ title, parentFolderId }),
+        body: JSON.stringify({ title, parentFolderId, isLocked, isHidden }),
       }),
+
+    lockFolder: (id, pin = null) =>
+      request(`/videos/folder/${id}/lock`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pin }),
+      }),
+
+    unlockFolder: (id, pin = null) =>
+      request(`/videos/folder/${id}/unlock`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pin }),
+      }),
+
+    hideFolder: (id, pin = null) =>
+      request(`/videos/folder/${id}/hide`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pin }),
+      }),
+
+    unhideFolder: (id, pin = null) =>
+      request(`/videos/folder/${id}/unhide`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pin }),
+      }),
+
+    getVaultFolders: () => request('/videos/vault/folders'),
 
     rename: (id, title) =>
       request(`/videos/${id}/rename`, {
@@ -526,9 +586,11 @@ export const api = {
   stream: {
     getUrl: (id, download = false) => {
       const token = getAccessToken();
+      const vaultToken = getVaultToken();
       const base = `${BASE_URL}/stream/${id}`;
       const params = [];
       if (token) params.push(`token=${encodeURIComponent(token)}`);
+      if (vaultToken) params.push(`vaultToken=${encodeURIComponent(vaultToken)}`);
       if (download) params.push('download=1');
       return params.length > 0 ? `${base}?${params.join('&')}` : base;
     },

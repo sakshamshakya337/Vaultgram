@@ -13,6 +13,11 @@ const {
   getUserLibrary,
   createFolder,
   listFolders,
+  lockFolder,
+  unlockFolder,
+  hideFolder,
+  unhideFolder,
+  listVaultFolders,
   renameItem,
   moveItem,
   batchMove,
@@ -25,7 +30,7 @@ const {
   downloadFile,
   getVideoThumbnail,
 } = require('../controllers/mediaController');
-const { protect, optionalAuth } = require('../middleware/auth');
+const { protect, optionalAuth, requireVaultAuth } = require('../middleware/auth');
 const {
   lockCategory,
   unlockCategory,
@@ -43,10 +48,16 @@ router.get('/categories', optionalAuth, getCategories);
 router.get('/user/library', optionalAuth, getUserLibrary);
 router.get('/folders', optionalAuth, listFolders);
 router.post('/folder', optionalAuth, createFolder);
+router.patch('/folder/:id/lock', protect, lockFolder);
+router.patch('/folder/:id/unlock', protect, unlockFolder);
+router.patch('/folder/:id/hide', protect, hideFolder);
+router.patch('/folder/:id/unhide', protect, unhideFolder);
+router.get('/vault/folders', protect, requireVaultAuth, listVaultFolders);
 
 // ─── Batch Operations ────────────────────────────────────────────────────────
 router.post('/batch/trash', optionalAuth, batchTrash);
 router.patch('/batch/move', optionalAuth, batchMove);
+router.patch('/move', optionalAuth, batchMove); // Alias for batch move
 router.post('/check-duplicates', optionalAuth, checkDuplicates);
 
 // ─── Drive File & Folder Operations ──────────────────────────────────────────
@@ -71,6 +82,7 @@ router.get('/search', optionalAuth, searchMedia);
 router.post('/category/:category/share', optionalAuth, createFolderShareLink);
 router.post('/:id/share', optionalAuth, createShareLink);
 router.get('/:id/download', optionalAuth, downloadFile);
+router.get('/download/:id', optionalAuth, downloadFile);
 router.get('/:id/thumbnail', optionalAuth, getVideoThumbnail);
 router.get('/:id', optionalAuth, getMedia);
 router.post('/upload', optionalAuth, uploadMiddleware, uploadMedia);

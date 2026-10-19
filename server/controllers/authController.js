@@ -634,13 +634,62 @@ exports.verifyBiometricAuth = async (req, res) => {
     user.currentChallenge = null;
     await user.save();
 
+    const forVault = req.body?.forVault === true || req.body?.forVault === 'true';
+    let vaultToken = null;
+    if (forVault) {
+      vaultToken = jwt.sign(
+        { userId: user._id.toString(), type: 'private_vault' },
+        process.env.JWT_SECRET || 'fallback_secret',
+        { expiresIn: '15m' }
+      );
+    }
+
     res.json({
       valid: true,
       message: 'Biometrics verified successfully',
+      ...(vaultToken ? { vaultToken, expiresIn: 900 } : {}),
     });
   } catch (err) {
     console.error('[verifyBiometricAuth error]:', err.message);
     res.status(500).json({ valid: false, message: err.message || 'Biometric authentication error' });
+  }
+};
+
+/**
+ * POST /api/v1/auth/vault/open
+ */
+exports.openPrivateVault = async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!pin) {
+      return res.status(400).json({ success: false, message: 'PIN is required to open Private Vault' });
+    }
+
+    const user = await User.findById(req.user._id).select('+pinHash');
+    if (!user || !user.pinHash) {
+      return res.status(400).json({ success: false, message: 'Please configure an app PIN before accessing Private Vault' });
+    }
+
+    const isValid = await user.comparePin(pin);
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Incorrect PIN' });
+    }
+
+    const vaultToken = jwt.sign(
+      { userId: user._id.toString(), type: 'private_vault' },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '15m' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Private Vault unlocked',
+      vaultToken,
+      expiresIn: 900,
+    });
+  } catch (err) {
+    console.error('[openPrivateVault error]:', err.message);
+    res.status(500).json({ success: false, message: 'Failed to authenticate Private Vault' });
   }
 };
 

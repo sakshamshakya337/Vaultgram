@@ -10,6 +10,7 @@ export const CategoryPinModal = () => {
     categoryLockTarget,
     setCategoryLockTarget,
     unlockCategoryForSession,
+    unlockFolderForSession,
     unlockReelsForSession,
     fetchVideos,
   } = useVideoFeed();
@@ -19,7 +20,11 @@ export const CategoryPinModal = () => {
   const [loading, setLoading] = useState(false);
   const [biometricAttempted, setBiometricAttempted] = useState(false);
 
-  const isReelsLock = categoryLockTarget === 'Reels';
+  const isReelsLock = categoryLockTarget === 'Reels' || categoryLockTarget?.type === 'reels';
+  const isFolderLock = categoryLockTarget?.type === 'folder' || !!categoryLockTarget?.folder;
+  const lockTitle = typeof categoryLockTarget === 'object' && categoryLockTarget !== null
+    ? (categoryLockTarget.title || categoryLockTarget.name || categoryLockTarget.category || 'Folder')
+    : (categoryLockTarget || 'Folder');
   const hasUserBiometrics = !!(hasBiometrics || user?.hasBiometrics);
 
   // Success handler for both PIN and Biometrics
@@ -27,11 +32,22 @@ export const CategoryPinModal = () => {
     if (isReelsLock) {
       unlockReelsForSession();
       fetchVideos('All', true);
+    } else if (isFolderLock) {
+      const folder = categoryLockTarget.folder;
+      if (unlockFolderForSession) {
+        unlockFolderForSession(folder || categoryLockTarget.id, categoryLockTarget.title || folder?.title);
+      } else {
+        unlockCategoryForSession(categoryLockTarget.title || folder?.title);
+      }
+      if (typeof categoryLockTarget.onSuccess === 'function') {
+        categoryLockTarget.onSuccess(folder);
+      }
     } else {
       unlockCategoryForSession(categoryLockTarget);
     }
     setCategoryLockTarget(null);
     setError('');
+    setBiometricAttempted(false);
   };
 
   // Trigger biometric WebAuthn verification
@@ -97,7 +113,7 @@ export const CategoryPinModal = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl p-4 animate-fade-in select-none">
       <div className="w-full max-w-sm rounded-3xl bg-zinc-950 border border-white/10 p-6 shadow-2xl relative">
         <PinKeypad
-          title={isReelsLock ? 'Unlock Reels Feed' : `Unlock ${categoryLockTarget}`}
+          title={isReelsLock ? 'Unlock Reels Feed' : `Unlock ${lockTitle}`}
           subtitle={
             hasUserBiometrics
               ? 'Use Face ID, Fingerprint or Passcode'

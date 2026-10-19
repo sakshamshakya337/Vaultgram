@@ -1,11 +1,27 @@
 import React, { useState } from 'react';
-import { FolderPlus, X } from 'lucide-react';
+import { FolderPlus, X, Lock, Fingerprint } from 'lucide-react';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/useAuth';
+import { useVideoFeed } from '../../contexts/useVideoFeed';
 
-export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreated }) => {
+export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreated, isVaultView = false }) => {
   const [title, setTitle] = useState('');
+  const [isLocked, setIsLocked] = useState(false);
+  const [isHidden, setIsHidden] = useState(isVaultView);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const { hasPin, hasBiometrics, user } = useAuth();
+  const { toggleCategoryLock, fetchCategories } = useVideoFeed();
+
+  // Reset or initialize state on open
+  React.useEffect(() => {
+    if (isOpen) {
+      setIsHidden(isVaultView);
+      setIsLocked(false);
+      setError('');
+    }
+  }, [isOpen, isVaultView]);
 
   if (!isOpen) return null;
 
@@ -17,8 +33,17 @@ export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreat
     setLoading(true);
     setError('');
     try {
-      await api.drive.createFolder(cleanTitle, currentFolderId);
+      const res = await api.drive.createFolder(cleanTitle, currentFolderId, isLocked, isHidden);
+      if (isLocked) {
+        await toggleCategoryLock(cleanTitle).catch(() => null);
+        if (res?._id) {
+          await toggleCategoryLock(String(res._id)).catch(() => null);
+        }
+      }
+      if (fetchCategories) fetchCategories();
       setTitle('');
+      setIsLocked(false);
+      setIsHidden(false);
       onFolderCreated();
       onClose();
     } catch (err) {
@@ -64,6 +89,92 @@ export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreat
             autoFocus
             required
           />
+
+          {/* Privacy & Lock Toggle (only shown when account has configured PIN) */}
+          {hasPin && (
+            <div className="space-y-2">
+              <div
+                onClick={() => setIsLocked((prev) => !prev)}
+                className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
+                  isLocked
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                    : 'bg-zinc-900/50 border-white/5 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                      isLocked
+                        ? 'bg-rose-500/20 text-rose-400'
+                        : 'bg-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    {hasBiometrics || user?.hasBiometrics ? (
+                      <Fingerprint className="w-4 h-4" />
+                    ) : (
+                      <Lock className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white leading-tight">
+                      Lock Folder (Passcode)
+                    </p>
+                    <p className="text-[10px] text-zinc-400">
+                      Require PIN or biometric verification to open
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                    isLocked
+                      ? 'bg-rose-500 border-rose-500 text-white'
+                      : 'border-white/20 bg-zinc-800'
+                  }`}
+                >
+                  {isLocked && <span className="text-[10px] font-bold">✓</span>}
+                </div>
+              </div>
+
+              {/* Hide Folder (Private Vault) Toggle */}
+              <div
+                onClick={() => setIsHidden((prev) => !prev)}
+                className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
+                  isHidden
+                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-300'
+                    : 'bg-zinc-900/50 border-white/5 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                      isHidden
+                        ? 'bg-purple-500/20 text-purple-400'
+                        : 'bg-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <span className="text-sm">👁️‍🗨️</span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white leading-tight">
+                      Hide Folder (Private Vault)
+                    </p>
+                    <p className="text-[10px] text-zinc-400">
+                      Hidden from drive, searches, and recents
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                    isHidden
+                      ? 'bg-purple-500 border-purple-500 text-white'
+                      : 'border-white/20 bg-zinc-800'
+                  }`}
+                >
+                  {isHidden && <span className="text-[10px] font-bold">✓</span>}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button

@@ -44,6 +44,8 @@ export const DriveSidebar = ({
     setIsUploadOpen,
     triggerInstall,
     vaultStats = { totalBytes: 0, totalItems: 0 },
+    isVaultUnlocked,
+    setIsPrivateVaultModalOpen,
   } = useVideoFeed();
 
   const { setIsSettingsOpen, setIsSetPinModalOpen, hasPin } = useAuth();
@@ -250,6 +252,40 @@ export const DriveSidebar = ({
           >
             <Trash2 className="w-4 h-4" />
             <span>Trash</span>
+          </button>
+
+          {/* Dedicated Private Vault Navigation */}
+          <button
+            onClick={() => {
+              if (isVaultUnlocked) {
+                onSelectNav('vault');
+              } else {
+                if (!hasPin) {
+                  setIsSetPinModalOpen(true);
+                } else {
+                  setIsPrivateVaultModalOpen(true);
+                }
+              }
+            }}
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              currentNav === 'vault'
+                ? 'bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-300 border border-cyan-500/40 shadow-lg shadow-cyan-500/10'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Shield className={`w-4 h-4 ${currentNav === 'vault' ? 'text-cyan-400' : 'text-zinc-400'}`} />
+            <div className="flex items-center justify-between flex-1">
+              <span>Private Vault</span>
+              <span
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md font-mono ${
+                  isVaultUnlocked
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                {isVaultUnlocked ? 'ACTIVE' : 'VAULT'}
+              </span>
+            </div>
           </button>
         </div>
 

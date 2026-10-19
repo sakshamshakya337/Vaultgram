@@ -63,7 +63,7 @@ app.use(
       return callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     methods: ['GET', 'POST', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'bypass-tunnel-reminder', 'Range'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'bypass-tunnel-reminder', 'Range', 'x-vault-token'],
     exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Type', 'Content-Disposition'],
     credentials: true,
   })

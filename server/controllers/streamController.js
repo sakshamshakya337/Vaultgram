@@ -33,6 +33,88 @@ exports.streamMedia = async (req, res) => {
       });
     }
 
+    // ─── Hidden & Private Vault Security Authorization ───────────────────
+    let isHiddenItem = !!item.isHidden;
+    let parentFolder = null;
+    if (item.folderId) {
+      parentFolder = await Media.findById(item.folderId).lean();
+      if (parentFolder?.isHidden) isHiddenItem = true;
+    }
+    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const itemOwner = item.uploadedBy || item.userId || parentFolder?.uploadedBy || parentFolder?.userId;
+    if (itemOwner && userId && String(itemOwner) !== String(userId)) {
+      return res.status(403).json({
+        code: 'ACCESS_DENIED',
+        error: 'ACCESS_DENIED',
+        message: 'Not authorized to stream this file',
+      });
+    }
+    if (isHiddenItem) {
+      const { verifyVaultToken } = require('../middleware/auth');
+      const vaultSession = verifyVaultToken(req);
+      if (vaultSession?.expired) {
+        return res.status(403).json({
+          code: 'VAULT_SESSION_EXPIRED',
+          error: 'VAULT_SESSION_EXPIRED',
+          message: 'Private vault session has expired. Please unlock the vault again.',
+        });
+      }
+      if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+        return res.status(403).json({
+          code: 'VAULT_AUTH_REQUIRED',
+          error: 'VAULT_AUTH_REQUIRED',
+          message: 'This file is inside a private vault folder. Active private vault session required.',
+        });
+      }
+    }
+
+    // ─── Folder & Category Lock Security Authorization ───────────────────
+    const ownerId = req.user?._id || item.uploadedBy;
+    if (ownerId) {
+      const User = require('../models/User');
+      const owner = await User.findById(ownerId).lean();
+      const userLocked = owner?.lockedCategories || [];
+
+      const itemCat = (item.category || '').trim().replace(/^#/, '').toLowerCase();
+      let isItemLocked = !!item.isLocked || userLocked.some((c) => (typeof c === 'string' ? c : c?.category || '').trim().replace(/^#/, '').toLowerCase() === itemCat);
+      
+      let parentFolderTitle = '';
+      let parentFolderIdStr = '';
+      if (!isItemLocked && parentFolder) {
+        parentFolderTitle = (parentFolder.title || '').trim().toLowerCase();
+        parentFolderIdStr = String(parentFolder._id).toLowerCase();
+        isItemLocked = !!parentFolder.isLocked || userLocked.some((c) => {
+          const clean = (typeof c === 'string' ? c : c?.category || '').trim().replace(/^#/, '').toLowerCase();
+          return clean === parentFolderTitle || clean === parentFolderIdStr;
+        });
+      }
+
+        if (isItemLocked) {
+          const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
+            ? req.query.unlockedCategories
+            : Array.isArray(req.query?.unlockedCategories)
+            ? req.query.unlockedCategories.join(',')
+            : '';
+          const unlockedList = rawUnlocked
+            .split(',')
+            .map((c) => c.trim().replace(/^#/, '').toLowerCase())
+            .filter(Boolean);
+
+          const isUnlocked = unlockedList.some((c) => 
+            c === itemCat || 
+            (parentFolderTitle && c === parentFolderTitle) || 
+            (parentFolderIdStr && c === parentFolderIdStr)
+          );
+
+          if (!isUnlocked) {
+            return res.status(403).json({
+              error: 'FOLDER_LOCKED',
+              message: 'This file is inside a locked folder or category. Unlock with biometric or PIN passcode.',
+            });
+          }
+        }
+      }
+
     // Check environment configuration
     if (!process.env.TELEGRAM_BOT_TOKEN) {
       console.error('[streamMedia] TELEGRAM_BOT_TOKEN environment variable is not defined!');

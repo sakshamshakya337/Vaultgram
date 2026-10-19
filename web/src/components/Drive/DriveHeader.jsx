@@ -14,7 +14,8 @@ import {
   Plus,
   ArrowLeft,
   Sun,
-  Moon
+  Moon,
+  Folder
 } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
@@ -55,7 +56,7 @@ export const DriveHeader = ({
   const isCurrentCategoryLocked =
     selectedCategory !== 'All' &&
     (lockedCategories || []).some(
-      (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
+      (lc) => (typeof lc === 'string' ? lc : lc?.category || '').toLowerCase() === selectedCategory.toLowerCase()
     );
 
   const handleHeaderLockToggle = async () => {
@@ -64,6 +65,29 @@ export const DriveHeader = ({
       return;
     }
     await toggleCategoryLock(selectedCategory);
+  };
+
+  const isCurrentFolderLocked =
+    currentFolder &&
+    (lockedCategories || []).some((lc) => {
+      const clean = (typeof lc === 'string' ? lc : lc?.category || '').trim().toLowerCase();
+      const folderTitle = (currentFolder.title || '').trim().toLowerCase();
+      const folderId = String(currentFolder._id || currentFolder.id || '').toLowerCase();
+      return clean === folderTitle || clean === folderId;
+    });
+
+  const handleCurrentFolderLockToggle = async () => {
+    if (!currentFolder) return;
+    if (!hasPin) {
+      setIsSetPinModalOpen(true);
+      return;
+    }
+    const folderTitle = currentFolder.title || '';
+    const folderId = String(currentFolder._id || currentFolder.id || '');
+    await toggleCategoryLock(folderTitle);
+    if (folderId && isCurrentFolderLocked) {
+      await toggleCategoryLock(folderId);
+    }
   };
 
   return (
@@ -115,10 +139,39 @@ export const DriveHeader = ({
               onClick={onResetToRoot}
               className="text-xs md:text-sm font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer truncate"
             >
-              {selectedCategory === 'All' && currentNav === 'all' ? 'Vaultgram Drive' : 'My Drive'}
+              {selectedCategory === 'All' && currentNav === 'all' && !currentFolder ? 'Vaultgram Drive' : 'My Drive'}
             </button>
 
-            {selectedCategory !== 'All' && currentNav === 'all' && (
+            {currentFolder && currentNav === 'all' && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                <span className="text-xs font-bold text-cyan-400 truncate flex items-center gap-1.5">
+                  <Folder className="w-3.5 h-3.5" />
+                  <span>{currentFolder.title}</span>
+                </span>
+
+                <button
+                  onClick={handleCurrentFolderLockToggle}
+                  className={`ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                    isCurrentFolderLocked
+                      ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                      : 'bg-zinc-900 text-zinc-400 border border-white/10 hover:text-white'
+                  }`}
+                  title={isCurrentFolderLocked ? 'Folder Locked' : 'Lock Folder (PIN)'}
+                >
+                  {isCurrentFolderLocked ? (
+                    <Lock className="w-3 h-3 text-rose-400" />
+                  ) : (
+                    <Unlock className="w-3 h-3 text-zinc-500" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isCurrentFolderLocked ? 'Locked' : 'Lock'}
+                  </span>
+                </button>
+              </>
+            )}
+
+            {!currentFolder && selectedCategory !== 'All' && currentNav === 'all' && (
               <>
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
                 <span className="text-xs font-bold text-cyan-400 truncate">#{selectedCategory}</span>

@@ -8,6 +8,7 @@ const User = require('../models/User');
 const WatchHistory = require('../models/WatchHistory');
 const Like = require('../models/Like');
 const Playlist = require('../models/Playlist');
+const { verifyVaultToken } = require('../middleware/auth');
 const {
   uploadMediaToTelegram,
   uploadVideoToTelegram,
@@ -164,9 +165,34 @@ exports.listMedia = async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 24));
     const { cursor, page: rawPage, filter: rawFilter, folderId, fileCategory, fileType, category, q, search } = req.query;
-    const filterType = rawFilter || 'my-drive'; // my-drive, starred, recent, this-week, this-month, trash
+    const filterType = rawFilter || 'my-drive'; // my-drive, starred, recent, this-week, this-month, trash, vault
 
     const query = {};
+
+    // Check Vault Session
+    const vaultSession = verifyVaultToken(req);
+
+    // If filterType is 'vault', strictly require valid vault session
+    if (filterType === 'vault') {
+      if (vaultSession?.expired) {
+        return res.status(403).json({
+          code: 'VAULT_SESSION_EXPIRED',
+          error: 'VAULT_SESSION_EXPIRED',
+          message: 'Private vault session has expired. Please unlock the vault again.',
+          items: [],
+          total: 0,
+        });
+      }
+      if (!vaultSession) {
+        return res.status(403).json({
+          code: 'VAULT_AUTH_REQUIRED',
+          error: 'VAULT_AUTH_REQUIRED',
+          message: 'Active private vault session required',
+          items: [],
+          total: 0,
+        });
+      }
+    }
 
     // Search query support
     const searchTerm = (q || search || '').trim();
@@ -178,8 +204,37 @@ exports.listMedia = async (req, res) => {
       ];
     }
 
+    // ─── Filter Types ─────────────────────────────────────────────────────────
     if (filterType === 'trash') {
       query.isTrashed = true;
+    } else if (filterType === 'vault') {
+      // Private Vault View
+      query.isTrashed = { $ne: true };
+      const reqUserId = req.user?._id?.toString() || req.user?.id?.toString();
+      if (reqUserId) {
+        query.$or = [{ uploadedBy: req.user._id }, { userId: req.user._id }];
+      }
+      if (!folderId || folderId === 'null' || folderId === 'root') {
+        // Root of Private Vault shows all hidden folders
+        query.isHidden = true;
+        query.folderId = null;
+      } else {
+        const targetFolder = await Media.findById(folderId).lean();
+        if (!targetFolder) {
+          return res.status(404).json({ error: 'Folder not found', items: [], total: 0 });
+        }
+        const folderOwner = targetFolder.uploadedBy || targetFolder.userId;
+        if (folderOwner && reqUserId && String(folderOwner) !== String(reqUserId)) {
+          return res.status(403).json({
+            code: 'ACCESS_DENIED',
+            error: 'ACCESS_DENIED',
+            message: 'Not authorized to access this folder',
+            items: [],
+            total: 0,
+          });
+        }
+        query.folderId = folderId;
+      }
     } else {
       query.isTrashed = { $ne: true };
 
@@ -198,7 +253,6 @@ exports.listMedia = async (req, res) => {
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         query.createdAt = { $gte: startOfMonth };
       } else if (category && category !== 'All') {
-        // category view shows all files in that category across folders unless a specific folderId is given
         if (folderId && folderId !== 'null' && folderId !== 'root') {
           query.folderId = folderId;
         }
@@ -220,7 +274,72 @@ exports.listMedia = async (req, res) => {
       query.fileType = fileType;
     }
 
-    // ─── Locked Categories Security Protection ──────────────────────────────────
+    // ─── Hidden Folders & Files Isolation ─────────────────────────────────────
+    // For any non-vault request: NEVER return hidden items or files inside hidden folders
+    if (filterType !== 'vault') {
+      const hiddenFolderDocs = await Media.find({
+        isFolder: true,
+        isHidden: true,
+        ...(req.user?._id ? { uploadedBy: req.user._id } : {}),
+      }).select('_id').lean();
+      const hiddenFolderIds = hiddenFolderDocs.map((d) => d._id);
+
+      query.isHidden = { $ne: true };
+
+      if (folderId && folderId !== 'null' && folderId !== 'root') {
+        // If a specific folderId is requested, verify if it exists and check authorization
+        const targetFolder = await Media.findById(folderId).lean();
+        if (targetFolder) {
+          const reqUserId = req.user?._id?.toString() || req.user?.id?.toString();
+          const folderOwner = targetFolder.uploadedBy || targetFolder.userId;
+          if (folderOwner && reqUserId && String(folderOwner) !== String(reqUserId)) {
+            return res.status(403).json({
+              code: 'ACCESS_DENIED',
+              error: 'ACCESS_DENIED',
+              message: 'Not authorized to access this folder',
+              items: [],
+              total: 0,
+            });
+          }
+
+          if (targetFolder.isHidden) {
+            if (vaultSession?.expired) {
+              return res.status(403).json({
+                code: 'VAULT_SESSION_EXPIRED',
+                error: 'VAULT_SESSION_EXPIRED',
+                message: 'Private vault session has expired. Please unlock the vault again.',
+                items: [],
+                total: 0,
+              });
+            }
+            if (!vaultSession || (reqUserId && vaultSession.userId !== reqUserId)) {
+              return res.status(403).json({
+                code: 'VAULT_AUTH_REQUIRED',
+                error: 'VAULT_AUTH_REQUIRED',
+                message: 'This folder is in your Private Vault. Please unlock Private Vault first.',
+                items: [],
+                total: 0,
+              });
+            }
+            if (folderOwner && vaultSession.userId && String(folderOwner) !== String(vaultSession.userId)) {
+              return res.status(403).json({
+                code: 'ACCESS_DENIED',
+                error: 'ACCESS_DENIED',
+                message: 'Not authorized to access this folder',
+                items: [],
+                total: 0,
+              });
+            }
+            // If vaultSession is valid, allow viewing the hidden folder
+            delete query.isHidden;
+          }
+        }
+      } else if (hiddenFolderIds.length > 0) {
+        query.folderId = { $nin: hiddenFolderIds };
+      }
+    }
+
+    // ─── Locked Categories & Folders Authorization ───────────────────────────
     let userLocked = [];
     if (req.user?._id) {
       const u = await User.findById(req.user._id).lean();
@@ -267,14 +386,64 @@ exports.listMedia = async (req, res) => {
       } else {
         delete query.folderId;
       }
-    } else {
-      // General Aggregate / Home / All Files / Root / Starred / Recent listing:
-      // STRICT SCOPING: ALWAYS exclude all locked categories from aggregate views,
-      // regardless of whether any category was unlocked in another context this session.
+    } else if (folderId && folderId !== 'null' && folderId !== 'root') {
+      // ─── Custom Folder Authorization & Scoping ───────────────────────────
+      const targetFolder = await Media.findOne({ _id: folderId, isFolder: true }).lean();
+      if (targetFolder) {
+        const reqUserId = req.user?._id?.toString() || req.user?.id?.toString();
+        const folderOwner = targetFolder.uploadedBy || targetFolder.userId;
+        if (folderOwner && reqUserId && String(folderOwner) !== String(reqUserId)) {
+          return res.status(403).json({
+            code: 'ACCESS_DENIED',
+            error: 'ACCESS_DENIED',
+            message: 'Not authorized to access this folder',
+            items: [],
+            total: 0,
+          });
+        }
+        const folderTitle = (targetFolder.title || '').trim().toLowerCase();
+        const folderIdStr = String(targetFolder._id).toLowerCase();
+        const folderCat = (targetFolder.category || '').trim().replace(/^#/, '').toLowerCase();
+
+        const isFolderLocked = targetFolder.isLocked || userLocked.some((c) => {
+          const clean = (typeof c === 'string' ? c : c?.category || '').trim().replace(/^#/, '').toLowerCase();
+          return clean === folderTitle || clean === folderIdStr || (folderCat && clean === folderCat);
+        });
+
+        const isFolderUnlocked = unlockedList.some((c) => {
+          return c === folderTitle || c === folderIdStr || (folderCat && c === folderCat);
+        });
+
+        if (isFolderLocked && !isFolderUnlocked) {
+          return res.status(403).json({
+            locked: true,
+            message: `Folder "${targetFolder.title}" is locked. Unlock with biometric or PIN passcode.`,
+            items: [],
+            nextCursor: null,
+            hasMore: false,
+            total: 0,
+          });
+        }
+      }
+      query.folderId = folderId;
+    } else if (filterType !== 'vault') {
+      // General Aggregate views: exclude locked categories from files list
       if (userLocked.length > 0) {
-        query.category = {
-          $nin: userLocked.map((c) => new RegExp(`^#?${c.replace(/^#/, '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')),
+        const lockedRegexes = userLocked.map((c) =>
+          new RegExp(`^#?${c.replace(/^#/, '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
+        );
+        const lockFilter = {
+          $or: [
+            { isFolder: true },
+            { category: { $nin: lockedRegexes } }
+          ]
         };
+        if (query.$or) {
+          query.$and = (query.$and || []).concat([{ $or: query.$or }, lockFilter]);
+          delete query.$or;
+        } else {
+          query.$or = lockFilter.$or;
+        }
       }
     }
 
@@ -300,7 +469,7 @@ exports.listMedia = async (req, res) => {
     const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]._id.toString() : null;
 
     // Build breadcrumbs if inside a folder
-    let breadcrumbs = [{ id: 'root', title: 'My Drive' }];
+    let breadcrumbs = [{ id: 'root', title: filterType === 'vault' ? 'Private Vault' : 'My Drive' }];
     if (folderId && folderId !== 'null' && folderId !== 'root') {
       let currentFolder = await Media.findById(folderId).lean();
       const trail = [];
@@ -312,12 +481,12 @@ exports.listMedia = async (req, res) => {
           currentFolder = null;
         }
       }
-      breadcrumbs = [{ id: 'root', title: 'My Drive' }, ...trail];
+      breadcrumbs = [{ id: 'root', title: filterType === 'vault' ? 'Private Vault' : 'My Drive' }, ...trail];
     }
 
     const formattedItems = items.map(ensureFileType);
 
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json({
       items: formattedItems,
       nextCursor,
@@ -337,28 +506,301 @@ exports.listMedia = async (req, res) => {
  */
 exports.createFolder = async (req, res) => {
   try {
-    const { title, folderId, parentFolderId } = req.body;
+    const { title, folderId, parentFolderId, isLocked, isHidden } = req.body;
     if (!title || !title.trim()) {
       return res.status(400).json({ message: 'Folder title is required' });
     }
 
+    const cleanTitle = title.trim();
     const targetParent = folderId || parentFolderId;
     const parentId = targetParent && targetParent !== 'root' && targetParent !== 'null' ? targetParent : null;
 
+    let shouldLock = !!isLocked;
+    let shouldHide = !!isHidden;
+    const userId = req.user?.id || req.user?._id;
+
+    if (parentId && userId) {
+      const parentFolder = await Media.findById(parentId).lean();
+      const user = await User.findById(userId).lean();
+      const userLocked = user?.lockedCategories || [];
+      if (parentFolder) {
+        const parentTitle = (parentFolder.title || '').trim().toLowerCase();
+        const parentIdStr = String(parentFolder._id).toLowerCase();
+        if (userLocked.some((l) => l.toLowerCase() === parentTitle || l.toLowerCase() === parentIdStr) || parentFolder.isLocked) {
+          shouldLock = true;
+        }
+        if (parentFolder.isHidden) {
+          shouldHide = true;
+        }
+      }
+    }
+
+    // Require auth configured before locking or hiding
+    if ((shouldLock || shouldHide) && userId) {
+      const user = await User.findById(userId).select('+pinHash');
+      const hasAuth = !!user?.pinHash || (user?.biometricCredentials && user.biometricCredentials.length > 0);
+      if (!hasAuth) {
+        shouldLock = false;
+        shouldHide = false;
+      }
+    }
+
     const folder = await Media.create({
-      title: title.trim(),
+      title: cleanTitle,
+      category: cleanTitle,
       isFolder: true,
       fileType: 'other',
       mediaType: 'folder',
       fileCategory: 'folder',
       folderId: parentId,
-      uploadedBy: req.user?.id || req.user?._id,
+      uploadedBy: userId,
+      isLocked: shouldLock,
+      isHidden: shouldHide,
     });
+
+    if (shouldLock && userId) {
+      const user = await User.findById(userId).select('+pinHash');
+      if (user) {
+        if (!user.lockedCategories.includes(cleanTitle)) {
+          user.lockedCategories.push(cleanTitle);
+        }
+        const folderIdStr = String(folder._id);
+        if (!user.lockedCategories.includes(folderIdStr)) {
+          user.lockedCategories.push(folderIdStr);
+        }
+        await user.save();
+      }
+    }
 
     res.status(201).json(ensureFileType(folder.toObject()));
   } catch (err) {
     console.error('[createFolder error]:', err.message);
     res.status(500).json({ message: 'Failed to create folder' });
+  }
+};
+
+/**
+ * PATCH /api/v1/media/folder/:id/lock
+ */
+exports.lockFolder = async (req, res) => {
+  try {
+    const folder = await Media.findOne({ _id: req.params.id, isFolder: true });
+    if (!folder) return res.status(404).json({ message: 'Folder not found' });
+
+    const userId = req.user?._id || req.user?.id;
+    if (folder.uploadedBy && userId && String(folder.uploadedBy) !== String(userId)) {
+      return res.status(403).json({ message: 'Not authorized to modify this folder' });
+    }
+
+    const user = await User.findById(userId).select('+pinHash');
+    if (!user || (!user.pinHash && (!user.biometricCredentials || user.biometricCredentials.length === 0))) {
+      return res.status(400).json({ message: 'Please set an app PIN before locking folders' });
+    }
+
+    if (req.body?.pin && user.pinHash) {
+      const isValid = await user.comparePin(req.body.pin);
+      if (!isValid) {
+        return res.status(401).json({ message: 'Incorrect PIN' });
+      }
+    }
+
+    folder.isLocked = true;
+    await folder.save();
+
+    const cleanTitle = (folder.title || '').trim();
+    if (!user.lockedCategories.includes(cleanTitle)) {
+      user.lockedCategories.push(cleanTitle);
+    }
+    const folderIdStr = String(folder._id);
+    if (!user.lockedCategories.includes(folderIdStr)) {
+      user.lockedCategories.push(folderIdStr);
+    }
+    await user.save();
+
+    res.json({
+      message: `Folder "${cleanTitle}" is now locked`,
+      folder: ensureFileType(folder.toObject()),
+      isLocked: true,
+      isHidden: folder.isHidden,
+    });
+  } catch (err) {
+    console.error('[lockFolder error]:', err.message);
+    res.status(500).json({ message: 'Failed to lock folder' });
+  }
+};
+
+/**
+ * PATCH /api/v1/media/folder/:id/unlock
+ */
+exports.unlockFolder = async (req, res) => {
+  try {
+    const folder = await Media.findOne({ _id: req.params.id, isFolder: true });
+    if (!folder) return res.status(404).json({ message: 'Folder not found' });
+
+    const userId = req.user?._id || req.user?.id;
+    if (folder.uploadedBy && userId && String(folder.uploadedBy) !== String(userId)) {
+      return res.status(403).json({ message: 'Not authorized to modify this folder' });
+    }
+
+    const user = await User.findById(userId).select('+pinHash');
+    if (req.body?.pin && user?.pinHash) {
+      const isValid = await user.comparePin(req.body.pin);
+      if (!isValid) {
+        return res.status(401).json({ message: 'Incorrect PIN' });
+      }
+    }
+
+    folder.isLocked = false;
+    await folder.save();
+
+    if (user) {
+      const cleanTitle = (folder.title || '').trim().toLowerCase();
+      const folderIdStr = String(folder._id).toLowerCase();
+      user.lockedCategories = (user.lockedCategories || []).filter((c) => {
+        const clean = (typeof c === 'string' ? c : c?.category || '').trim().toLowerCase();
+        return clean !== cleanTitle && clean !== folderIdStr;
+      });
+      await user.save();
+    }
+
+    res.json({
+      message: `Folder "${folder.title}" is now unlocked`,
+      folder: ensureFileType(folder.toObject()),
+      isLocked: false,
+      isHidden: folder.isHidden,
+    });
+  } catch (err) {
+    console.error('[unlockFolder error]:', err.message);
+    res.status(500).json({ message: 'Failed to unlock folder' });
+  }
+};
+
+/**
+ * PATCH /api/v1/media/folder/:id/hide
+ */
+exports.hideFolder = async (req, res) => {
+  try {
+    const folder = await Media.findOne({ _id: req.params.id, isFolder: true });
+    if (!folder) return res.status(404).json({ message: 'Folder not found' });
+
+    const userId = req.user?._id || req.user?.id;
+    if (folder.uploadedBy && userId && String(folder.uploadedBy) !== String(userId)) {
+      return res.status(403).json({ message: 'Not authorized to modify this folder' });
+    }
+
+    const user = await User.findById(userId).select('+pinHash');
+    if (!user || (!user.pinHash && (!user.biometricCredentials || user.biometricCredentials.length === 0))) {
+      return res.status(400).json({ message: 'Please set an app PIN before hiding folders' });
+    }
+
+    if (req.body?.pin && user.pinHash) {
+      const isValid = await user.comparePin(req.body.pin);
+      if (!isValid) {
+        return res.status(401).json({ message: 'Incorrect PIN' });
+      }
+    }
+
+    folder.isHidden = true;
+    await folder.save();
+
+    // Cascade isHidden to all descendant folders and files
+    const cascadeHide = async (parentId) => {
+      const children = await Media.find({ folderId: parentId });
+      for (const child of children) {
+        child.isHidden = true;
+        await child.save();
+        if (child.isFolder) {
+          await cascadeHide(child._id);
+        }
+      }
+    };
+    await cascadeHide(folder._id);
+
+    res.json({
+      message: `Folder "${folder.title}" is now hidden and moved to Private Vault`,
+      folder: ensureFileType(folder.toObject()),
+      isHidden: true,
+      isLocked: folder.isLocked,
+    });
+  } catch (err) {
+    console.error('[hideFolder error]:', err.message);
+    res.status(500).json({ message: 'Failed to hide folder' });
+  }
+};
+
+/**
+ * PATCH /api/v1/media/folder/:id/unhide
+ */
+exports.unhideFolder = async (req, res) => {
+  try {
+    const folder = await Media.findOne({ _id: req.params.id, isFolder: true });
+    if (!folder) return res.status(404).json({ message: 'Folder not found' });
+
+    const userId = req.user?._id || req.user?.id;
+    if (folder.uploadedBy && userId && String(folder.uploadedBy) !== String(userId)) {
+      return res.status(403).json({ message: 'Not authorized to modify this folder' });
+    }
+
+    const vaultSession = verifyVaultToken(req);
+    const user = await User.findById(userId).select('+pinHash');
+    if (!vaultSession) {
+      if (!req.body?.pin) {
+        return res.status(403).json({ message: 'Authentication required to unhide folder' });
+      }
+      if (user?.pinHash) {
+        const isValid = await user.comparePin(req.body.pin);
+        if (!isValid) {
+          return res.status(401).json({ message: 'Incorrect PIN' });
+        }
+      }
+    }
+
+    folder.isHidden = false;
+    await folder.save();
+
+    // Cascade unhide to descendants
+    const cascadeUnhide = async (parentId) => {
+      const children = await Media.find({ folderId: parentId });
+      for (const child of children) {
+        child.isHidden = false;
+        await child.save();
+        if (child.isFolder) {
+          await cascadeUnhide(child._id);
+        }
+      }
+    };
+    await cascadeUnhide(folder._id);
+
+    res.json({
+      message: `Folder "${folder.title}" is restored to My Cloud Drive`,
+      folder: ensureFileType(folder.toObject()),
+      isHidden: false,
+      isLocked: folder.isLocked,
+    });
+  } catch (err) {
+    console.error('[unhideFolder error]:', err.message);
+    res.status(500).json({ message: 'Failed to unhide folder' });
+  }
+};
+
+/**
+ * GET /api/v1/media/vault/folders
+ */
+exports.listVaultFolders = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const folders = await Media.find({
+      isFolder: true,
+      isHidden: true,
+      isTrashed: { $ne: true },
+      ...(userId ? { uploadedBy: userId } : {}),
+    }).sort({ title: 1 }).lean();
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.json({ folders: folders.map(ensureFileType) });
+  } catch (err) {
+    console.error('[listVaultFolders error]:', err.message);
+    res.status(500).json({ message: 'Failed to list private vault folders' });
   }
 };
 
@@ -549,10 +991,41 @@ exports.uploadMedia = async (req, res) => {
     );
 
     // 2. Save document in MongoDB
+    let finalCategory = (category?.trim() || '').replace(/^#/, '').trim();
+    let isFileHidden = false;
+    let isFileLocked = false;
+
+    if (parentId) {
+      const parentFolder = await Media.findById(parentId).lean();
+      if (parentFolder) {
+        if (!finalCategory || finalCategory.toLowerCase() === 'general' || finalCategory.toLowerCase() === 'all') {
+          finalCategory = parentFolder.category || parentFolder.title;
+        }
+        if (parentFolder.isHidden) {
+          isFileHidden = true;
+        }
+        if (parentFolder.isLocked) {
+          isFileLocked = true;
+        }
+      }
+    }
+    if (!finalCategory) finalCategory = 'General';
+
+    // If uploading into a hidden folder, verify vault session
+    if (isFileHidden) {
+      const vaultSession = verifyVaultToken(req);
+      if (!vaultSession) {
+        return res.status(403).json({
+          message: 'Cannot upload into private vault folder without active vault session',
+          requestId: correlationId,
+        });
+      }
+    }
+
     const doc = await Media.create({
       title: finalTitle,
       description: description?.trim() || '',
-      category: (category?.trim() || 'General').replace(/^#/, '').trim() || 'General',
+      category: finalCategory,
       isFolder: false,
       folderId: parentId,
       fileType: fileType || autoFileType,
@@ -574,6 +1047,8 @@ exports.uploadMedia = async (req, res) => {
       originalName: uploadedFile.originalname || '',
       originalSizeBytes: uploadedFile.size || 0,
       uploadedBy: req.user?.id || req.user?._id,
+      isHidden: isFileHidden,
+      isLocked: isFileLocked,
     });
 
     const resultDoc = ensureFileType(doc.toObject());
@@ -632,16 +1107,107 @@ exports.renameItem = async (req, res) => {
  */
 exports.moveItem = async (req, res) => {
   try {
-    const { targetFolderId, category, newCategory } = req.body;
-    const parentId = targetFolderId && targetFolderId !== 'root' && targetFolderId !== 'null' ? targetFolderId : null;
-    const effectiveCategory = (newCategory || category || '').trim();
+    const rawTarget = req.body.targetFolderId !== undefined ? req.body.targetFolderId : req.body.destinationFolderId;
+    const parentId = rawTarget && rawTarget !== 'root' && rawTarget !== 'null' ? rawTarget : null;
+    const effectiveCategory = (req.body.newCategory || req.body.category || '').trim();
 
+    const sourceItem = await Media.findById(req.params.id);
+    if (!sourceItem) return res.status(404).json({ message: 'Item not found' });
+
+    // Verify ownership
+    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const itemOwner = sourceItem.uploadedBy || sourceItem.userId;
+    if (itemOwner && userId && String(itemOwner) !== String(userId)) {
+      return res.status(403).json({
+        code: 'ACCESS_DENIED',
+        error: 'ACCESS_DENIED',
+        message: 'Not authorized to move this item',
+      });
+    }
+
+    // Check if source item is inside a hidden folder or is hidden
+    let isSourceHidden = !!sourceItem.isHidden;
+    if (!isSourceHidden && sourceItem.folderId) {
+      const parent = await Media.findById(sourceItem.folderId).lean();
+      if (parent?.isHidden) isSourceHidden = true;
+    }
+
+    const vaultSession = verifyVaultToken(req);
+    if (isSourceHidden) {
+      if (vaultSession?.expired) {
+        return res.status(403).json({
+          code: 'VAULT_SESSION_EXPIRED',
+          error: 'VAULT_SESSION_EXPIRED',
+          message: 'Private vault session has expired. Please unlock the vault again.',
+        });
+      }
+      if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+        return res.status(403).json({
+          code: 'VAULT_AUTH_REQUIRED',
+          error: 'VAULT_AUTH_REQUIRED',
+          message: 'Cannot move protected private vault item without active vault session',
+        });
+      }
+    }
+
+    // Check destination folder
     const updateFields = {};
-    if (targetFolderId !== undefined) {
+    if (rawTarget !== undefined) {
       updateFields.folderId = parentId;
     }
     if (effectiveCategory) {
       updateFields.category = effectiveCategory.replace(/^#/, '');
+    }
+
+    if (parentId) {
+      const destFolder = await Media.findById(parentId).lean();
+      if (!destFolder || !destFolder.isFolder) {
+        return res.status(400).json({ message: 'Target folder does not exist' });
+      }
+
+      // Check circular reference if moving a folder
+      if (sourceItem.isFolder) {
+        if (String(sourceItem._id) === String(parentId)) {
+          return res.status(400).json({ message: 'Cannot move folder into itself' });
+        }
+        let checkParent = destFolder;
+        while (checkParent) {
+          if (String(checkParent._id) === String(sourceItem._id)) {
+            return res.status(400).json({ message: 'Cannot move folder into its own subfolder' });
+          }
+          checkParent = checkParent.folderId ? await Media.findById(checkParent.folderId).lean() : null;
+        }
+      }
+
+      if (destFolder.isHidden) {
+        if (vaultSession?.expired) {
+          return res.status(403).json({
+            code: 'VAULT_SESSION_EXPIRED',
+            error: 'VAULT_SESSION_EXPIRED',
+            message: 'Private vault session has expired. Please unlock the vault again.',
+          });
+        }
+        if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+          return res.status(403).json({
+            code: 'VAULT_AUTH_REQUIRED',
+            error: 'VAULT_AUTH_REQUIRED',
+            message: 'Cannot move item into private vault without active vault session',
+          });
+        }
+        updateFields.isHidden = true;
+      } else if (isSourceHidden && !destFolder.isHidden) {
+        // Moving out of private vault into public folder
+        updateFields.isHidden = false;
+      }
+
+      if (destFolder.isLocked) {
+        updateFields.isLocked = true;
+      }
+    } else {
+      // Moving to root
+      if (isSourceHidden) {
+        updateFields.isHidden = false;
+      }
     }
 
     const item = await Media.findByIdAndUpdate(
@@ -650,7 +1216,6 @@ exports.moveItem = async (req, res) => {
       { new: true }
     );
 
-    if (!item) return res.status(404).json({ message: 'Item not found' });
     res.json(ensureFileType(item.toObject()));
   } catch (err) {
     console.error('[moveItem error]:', err.message);
@@ -659,35 +1224,121 @@ exports.moveItem = async (req, res) => {
 };
 
 /**
- * PATCH /api/v1/media/batch/move
+ * PATCH /api/v1/media/batch/move or /api/v1/media/move
  */
 exports.batchMove = async (req, res) => {
   try {
-    const { ids, targetFolderId, category, newCategory } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ message: 'ids array is required' });
+    const rawIds = req.body.ids || req.body.itemIds || [];
+    if (!Array.isArray(rawIds) || rawIds.length === 0) {
+      return res.status(400).json({ message: 'ids or itemIds array is required' });
     }
 
-    const parentId = targetFolderId && targetFolderId !== 'root' && targetFolderId !== 'null' ? targetFolderId : null;
-    const effectiveCategory = (newCategory || category || '').trim();
+    const rawTarget = req.body.targetFolderId !== undefined ? req.body.targetFolderId : req.body.destinationFolderId;
+    const parentId = rawTarget && rawTarget !== 'root' && rawTarget !== 'null' ? rawTarget : null;
+    const effectiveCategory = (req.body.newCategory || req.body.category || '').trim();
+
+    const items = await Media.find({ _id: { $in: rawIds } });
+    if (!items || items.length === 0) {
+      return res.status(404).json({ message: 'Items not found' });
+    }
+
+    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    for (const it of items) {
+      const owner = it.uploadedBy || it.userId;
+      if (owner && userId && String(owner) !== String(userId)) {
+        return res.status(403).json({
+          code: 'ACCESS_DENIED',
+          error: 'ACCESS_DENIED',
+          message: 'Not authorized to move one or more items',
+        });
+      }
+    }
+
+    let anySourceHidden = false;
+    for (const it of items) {
+      if (it.isHidden) {
+        anySourceHidden = true;
+        break;
+      }
+      if (it.folderId) {
+        const parent = await Media.findById(it.folderId).lean();
+        if (parent?.isHidden) {
+          anySourceHidden = true;
+          break;
+        }
+      }
+    }
+
+    const vaultSession = verifyVaultToken(req);
+    if (anySourceHidden) {
+      if (vaultSession?.expired) {
+        return res.status(403).json({
+          code: 'VAULT_SESSION_EXPIRED',
+          error: 'VAULT_SESSION_EXPIRED',
+          message: 'Private vault session has expired. Please unlock the vault again.',
+        });
+      }
+      if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+        return res.status(403).json({
+          code: 'VAULT_AUTH_REQUIRED',
+          error: 'VAULT_AUTH_REQUIRED',
+          message: 'Cannot move protected private vault item without active vault session',
+        });
+      }
+    }
 
     const updateFields = {};
-    if (targetFolderId !== undefined) {
+    if (rawTarget !== undefined) {
       updateFields.folderId = parentId;
     }
     if (effectiveCategory) {
       updateFields.category = effectiveCategory.replace(/^#/, '');
     }
 
+    if (parentId) {
+      const destFolder = await Media.findById(parentId).lean();
+      if (!destFolder || !destFolder.isFolder) {
+        return res.status(400).json({ message: 'Target folder does not exist' });
+      }
+
+      if (destFolder.isHidden) {
+        if (vaultSession?.expired) {
+          return res.status(403).json({
+            code: 'VAULT_SESSION_EXPIRED',
+            error: 'VAULT_SESSION_EXPIRED',
+            message: 'Private vault session has expired. Please unlock the vault again.',
+          });
+        }
+        if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+          return res.status(403).json({
+            code: 'VAULT_AUTH_REQUIRED',
+            error: 'VAULT_AUTH_REQUIRED',
+            message: 'Cannot move item into private vault without active vault session',
+          });
+        }
+        updateFields.isHidden = true;
+      } else if (anySourceHidden && !destFolder.isHidden) {
+        updateFields.isHidden = false;
+      }
+
+      if (destFolder.isLocked) {
+        updateFields.isLocked = true;
+      }
+    } else {
+      if (anySourceHidden) {
+        updateFields.isHidden = false;
+      }
+    }
+
     await Media.updateMany(
-      { _id: { $in: ids } },
+      { _id: { $in: rawIds } },
       { $set: updateFields }
     );
 
     res.json({
       success: true,
-      message: `Successfully moved ${ids.length} items`,
-      movedCount: ids.length,
+      message: `Successfully moved ${rawIds.length} items`,
+      movedCount: rawIds.length,
     });
   } catch (err) {
     console.error('[batchMove error]:', err.message);
@@ -908,7 +1559,17 @@ exports.autoPurgeOldTrash = async () => {
  */
 exports.listFolders = async (req, res) => {
   try {
-    const folders = await Media.find({ isFolder: true, isTrashed: { $ne: true } }).sort({ title: 1 }).lean();
+    const filter = {
+      isFolder: true,
+      isTrashed: { $ne: true },
+      isHidden: { $ne: true },
+    };
+    const userId = req.user?._id || req.user?.id;
+    if (userId) {
+      filter.uploadedBy = userId;
+    }
+    const folders = await Media.find(filter).sort({ title: 1 }).lean();
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json({ folders: folders.map(ensureFileType) });
   } catch (err) {
     res.status(500).json({ message: 'Failed to list folders' });
@@ -926,14 +1587,43 @@ exports.searchMedia = async (req, res) => {
       return res.json({ items: [], nextCursor: null, hasMore: false, total: 0 });
     }
 
+    const userId = req.user?._id || req.user?.id;
+    // Exclude hidden folders and their contents from global search
+    const hiddenFolderDocs = await Media.find({
+      isFolder: true,
+      isHidden: true,
+      ...(userId ? { uploadedBy: userId } : {}),
+    }).select('_id').lean();
+    const hiddenFolderIds = hiddenFolderDocs.map((d) => d._id);
+
     const filter = {
       isTrashed: { $ne: true },
+      isHidden: { $ne: true },
       $or: [
         { title: { $regex: q.trim(), $options: 'i' } },
         { description: { $regex: q.trim(), $options: 'i' } },
         { category: { $regex: q.trim(), $options: 'i' } },
       ],
     };
+
+    if (hiddenFolderIds.length > 0) {
+      filter.folderId = { $nin: hiddenFolderIds };
+    }
+
+    // Exclude locked categories from normal search unless user unlocked them
+    let userLocked = [];
+    if (userId) {
+      const u = await User.findById(userId).lean();
+      if (Array.isArray(u?.lockedCategories)) {
+        userLocked = u.lockedCategories;
+      }
+    }
+    if (userLocked.length > 0) {
+      const lockedRegexes = userLocked.map((c) =>
+        new RegExp(`^#?${c.replace(/^#/, '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
+      );
+      filter.category = { $nin: lockedRegexes };
+    }
 
     if (fileCategory && fileCategory !== 'all') {
       filter.fileCategory = fileCategory;
@@ -954,6 +1644,7 @@ exports.searchMedia = async (req, res) => {
     const items = hasMore ? rawItems.slice(0, limit) : rawItems;
     const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]._id.toString() : null;
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json({
       items: items.map(ensureFileType),
       nextCursor,
@@ -974,6 +1665,66 @@ exports.getMedia = async (req, res) => {
   try {
     const item = await Media.findById(req.params.id).lean();
     if (!item) return res.status(404).json({ message: 'File not found' });
+
+    // Check hidden folder privacy
+    let isHiddenItem = !!item.isHidden;
+    let parent = null;
+    if (item.folderId) {
+      parent = await Media.findById(item.folderId).lean();
+      if (parent?.isHidden) isHiddenItem = true;
+    }
+
+    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const itemOwner = item.uploadedBy || item.userId || parent?.uploadedBy || parent?.userId;
+    if (itemOwner && userId && String(itemOwner) !== String(userId)) {
+      return res.status(403).json({
+        code: 'ACCESS_DENIED',
+        error: 'ACCESS_DENIED',
+        message: 'Not authorized to access this file',
+      });
+    }
+
+    if (isHiddenItem) {
+      const vaultSession = verifyVaultToken(req);
+      if (vaultSession?.expired) {
+        return res.status(403).json({
+          code: 'VAULT_SESSION_EXPIRED',
+          error: 'VAULT_SESSION_EXPIRED',
+          message: 'Private vault session has expired. Please unlock the vault again.',
+        });
+      }
+      if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+        return res.status(403).json({
+          code: 'VAULT_AUTH_REQUIRED',
+          error: 'VAULT_AUTH_REQUIRED',
+          message: 'Access denied: item is in private vault',
+        });
+      }
+    }
+
+    // Check locked folder privacy
+    const ownerId = req.user?._id || item.uploadedBy;
+    if (ownerId) {
+      const owner = await User.findById(ownerId).lean();
+      const userLocked = owner?.lockedCategories || [];
+      if (userLocked.length > 0 || item.isLocked) {
+        const itemCat = (item.category || '').trim().replace(/^#/, '').toLowerCase();
+        let isItemLocked = item.isLocked || userLocked.some((c) => (typeof c === 'string' ? c : c?.category || '').trim().replace(/^#/, '').toLowerCase() === itemCat);
+        if (isItemLocked) {
+          const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
+            ? req.query.unlockedCategories
+            : Array.isArray(req.query?.unlockedCategories)
+            ? req.query.unlockedCategories.join(',')
+            : '';
+          const unlockedList = rawUnlocked.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+          if (!unlockedList.includes(itemCat) && !unlockedList.includes(String(item._id).toLowerCase())) {
+            return res.status(403).json({ message: 'Access denied: item is locked', locked: true });
+          }
+        }
+      }
+    }
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.json(ensureFileType(item));
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch item details' });
@@ -988,6 +1739,64 @@ exports.downloadFile = async (req, res) => {
     const item = await Media.findById(req.params.id);
     if (!item || !item.telegramFileId) {
       return res.status(404).json({ message: 'File not found' });
+    }
+
+    // Check hidden folder privacy
+    let isHiddenItem = !!item.isHidden;
+    let parent = null;
+    if (item.folderId) {
+      parent = await Media.findById(item.folderId).lean();
+      if (parent?.isHidden) isHiddenItem = true;
+    }
+
+    const userId = req.user?._id?.toString() || req.user?.id?.toString();
+    const itemOwner = item.uploadedBy || item.userId || parent?.uploadedBy || parent?.userId;
+    if (itemOwner && userId && String(itemOwner) !== String(userId)) {
+      return res.status(403).json({
+        code: 'ACCESS_DENIED',
+        error: 'ACCESS_DENIED',
+        message: 'Not authorized to download this file',
+      });
+    }
+
+    if (isHiddenItem) {
+      const vaultSession = verifyVaultToken(req);
+      if (vaultSession?.expired) {
+        return res.status(403).json({
+          code: 'VAULT_SESSION_EXPIRED',
+          error: 'VAULT_SESSION_EXPIRED',
+          message: 'Private vault session has expired. Please unlock the vault again.',
+        });
+      }
+      if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+        return res.status(403).json({
+          code: 'VAULT_AUTH_REQUIRED',
+          error: 'VAULT_AUTH_REQUIRED',
+          message: 'Access denied: item is in private vault',
+        });
+      }
+    }
+
+    // Check locked folder privacy
+    const ownerId = req.user?._id || item.uploadedBy;
+    if (ownerId) {
+      const owner = await User.findById(ownerId).lean();
+      const userLocked = owner?.lockedCategories || [];
+      if (userLocked.length > 0 || item.isLocked) {
+        const itemCat = (item.category || '').trim().replace(/^#/, '').toLowerCase();
+        let isItemLocked = item.isLocked || userLocked.some((c) => (typeof c === 'string' ? c : c?.category || '').trim().replace(/^#/, '').toLowerCase() === itemCat);
+        if (isItemLocked) {
+          const rawUnlocked = typeof req.query?.unlockedCategories === 'string'
+            ? req.query.unlockedCategories
+            : Array.isArray(req.query?.unlockedCategories)
+            ? req.query.unlockedCategories.join(',')
+            : '';
+          const unlockedList = rawUnlocked.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+          if (!unlockedList.includes(itemCat) && !unlockedList.includes(String(item._id).toLowerCase())) {
+            return res.status(403).json({ message: 'Access denied: item is locked', locked: true });
+          }
+        }
+      }
     }
 
     const fileUrl = await resolveFileUrl(item.telegramFileId);
@@ -1009,6 +1818,7 @@ exports.downloadFile = async (req, res) => {
     const dispositionType = isInline ? 'inline' : 'attachment';
 
     res.setHeader('Content-Disposition', `${dispositionType}; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     if (item.mimeType) res.setHeader('Content-Type', item.mimeType);
     if (item.fileSizeBytes) res.setHeader('Content-Length', item.fileSizeBytes);
 

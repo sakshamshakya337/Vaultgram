@@ -28,6 +28,16 @@ const mediaSchema = new mongoose.Schema(
       ref: 'Media',
       default: null, // null means root "My Drive"
     },
+    isHidden: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isLocked: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     fileType: {
       type: String,
       enum: ['video', 'document', 'image', 'audio', 'other'],
@@ -126,12 +136,22 @@ const mediaSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
   },
   { timestamps: true, collection: 'videos' }
 );
 
-// Pre-save hook: Ensure fileType is set
+// Pre-save hook: Ensure fileType is set and sync uploadedBy/userId
 mediaSchema.pre('save', function (next) {
+  if (!this.uploadedBy && this.userId) {
+    this.uploadedBy = this.userId;
+  }
+  if (!this.userId && this.uploadedBy) {
+    this.userId = this.uploadedBy;
+  }
   if (!this.fileType) {
     if (this.mediaType === 'video' || this.fileCategory === 'video') this.fileType = 'video';
     else if (this.mediaType === 'image' || this.fileCategory === 'image') this.fileType = 'image';

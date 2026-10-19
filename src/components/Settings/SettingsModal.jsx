@@ -46,6 +46,9 @@ export const SettingsModal = () => {
     lockedCategories,
     toggleCategoryLock,
     vaultStats = { totalBytes: 0, totalItems: 0 },
+    isVaultUnlocked,
+    lockVault,
+    setIsPrivateVaultModalOpen,
   } = useVideoFeed();
 
   const [isRemovingPin, setIsRemovingPin] = useState(false);
@@ -391,6 +394,63 @@ export const SettingsModal = () => {
                 </div>
               </form>
             )}
+          </div>
+
+          {/* Dedicated Private Vault Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-purple-400" />
+                  <span>Private Vault</span>
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Hidden & protected folders with short-lived session
+                </p>
+              </div>
+              <span
+                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
+                  isVaultUnlocked
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : 'bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                {isVaultUnlocked ? 'Vault Active' : 'Locked'}
+              </span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 space-y-3">
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                Hidden folders and their files never appear in your ordinary drive, recents, or search results.
+              </p>
+              <div className="flex gap-2">
+                {isVaultUnlocked ? (
+                  <button
+                    onClick={() => {
+                      lockVault();
+                      showSuccess('Private Vault locked');
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 font-semibold text-xs transition-colors cursor-pointer text-center"
+                  >
+                    Lock Private Vault
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setIsSettingsOpen(false);
+                      if (!hasPin) {
+                        setIsSetPinModalOpen(true);
+                      } else {
+                        setIsPrivateVaultModalOpen(true);
+                      }
+                    }}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white font-bold text-xs shadow-md shadow-purple-500/20 hover:opacity-90 active:scale-95 transition-all cursor-pointer text-center"
+                  >
+                    Access Private Vault
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Biometric WebAuthn Section (Fingerprint / Face ID) */}

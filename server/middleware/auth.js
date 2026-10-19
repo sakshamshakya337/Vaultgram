@@ -59,4 +59,48 @@ const requireAdmin = (req, res, next) => {
   return res.status(403).json({ message: 'Admin privileges required' });
 };
 
-module.exports = { protect, optionalAuth, requireAdmin };
+const verifyVaultToken = (req) => {
+  const token = req.headers['x-vault-token'] || req.query?.vaultToken;
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+    if (decoded && decoded.type === 'private_vault') {
+      return decoded;
+    }
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return { expired: true };
+    }
+    return null;
+  }
+  return null;
+};
+
+const requireVaultAuth = (req, res, next) => {
+  const vaultSession = verifyVaultToken(req);
+  if (vaultSession?.expired) {
+    return res.status(403).json({
+      code: 'VAULT_SESSION_EXPIRED',
+      error: 'VAULT_SESSION_EXPIRED',
+      message: 'Private vault session has expired. Please unlock the vault again.',
+    });
+  }
+  const userId = req.user?._id?.toString() || req.user?.id?.toString();
+  if (!vaultSession || (userId && vaultSession.userId !== userId)) {
+    return res.status(403).json({
+      code: 'VAULT_AUTH_REQUIRED',
+      error: 'VAULT_AUTH_REQUIRED',
+      message: 'Active private vault session required',
+    });
+  }
+  req.vaultSession = vaultSession;
+  next();
+};
+
+module.exports = {
+  protect,
+  optionalAuth,
+  requireAdmin,
+  verifyVaultToken,
+  requireVaultAuth,
+};

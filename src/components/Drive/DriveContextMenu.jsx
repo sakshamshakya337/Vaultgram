@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import {
   Eye,
+  EyeOff,
   Edit2,
   FolderSymlink,
   Share2,
@@ -8,7 +9,10 @@ import {
   Trash2,
   FolderOpen,
   Copy,
-  Info
+  Info,
+  Lock,
+  Unlock,
+  Shield
 } from 'lucide-react';
 
 export const DriveContextMenu = ({
@@ -24,6 +28,10 @@ export const DriveContextMenu = ({
   onShare,
   onDownload,
   onDelete,
+  onLockFolder,
+  onUnlockFolder,
+  onHideFolder,
+  onUnhideFolder,
 }) => {
   const menuRef = useRef(null);
 
@@ -51,10 +59,13 @@ export const DriveContextMenu = ({
   }, [onClose]);
 
   // Adjust menu position to guarantee it stays inside window viewport
-  const menuWidth = 200;
-  const menuHeight = isFolder ? 180 : 250;
+  const menuWidth = 210;
+  const menuHeight = isFolder ? 270 : 250;
   const adjustedX = Math.min(Math.max(10, x), window.innerWidth - menuWidth - 10);
   const adjustedY = Math.min(Math.max(10, y), window.innerHeight - menuHeight - 10);
+
+  const isLocked = !!(item?.isLocked);
+  const isHidden = !!(item?.isHidden);
 
   return (
     <div
@@ -88,6 +99,47 @@ export const DriveContextMenu = ({
           {isFolder ? <FolderOpen className="w-4 h-4 text-blue-400" /> : <Eye className="w-4 h-4 text-cyan-400" />}
           <span>{isFolder ? 'Open Folder' : selectedCount > 1 ? 'Preview First' : 'Preview / Open'}</span>
         </button>
+
+        {/* Folder Privacy Actions */}
+        {isFolder && (
+          <>
+            {/* Lock / Unlock Folder */}
+            <button
+              onClick={() => {
+                onClose();
+                if (isLocked) {
+                  onUnlockFolder?.(item);
+                } else {
+                  onLockFolder?.(item);
+                }
+              }}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl transition-colors cursor-pointer text-left font-medium ${
+                isLocked ? 'text-amber-400 hover:bg-amber-500/10' : 'text-rose-400 hover:bg-rose-500/10'
+              }`}
+            >
+              {isLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              <span>{isLocked ? 'Unlock Folder' : 'Lock Folder'}</span>
+            </button>
+
+            {/* Hide / Unhide Folder */}
+            <button
+              onClick={() => {
+                onClose();
+                if (isHidden) {
+                  onUnhideFolder?.(item);
+                } else {
+                  onHideFolder?.(item);
+                }
+              }}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl transition-colors cursor-pointer text-left font-medium ${
+                isHidden ? 'text-cyan-400 hover:bg-cyan-500/10' : 'text-purple-400 hover:bg-purple-500/10'
+              }`}
+            >
+              {isHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              <span>{isHidden ? 'Unhide Folder' : 'Hide Folder'}</span>
+            </button>
+          </>
+        )}
 
         {/* Rename Action (Single item only) */}
         {selectedCount <= 1 && onRename && (

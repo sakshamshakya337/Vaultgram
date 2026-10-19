@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { api } from '../services/api';
+import { api, getVaultToken, setVaultToken, clearVaultToken } from '../services/api';
 import { useAuth } from './useAuth.js';
 import { VideoFeedContext } from './VideoFeedContext.js';
 
@@ -36,10 +36,15 @@ export const VideoFeedProvider = ({ children }) => {
   const [sessionUnlockedCategories, setSessionUnlockedCategories] = useState(new Set());
   const [categoryLockTarget, setCategoryLockTarget] = useState(null);
 
+  // Private Vault session state
+  const [vaultTokenState, setVaultTokenState] = useState(() => getVaultToken());
+  const [isPrivateVaultModalOpen, setIsPrivateVaultModalOpen] = useState(false);
+  const isVaultUnlocked = !!vaultTokenState;
+
   // Session-only unlocked Reels state (gated behind PIN)
   const [sessionUnlockedReels, setSessionUnlockedReels] = useState(false);
 
-  // 3-Minute Inactivity Timer for re-locking opened protected folders and Reels
+  // 3-Minute Inactivity Timer for re-locking opened protected folders, Reels, and Private Vault
   const INACTIVITY_TIMEOUT_MS = 8 * 60 * 1000;
   const lastActivityRef = useRef(Date.now());
   const lastHiddenTimeRef = useRef(null);
@@ -58,15 +63,61 @@ export const VideoFeedProvider = ({ children }) => {
     };
   }, []);
 
-  // 3-Minute Inactivity Re-lock for protected folders & Reels
+  // Lock Private Vault
+  const lockVault = useCallback(() => {
+    clearVaultToken();
+    setVaultTokenState(null);
+  }, []);
+
+  // Open Private Vault with PIN
+  const openPrivateVault = useCallback(async (pin) => {
+    const res = await api.auth.openVault(pin);
+    if (res?.vaultToken) {
+      setVaultToken(res.vaultToken, res.expiresIn || 900);
+      setVaultTokenState(res.vaultToken);
+      setIsPrivateVaultModalOpen(false);
+      return res;
+    }
+    throw new Error(res?.message || 'Failed to unlock Private Vault');
+  }, []);
+
+  // Open Private Vault with WebAuthn biometrics
+  const openPrivateVaultWithBiometrics = useCallback(async (assertion) => {
+    const res = await api.auth.biometric.verifyAuth(assertion, true);
+    if (res?.vaultToken) {
+      setVaultToken(res.vaultToken, res.expiresIn || 900);
+      setVaultTokenState(res.vaultToken);
+      setIsPrivateVaultModalOpen(false);
+      return res;
+    }
+    throw new Error(res?.message || 'Biometric verification failed');
+  }, []);
+
+  // Listen for vault:expired event
   useEffect(() => {
-    // Periodic check every 10s for 3-minute idle inactivity
+    const handleExpired = () => {
+      setVaultTokenState(null);
+    };
+    window.addEventListener('vault:expired', handleExpired);
+    return () => window.removeEventListener('vault:expired', handleExpired);
+  }, []);
+
+  // Clear vault session on logout / user change
+  useEffect(() => {
+    if (!user) {
+      lockVault();
+    }
+  }, [user, lockVault]);
+
+  // Inactivity Re-lock for protected folders, Reels, and Private Vault
+  useEffect(() => {
     const interval = setInterval(() => {
       const idleTime = Date.now() - lastActivityRef.current;
       if (idleTime >= INACTIVITY_TIMEOUT_MS) {
-        if (sessionUnlockedCategories.size > 0 || sessionUnlockedReels) {
+        if (sessionUnlockedCategories.size > 0 || sessionUnlockedReels || getVaultToken()) {
           setSessionUnlockedCategories(new Set());
           setSessionUnlockedReels(false);
+          lockVault();
           // If viewing a locked folder, return to root
           const isCurrentLocked = lockedCategories.some(
             (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
@@ -87,9 +138,10 @@ export const VideoFeedProvider = ({ children }) => {
         const idleDuration = now - lastActivityRef.current;
 
         if (hiddenDuration >= INACTIVITY_TIMEOUT_MS || idleDuration >= INACTIVITY_TIMEOUT_MS) {
-          if (sessionUnlockedCategories.size > 0 || sessionUnlockedReels) {
+          if (sessionUnlockedCategories.size > 0 || sessionUnlockedReels || getVaultToken()) {
             setSessionUnlockedCategories(new Set());
             setSessionUnlockedReels(false);
+            lockVault();
             const isCurrentLocked = lockedCategories.some(
               (lc) => lc.toLowerCase() === selectedCategory.toLowerCase()
             );
@@ -109,7 +161,7 @@ export const VideoFeedProvider = ({ children }) => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [lockedCategories, selectedCategory, sessionUnlockedCategories, sessionUnlockedReels]);
+  }, [INACTIVITY_TIMEOUT_MS, lockedCategories, selectedCategory, sessionUnlockedCategories, sessionUnlockedReels, setSelectedCategory, lockVault]);
 
   // Audio Autoplay: Starts muted, unlocked on first interaction
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
@@ -334,15 +386,39 @@ export const VideoFeedProvider = ({ children }) => {
     [lockedCategories, sessionUnlockedCategories, hasPin]
   );
 
-  // Unlock folder/category for the current session
-  const unlockCategoryForSession = useCallback((cat) => {
+  // Unlock folder for the current session without altering selectedCategory
+  const unlockFolderForSession = useCallback((folderOrId, folderTitle) => {
     setSessionUnlockedCategories((prev) => {
       const next = new Set(prev);
-      next.add(cat.toLowerCase());
+      if (typeof folderOrId === 'string' && folderOrId) {
+        next.add(folderOrId.toLowerCase());
+      } else if (folderOrId?._id || folderOrId?.id) {
+        next.add(String(folderOrId._id || folderOrId.id).toLowerCase());
+      }
+      if (folderTitle && typeof folderTitle === 'string') {
+        next.add(folderTitle.toLowerCase());
+      }
+      if (typeof folderOrId === 'object' && folderOrId?.title) {
+        next.add(folderOrId.title.toLowerCase());
+      }
       return next;
     });
-    setSelectedCategory(cat);
   }, []);
+
+  // Unlock folder/category for the current session
+  const unlockCategoryForSession = useCallback((cat) => {
+    if (!cat) return;
+    const catStr = typeof cat === 'string' ? cat : (cat.category || cat.title || '');
+    setSessionUnlockedCategories((prev) => {
+      const next = new Set(prev);
+      if (catStr) next.add(catStr.toLowerCase());
+      if (cat?._id) next.add(String(cat._id).toLowerCase());
+      return next;
+    });
+    if (typeof cat === 'string') {
+      setSelectedCategory(cat);
+    }
+  }, [setSelectedCategory]);
 
   // Unlock entire Reels Feed for the current session
   const unlockReelsForSession = useCallback(() => {
@@ -430,6 +506,7 @@ export const VideoFeedProvider = ({ children }) => {
         toggleCategoryLock,
         sessionUnlockedCategories,
         unlockCategoryForSession,
+        unlockFolderForSession,
         sessionUnlockedReels,
         unlockReelsForSession,
         categoryLockTarget,
@@ -457,6 +534,13 @@ export const VideoFeedProvider = ({ children }) => {
         isInstallable,
         isIOS,
         triggerInstall,
+        vaultToken: vaultTokenState,
+        isVaultUnlocked,
+        openPrivateVault,
+        openPrivateVaultWithBiometrics,
+        lockVault,
+        isPrivateVaultModalOpen,
+        setIsPrivateVaultModalOpen,
       }}
     >
       {children}
