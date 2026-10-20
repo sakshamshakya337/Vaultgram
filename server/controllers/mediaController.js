@@ -826,9 +826,29 @@ exports.listVaultFolders = async (req, res) => {
       countMap[String(c._id)] = c.count;
     }
 
+    const totalCountAgg = await Media.aggregate([
+      {
+        $match: {
+          status: { $ne: 'deleting' },
+          folderId: { $in: folderIds },
+        },
+      },
+      {
+        $group: {
+          _id: '$folderId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const totalCountMap = {};
+    for (const c of totalCountAgg) {
+      totalCountMap[String(c._id)] = c.count;
+    }
+
     const enhancedFolders = folders.map((f) => {
       const obj = ensureFileType(f);
       obj.itemCount = countMap[String(f._id)] || 0;
+      obj.totalItemCount = totalCountMap[String(f._id)] || 0;
       return obj;
     });
 
@@ -1538,27 +1558,52 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
   const correlationId = options.correlationId || `cascade_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   console.log(`[${correlationId}] [deleteFolderCascade] Starting cascade delete for folderId=${folderId}, userId=${userId}`);
 
-  const folder = await Media.findOne({ _id: folderId, isFolder: true });
-  if (!folder) {
-    const error = new Error('Folder not found');
-    error.status = 404;
-    error.code = 'NOT_FOUND';
+  if (!mongoose.Types.ObjectId.isValid(folderId)) {
+    const error = new Error('Invalid folder ID format');
+    error.status = 400;
+    error.code = 'INVALID_ID';
     throw error;
   }
 
-  // 1. Authorization: Verify folder belongs to user
-  const folderOwner = folder.uploadedBy || folder.userId;
-  if (folderOwner && !userId) {
-    const error = new Error('Authentication required to delete folder');
-    error.status = 401;
-    error.code = 'UNAUTHORIZED';
-    throw error;
+  const folder = await Media.findOne({ _id: folderId, isFolder: true });
+  if (!folder) {
+    // Check if there are any orphaned descendant records (files or subfolders) pointing to this folderId
+    const orphanedChildren = await Media.find({ folderId }).lean();
+    if (orphanedChildren.length === 0) {
+      // Idempotent delete: The folder and all its contents are already completely gone!
+      console.log(`[${correlationId}] [deleteFolderCascade] Folder ${folderId} already deleted and has no remaining records. Returning idempotent success.`);
+      return {
+        success: true,
+        status: 'already_deleted',
+        folderId,
+        folderTitle: options.folderTitle || 'Folder',
+        message: 'Folder has already been deleted or does not exist',
+        deletedFilesCount: 0,
+        deletedFoldersCount: 0,
+        deletedTelegramMessagesCount: 0,
+        legacyFilesWithoutMessageId: 0,
+        legacyThumbnailsWithoutMessageId: 0,
+      };
+    }
+
+    console.log(`[${correlationId}] [deleteFolderCascade] Folder document missing but found ${orphanedChildren.length} orphaned child records. Cleaning up remaining children...`);
   }
-  if (folderOwner && userId && String(folderOwner) !== String(userId)) {
-    const error = new Error('Not authorized to delete this folder');
-    error.status = 403;
-    error.code = 'ACCESS_DENIED';
-    throw error;
+
+  // 1. Authorization: Verify folder belongs to user
+  if (folder) {
+    const folderOwner = folder.uploadedBy || folder.userId;
+    if (folderOwner && !userId) {
+      const error = new Error('Authentication required to delete folder');
+      error.status = 401;
+      error.code = 'UNAUTHORIZED';
+      throw error;
+    }
+    if (folderOwner && userId && String(folderOwner) !== String(userId)) {
+      const error = new Error('Not authorized to delete this folder');
+      error.status = 403;
+      error.code = 'ACCESS_DENIED';
+      throw error;
+    }
   }
 
   // 2. Lock & Biometric Protection: Never allow delete to bypass lock!
@@ -1571,16 +1616,16 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
     }
   }
 
-  const folderTitle = (folder.title || '').trim().toLowerCase();
-  const folderIdStr = String(folder._id).toLowerCase();
-  const folderCat = (folder.category || '').trim().replace(/^#/, '').toLowerCase();
+  const folderTitle = (folder?.title || '').trim().toLowerCase();
+  const folderIdStr = folder ? String(folder._id).toLowerCase() : String(folderId).toLowerCase();
+  const folderCat = (folder?.category || '').trim().replace(/^#/, '').toLowerCase();
 
-  const isFolderLocked = folder.isLocked || userLocked.some((c) => {
+  const isFolderLocked = folder?.isLocked || userLocked.some((c) => {
     const clean = (typeof c === 'string' ? c : c?.category || '').trim().toLowerCase();
     return clean === folderTitle || clean === folderIdStr || (folderCat && clean === folderCat);
   });
 
-  const isFolderHidden = !!folder.isHidden;
+  const isFolderHidden = !!folder?.isHidden;
 
   if (isFolderHidden) {
     let hasVaultAuth = false;
@@ -1631,7 +1676,7 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
     }
 
     if (!isUnlocked) {
-      const error = new Error(`Folder "${folder.title}" is locked. PIN passcode or unlock required before deletion.`);
+      const error = new Error(`Folder "${folder?.title || 'locked'}" is locked. PIN passcode or unlock required before deletion.`);
       error.status = 403;
       error.code = 'FOLDER_LOCKED';
       throw error;
@@ -1639,9 +1684,9 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
   }
 
   // 3. Collect everything: Folder + all descendants (recursive subfolders)
-  const allFolderIds = [folder._id];
-  const allFolderTitles = [folder.title];
-  const queue = [folder._id];
+  const allFolderIds = folder ? [folder._id] : [new mongoose.Types.ObjectId(folderId)];
+  const allFolderTitles = folder?.title ? [folder.title] : [];
+  const queue = [...allFolderIds];
 
   while (queue.length > 0) {
     const parentId = queue.shift();
@@ -1695,7 +1740,7 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
   }
 
   // Also include any previously pending message IDs on the folders
-  if (Array.isArray(folder.pendingTelegramDeletes)) {
+  if (Array.isArray(folder?.pendingTelegramDeletes)) {
     rawMessageIds.push(...folder.pendingTelegramDeletes);
   }
 
@@ -1728,16 +1773,18 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
   // If Telegram deletion failed permanently for some messages, do NOT drop the MongoDB records!
   if (!tgResult.success && tgResult.failedIds.length > 0) {
     console.warn(`[${correlationId}] [deleteFolderCascade] Partial Telegram delete failure: ${tgResult.failedIds.length} messages failed`);
-    await Media.findByIdAndUpdate(folder._id, {
-      status: 'delete_failed',
-      pendingTelegramDeletes: tgResult.failedIds,
-    });
+    if (folder) {
+      await Media.findByIdAndUpdate(folder._id, {
+        status: 'delete_failed',
+        pendingTelegramDeletes: tgResult.failedIds,
+      });
+    }
 
     return {
       success: false,
       status: 'delete_failed',
-      folderId: folder._id,
-      folderTitle: folder.title,
+      folderId: folder ? folder._id : folderId,
+      folderTitle: folder ? folder.title : 'Folder',
       message: 'Some files could not be removed from Telegram. Database records preserved. Please retry.',
       deletedTelegramCount: tgResult.deletedCount,
       failedTelegramIds: tgResult.failedIds,
@@ -1831,14 +1878,15 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
     }
   }
 
-  console.log(`[${correlationId}] [deleteFolderCascade] Successfully completed cascade delete for folder "${folder.title}"`);
+  const finalTitle = folder?.title || 'Folder';
+  console.log(`[${correlationId}] [deleteFolderCascade] Successfully completed cascade delete for folder "${finalTitle}"`);
 
   return {
     success: true,
     status: 'deleted',
-    folderId: folder._id,
-    folderTitle: folder.title,
-    message: `Folder "${folder.title}" and all its contents were completely deleted`,
+    folderId: folder ? folder._id : folderId,
+    folderTitle: finalTitle,
+    message: folder ? `Folder "${folder.title}" and all its contents were completely deleted` : 'Orphaned folder contents were completely deleted',
     deletedFilesCount: files.length,
     deletedFoldersCount: allFolderIds.length,
     deletedTelegramMessagesCount: tgResult.deletedCount,
@@ -1848,6 +1896,62 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
 }
 
 exports.deleteFolderCascade = deleteFolderCascade;
+
+/**
+ * GET /api/v1/media/folder/:id/info
+ * Retrieves accurate recursive file and subfolder counts for a folder
+ */
+exports.getFolderInfo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, error: 'INVALID_ID', message: 'Invalid folder ID' });
+    }
+
+    const folder = await Media.findOne({ _id: id, isFolder: true }).lean();
+    if (!folder) {
+      return res.status(404).json({ success: false, error: 'NOT_FOUND', message: 'Folder not found' });
+    }
+
+    const userId = req.user?._id || req.user?.id;
+    if (folder.uploadedBy && userId && String(folder.uploadedBy) !== String(userId)) {
+      return res.status(403).json({ success: false, error: 'ACCESS_DENIED', message: 'Not authorized to view folder info' });
+    }
+
+    const allFolderIds = [folder._id];
+    const queue = [folder._id];
+    while (queue.length > 0) {
+      const parentId = queue.shift();
+      const children = await Media.find({ folderId: parentId, isFolder: true }).select('_id').lean();
+      for (const child of children) {
+        allFolderIds.push(child._id);
+        queue.push(child._id);
+      }
+    }
+
+    const files = await Media.find({ folderId: { $in: allFolderIds }, isFolder: false }).select('_id isTrashed telegramMessageId').lean();
+    const activeFilesCount = files.filter((f) => !f.isTrashed).length;
+    const trashedFilesCount = files.filter((f) => f.isTrashed).length;
+    const totalFilesCount = files.length;
+    const subfolderCount = allFolderIds.length - 1;
+
+    return res.json({
+      success: true,
+      folderId: folder._id,
+      title: folder.title,
+      isLocked: folder.isLocked,
+      isHidden: folder.isHidden,
+      fileCount: totalFilesCount,
+      activeFilesCount,
+      trashedFilesCount,
+      subfolderCount,
+      totalCount: totalFilesCount + subfolderCount,
+    });
+  } catch (err) {
+    console.error('[getFolderInfo error]:', err.message);
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: 'Failed to retrieve folder info' });
+  }
+};
 
 /**
  * DELETE /api/v1/media/folder/:id
@@ -1915,7 +2019,16 @@ exports.retryDeleteFolder = async (req, res) => {
 exports.trashOrDelete = async (req, res) => {
   try {
     const item = await Media.findById(req.params.id);
-    if (!item) return res.status(404).json({ message: 'Item not found' });
+    if (!item) {
+      if (req.method === 'DELETE' || req.query.permanent === 'true') {
+        return res.json({
+          success: true,
+          status: 'already_deleted',
+          message: 'Item has already been deleted or does not exist',
+        });
+      }
+      return res.status(404).json({ message: 'Item not found' });
+    }
 
     // Permanent delete if item is already trashed, or if direct DELETE HTTP method or ?permanent=true is used
     const isPermanent = item.isTrashed || req.query.permanent === 'true' || req.method === 'DELETE';
@@ -2107,9 +2220,29 @@ exports.listFolders = async (req, res) => {
       countMap[String(c._id)] = c.count;
     }
 
+    const totalCountAgg = await Media.aggregate([
+      {
+        $match: {
+          status: { $ne: 'deleting' },
+          folderId: { $in: folderIds },
+        },
+      },
+      {
+        $group: {
+          _id: '$folderId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const totalCountMap = {};
+    for (const c of totalCountAgg) {
+      totalCountMap[String(c._id)] = c.count;
+    }
+
     const enhancedFolders = folders.map((f) => {
       const obj = ensureFileType(f);
       obj.itemCount = countMap[String(f._id)] || 0;
+      obj.totalItemCount = totalCountMap[String(f._id)] || 0;
       return obj;
     });
 

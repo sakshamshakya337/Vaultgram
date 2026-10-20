@@ -107,6 +107,15 @@ app.use('/api/v1/files', dbMiddleware, mediaRoutes);
 app.use('/api/v1/share', dbMiddleware, shareRoutes);
 app.use('/api/v1/stream', dbMiddleware, streamRoutes);
 
+// 404 handler for all unmatched API and stream routes (ensures JSON responses, never HTML)
+app.all(['/api/*', '/stream/*'], (_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'NOT_FOUND',
+    message: 'API route not found',
+  });
+});
+
 // Global error handler
 app.use((err, _req, res, _next) => {
   console.error('[GlobalError]', err.message);

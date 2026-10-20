@@ -15,6 +15,7 @@ import {
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { api } from '../../services/api';
 
 export const DriveFolderGrid = ({
   folders = [],
@@ -41,6 +42,31 @@ export const DriveFolderGrid = ({
   const [deleteFolderTarget, setDeleteFolderTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+
+  const handleOpenDeleteDialog = async (folder) => {
+    setDeleteFolderTarget(folder);
+    setDeleteError(null);
+    const folderId = folder?._id || folder?.id;
+    if (folderId && api?.drive?.getFolderInfo) {
+      try {
+        const info = await api.drive.getFolderInfo(folderId);
+        if (info?.success) {
+          setDeleteFolderTarget((prev) =>
+            prev && (prev._id === folderId || prev.id === folderId)
+              ? {
+                  ...prev,
+                  itemCount: info.fileCount,
+                  totalItemCount: info.totalCount,
+                  subfolderCount: info.subfolderCount,
+                }
+              : prev
+          );
+        }
+      } catch (e) {
+        // Fallback to existing count
+      }
+    }
+  };
 
   const handleToggleLock = async (e, identifier, secondaryId = null, folderObj = null) => {
     e.stopPropagation();
@@ -87,6 +113,11 @@ export const DriveFolderGrid = ({
       }
       setDeleteFolderTarget(null);
     } catch (err) {
+      // If folder is already gone / not found, dismiss cleanly
+      if (err.status === 404 || err.message?.toLowerCase().includes('already deleted') || err.message?.toLowerCase().includes('not found')) {
+        setDeleteFolderTarget(null);
+        return;
+      }
       setDeleteError(err.message || 'Failed to delete folder');
     } finally {
       setIsDeleting(false);
@@ -277,7 +308,7 @@ export const DriveFolderGrid = ({
                               <button
                                 className="flex w-full items-center space-x-2 rounded-xl px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer"
                                 onClick={() => {
-                                  setDeleteFolderTarget(folder);
+                                  handleOpenDeleteDialog(folder);
                                   setActiveMenuId(null);
                                 }}
                               >
@@ -384,7 +415,7 @@ export const DriveFolderGrid = ({
         title="Delete Folder"
         itemName={deleteFolderTarget?.title || 'this folder'}
         itemType="folder"
-        fileCount={deleteFolderTarget?.itemCount ?? 0}
+        fileCount={deleteFolderTarget?.totalItemCount ?? deleteFolderTarget?.itemCount ?? 0}
         loading={isDeleting}
         error={deleteError}
         onConfirm={handleConfirmDeleteFolder}

@@ -313,16 +313,45 @@ async function runTests() {
     assert(!purgedRetryFolder && !purgedRetryFile, 'MongoDB records purged once Telegram retry succeeds');
 
     // ──────────────────────────────────────────────────────────────────────────
-    // TEST 9: Idempotency: Calling delete on already deleted folder
+    // TEST 9: Idempotency: Calling delete on already deleted folder returns success, NOT 404
     // ──────────────────────────────────────────────────────────────────────────
     console.log('\n--- Scenario 8: Idempotency ---');
-    let alreadyDeletedErr = null;
+    const alreadyDeletedRes = await deleteFolderCascade(testUser._id, failFolder._id);
+    assert(
+      alreadyDeletedRes.success === true && alreadyDeletedRes.status === 'already_deleted',
+      'Second delete call on already-deleted folder returns success status already_deleted instead of 404'
+    );
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // TEST 10: Empty folder (0 files) deletes cleanly
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log('\n--- Scenario 9: Empty folder (0 files) deletion ---');
+    const emptyFolder = await Media.create({
+      title: 'Empty Folder',
+      isFolder: true,
+      uploadedBy: testUser._id,
+    });
+
+    const emptyRes = await deleteFolderCascade(testUser._id, emptyFolder._id, {
+      deleteTelegramMessages: async () => ({ success: true, deletedCount: 0, failedIds: [], errors: [] }),
+    });
+    assert(emptyRes.success === true, 'Empty folder deletes cleanly with success: true');
+    assert(emptyRes.deletedFilesCount === 0, 'Empty folder reports 0 files deleted');
+    assert(emptyRes.deletedFoldersCount === 1, 'Empty folder reports 1 folder deleted');
+    const dbEmptyCheck = await Media.findById(emptyFolder._id);
+    assert(!dbEmptyCheck, 'Empty folder record is removed from MongoDB');
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // TEST 11: Invalid folder ID format returns 400
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log('\n--- Scenario 10: Invalid folder ID validation ---');
+    let invalidIdErr = null;
     try {
-      await deleteFolderCascade(testUser._id, failFolder._id);
+      await deleteFolderCascade(testUser._id, 'invalid-non-object-id');
     } catch (err) {
-      alreadyDeletedErr = err;
+      invalidIdErr = err;
     }
-    assert(alreadyDeletedErr && alreadyDeletedErr.status === 404, 'Second delete call safely returns 404 Not Found without crashing');
+    assert(invalidIdErr && invalidIdErr.status === 400, 'Invalid folder ID returns status 400');
 
     // Clean up test data
     await Media.deleteMany({ _id: { $in: [folder1._id, unrelatedFolder._id, unrelatedFile._id] } });

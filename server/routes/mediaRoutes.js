@@ -15,6 +15,7 @@ const {
   listFolders,
   deleteFolder,
   retryDeleteFolder,
+  getFolderInfo,
   cleanupOrphansHandler,
   lockFolder,
   unlockFolder,
@@ -51,6 +52,7 @@ router.get('/categories', optionalAuth, getCategories);
 router.get('/user/library', optionalAuth, getUserLibrary);
 router.get('/folders', optionalAuth, listFolders);
 router.post('/folder', optionalAuth, createFolder);
+router.get('/folder/:id/info', optionalAuth, getFolderInfo);
 router.delete('/folder/:id', optionalAuth, deleteFolder);
 router.post('/folder/:id/retry', optionalAuth, retryDeleteFolder);
 router.post('/maintenance/cleanup-orphans', optionalAuth, cleanupOrphansHandler);

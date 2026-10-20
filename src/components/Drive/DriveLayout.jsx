@@ -311,7 +311,7 @@ export const DriveLayout = () => {
     setSelectedFileIds([]);
   };
 
-  const handleDeleteFolder = async (folderOrId) => {
+  const handleDeleteFolder = async (folderOrId, silent = false) => {
     const folderId = typeof folderOrId === 'string' ? folderOrId : folderOrId?._id || folderOrId?.id;
     if (!folderId) return;
     try {
@@ -320,11 +320,20 @@ export const DriveLayout = () => {
       if (currentFolder && (String(currentFolder._id) === String(folderId) || String(currentFolder.id) === String(folderId))) {
         setCurrentFolder(null);
       }
+      // Remove folder immediately from local state
+      setFolders((prev) => prev.filter((f) => String(f._id || f.id) !== String(folderId)));
       loadDriveItems();
       if (fetchLibraryStats) fetchLibraryStats();
       if (fetchCategories) fetchCategories();
       return res;
     } catch (err) {
+      if (err.status === 404 || err.message?.toLowerCase().includes('already deleted') || err.message?.toLowerCase().includes('not found')) {
+        setFolders((prev) => prev.filter((f) => String(f._id || f.id) !== String(folderId)));
+        loadDriveItems();
+        if (fetchLibraryStats) fetchLibraryStats();
+        if (fetchCategories) fetchCategories();
+        if (silent) return { success: true, status: 'already_deleted' };
+      }
       console.error('[handleDeleteFolder error]:', err.message);
       throw err;
     }

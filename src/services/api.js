@@ -187,10 +187,19 @@ async function request(path, options = {}) {
   };
 
   const url = `${BASE_URL}${path}`;
-  let response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (netErr) {
+    console.error('[API Network Error]:', netErr.message);
+    const err = new Error('Network error. Please check your internet connection.');
+    err.isNetworkError = true;
+    err.originalError = netErr;
+    throw err;
+  }
 
   // Interceptor: If 401 Unauthorized, perform silent refresh and retry request
   if (response.status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/register') && !path.startsWith('/auth/refresh')) {
@@ -251,9 +260,25 @@ async function request(path, options = {}) {
         window.dispatchEvent(new Event('vault:expired'));
       }
     }
-    const message = data?.message || `HTTP error ${response.status}`;
+    let message = data?.message;
+    if (!message) {
+      if (response.status === 404) {
+        message = 'Folder not found or already deleted';
+      } else if (response.status === 401) {
+        message = 'Authentication required';
+      } else if (response.status === 403) {
+        message = 'Locked folder, verification required';
+      } else if (response.status === 429) {
+        message = 'Telegram rate limit reached. Please wait a moment and retry.';
+      } else if (response.status === 502) {
+        message = 'Telegram cloud service error. Please retry.';
+      } else {
+        message = `HTTP error ${response.status}`;
+      }
+    }
     const error = new Error(message);
     error.status = response.status;
+    error.code = data?.error || data?.code;
     error.data = data;
     throw error;
   }
@@ -638,7 +663,7 @@ export const api = {
         method: 'DELETE',
       }),
 
-    deleteFolder: (id, options = {}) => {
+    deleteFolder: async (id, options = {}) => {
       const headers = {};
       if (options.pin) headers['x-folder-pin'] = options.pin;
       const params = new URLSearchParams();
@@ -646,20 +671,44 @@ export const api = {
         params.append('unlockedCategories', options.unlockedCategories);
       }
       const queryStr = params.toString() ? `?${params.toString()}` : '';
-      return request(`/videos/folder/${id}${queryStr}`, {
-        method: 'DELETE',
-        headers,
-      });
+
+      try {
+        return await request(`/videos/folder/${id}${queryStr}`, {
+          method: 'DELETE',
+          headers,
+        });
+      } catch (err) {
+        // If /videos/folder/:id returned 404 because the route is not matched on backend or already deleted, try fallback
+        if (err.status === 404 && (!err.data || err.data.error === 'ROUTE_NOT_FOUND')) {
+          console.warn('[deleteFolder] /videos/folder/:id 404, falling back to /videos/:id?permanent=true');
+          return await request(`/videos/${id}?permanent=true${options.unlockedCategories ? `&unlockedCategories=${encodeURIComponent(options.unlockedCategories)}` : ''}`, {
+            method: 'DELETE',
+            headers,
+          });
+        }
+        throw err;
+      }
     },
 
-    retryDeleteFolder: (id, options = {}) => {
+    retryDeleteFolder: async (id, options = {}) => {
       const headers = {};
       if (options.pin) headers['x-folder-pin'] = options.pin;
-      return request(`/videos/folder/${id}/retry`, {
-        method: 'POST',
-        headers,
-      });
+      try {
+        return await request(`/videos/folder/${id}/retry`, {
+          method: 'POST',
+          headers,
+        });
+      } catch (err) {
+        // If retry endpoint returns 404, fallback to deleteFolder
+        if (err.status === 404) {
+          return await api.drive.deleteFolder(id, options);
+        }
+        throw err;
+      }
     },
+
+    getFolderInfo: (id) =>
+      request(`/videos/folder/${id}/info`),
 
     emptyTrash: () =>
       request('/videos/trash/empty', {
