@@ -110,6 +110,7 @@ export const DriveLayout = () => {
   const [isVoiceMemoOpen, setIsVoiceMemoOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState(null);
   const [shareFolderTarget, setShareFolderTarget] = useState(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const sentinelRef = useRef(null);
 
   // Memoized query parameters for unified cursor pagination
@@ -675,7 +676,7 @@ export const DriveLayout = () => {
   }, [categories, driveItems]);
 
   return (
-    <div className="flex w-screen h-screen bg-black text-white overflow-hidden select-none font-sans relative">
+    <div className="flex w-full max-w-full h-full min-h-0 bg-black text-white overflow-hidden select-none font-sans relative">
       {/* Full-window Drag-and-Drop Dropzone Overlay */}
       <UploadDropzoneOverlay currentFolder={currentFolder} selectedCategory={selectedCategory} />
 
@@ -701,8 +702,57 @@ export const DriveLayout = () => {
         />
       </div>
 
+      {/* Mobile Drawer Navigation (Slide-in with Backdrop) */}
+      {isMobileDrawerOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsMobileDrawerOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Drawer Container */}
+          <div className="relative z-10 h-full max-w-[85vw] flex animate-fade-in shadow-2xl">
+            <DriveSidebar
+              currentNav={currentNav}
+              onSelectNav={(nav) => {
+                setCurrentNav(nav);
+                setCurrentFolder(null);
+                setSelectedFileIds([]);
+                setFocusedIndex(-1);
+                if (nav !== 'all') {
+                  setSelectedCategory('All');
+                }
+                setIsMobileDrawerOpen(false);
+              }}
+              selectedCategory={selectedCategory}
+              currentFolder={currentFolder}
+              onResetToRoot={() => {
+                handleResetToRoot();
+                setIsMobileDrawerOpen(false);
+              }}
+              onOpenCategory={(cat) => {
+                handleOpenCategory(cat);
+                setIsMobileDrawerOpen(false);
+              }}
+              onOpenNewFolder={() => {
+                setIsNewFolderOpen(true);
+                setIsMobileDrawerOpen(false);
+              }}
+              onOpenVoiceMemo={() => {
+                setIsVoiceMemoOpen(true);
+                setIsMobileDrawerOpen(false);
+              }}
+              onClose={() => setIsMobileDrawerOpen(false)}
+              isMobile={true}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 2. Main Drive Workspace */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-zinc-950/40 relative">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-zinc-950/40 relative">
         {/* Top Header Bar */}
         {currentNav !== 'reels' ? (
           <DriveHeader
@@ -713,6 +763,7 @@ export const DriveLayout = () => {
             currentNav={currentNav}
             currentFolder={currentFolder}
             onResetToRoot={handleResetToRoot}
+            onToggleMobileMenu={() => setIsMobileDrawerOpen((prev) => !prev)}
           />
         ) : (
           <div className="hidden md:block">
@@ -724,6 +775,7 @@ export const DriveLayout = () => {
               currentNav={currentNav}
               currentFolder={currentFolder}
               onResetToRoot={handleResetToRoot}
+              onToggleMobileMenu={() => setIsMobileDrawerOpen((prev) => !prev)}
             />
           </div>
         )}
@@ -736,22 +788,22 @@ export const DriveLayout = () => {
             </div>
           </div>
         ) : (
-          <main className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 md:space-y-8 pb-28 md:pb-8 no-scrollbar">
+          <main className="flex-1 overflow-y-auto p-3.5 sm:p-4 md:p-8 space-y-5 md:space-y-8 pb-28 md:pb-8 no-scrollbar w-full max-w-full overflow-x-hidden">
             {/* Private Vault Top Session Banner */}
             {currentNav === 'vault' && isVaultUnlocked && (
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-900 border border-purple-500/30 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-900 border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 w-full">
+                <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
                     <EyeOff className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white">Private Vault Active</span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-white">Private Vault Active</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold shrink-0">
                         ENCRYPTED SESSION
                       </span>
                     </div>
-                    <p className="text-[11px] text-zinc-400">
+                    <p className="text-[11px] text-zinc-400 break-words mt-0.5 leading-relaxed">
                       Hidden folders & files are visible only while this session is active
                     </p>
                   </div>
@@ -761,7 +813,7 @@ export const DriveLayout = () => {
                     lockVault();
                     setCurrentNav('all');
                   }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold transition-all cursor-pointer shadow-sm w-full sm:w-auto shrink-0 active:scale-[0.98]"
                   title="Lock Vault immediately"
                 >
                   <span>Lock Vault</span>
@@ -771,19 +823,19 @@ export const DriveLayout = () => {
 
             {/* Private Vault Locked State */}
             {currentNav === 'vault' && !isVaultUnlocked ? (
-              <div className="p-8 md:p-12 rounded-3xl bg-zinc-900/40 border border-purple-500/20 flex flex-col items-center justify-center text-center space-y-4 my-8">
-                <div className="w-16 h-16 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                  <Shield className="w-8 h-8" />
+              <div className="p-6 sm:p-8 md:p-12 rounded-3xl bg-zinc-900/40 border border-purple-500/20 flex flex-col items-center justify-center text-center space-y-4 my-4 sm:my-8 w-full max-w-full">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+                  <Shield className="w-7 h-7 sm:w-8 sm:h-8" />
                 </div>
-                <div>
-                  <h4 className="text-base font-bold text-white mb-1">Private Vault is Locked</h4>
-                  <p className="text-xs text-zinc-400 max-w-sm leading-relaxed">
+                <div className="max-w-sm px-2">
+                  <h4 className="text-sm sm:text-base font-bold text-white mb-1">Private Vault is Locked</h4>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
                     Enter your privacy passcode or use biometric authentication to view your hidden folders and private files.
                   </p>
                 </div>
                 <button
                   onClick={() => setIsPrivateVaultModalOpen(true)}
-                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
                 >
                   Unlock Private Vault
                 </button>
@@ -915,18 +967,20 @@ export const DriveLayout = () => {
                 )
               ) : files.length === 0 ? (
                 /* Empty State */
-                <div className="p-8 md:p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-6">
-                  <div className="w-16 h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600">
+                <div className="p-6 sm:p-8 md:p-12 rounded-3xl bg-zinc-900/30 border border-white/5 flex flex-col items-center justify-center text-center space-y-4 my-4 sm:my-6 w-full max-w-full">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-600 shrink-0">
                     {currentNav === 'starred' ? (
-                      <Heart className="w-8 h-8 text-rose-500/40" />
+                      <Heart className="w-7 h-7 sm:w-8 sm:h-8 text-rose-500/40" />
                     ) : currentNav === 'trash' ? (
-                      <Trash2 className="w-8 h-8 text-zinc-600" />
+                      <Trash2 className="w-7 h-7 sm:w-8 sm:h-8 text-zinc-600" />
+                    ) : currentNav === 'vault' ? (
+                      <Shield className="w-7 h-7 sm:w-8 sm:h-8 text-purple-400/60" />
                     ) : (
-                      <Folder className="w-8 h-8 text-zinc-600" />
+                      <Folder className="w-7 h-7 sm:w-8 sm:h-8 text-zinc-600" />
                     )}
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white mb-1">
+                  <div className="max-w-sm px-2">
+                    <h4 className="text-sm sm:text-base font-bold text-white mb-1">
                       {currentNav === 'timeline'
                         ? 'Timeline is Empty'
                         : currentNav === 'this-week'
@@ -937,11 +991,13 @@ export const DriveLayout = () => {
                         ? 'No Starred Files'
                         : currentNav === 'trash'
                         ? 'Trash is Empty'
+                        : currentNav === 'vault'
+                        ? 'Private Vault is Empty'
                         : searchQuery
                         ? 'No Files Found'
                         : 'No Files in this Folder'}
                     </h4>
-                    <p className="text-xs text-zinc-400 max-w-xs leading-relaxed">
+                    <p className="text-xs text-zinc-400 leading-relaxed">
                       {currentNav === 'timeline'
                         ? 'Upload media to see it organized chronologically by date.'
                         : currentNav === 'this-week'
@@ -952,28 +1008,30 @@ export const DriveLayout = () => {
                         ? 'Like or star videos to save them here for quick access.'
                         : currentNav === 'trash'
                         ? 'Items you delete will appear here.'
+                        : currentNav === 'vault'
+                        ? 'Create a hidden folder or upload files directly into your private vault.'
                         : searchQuery
                         ? `No files match "${searchQuery}".`
                         : 'Upload your first media file or create a folder.'}
                     </p>
                   </div>
 
-                  {currentNav === 'all' && (
-                    <div className="flex items-center gap-2">
+                  {(currentNav === 'all' || currentNav === 'vault') && (
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto px-4 sm:px-0">
                       <button
                         onClick={() => openFilePicker({
                           folderId: currentFolder?._id || null,
                           folderTitle: currentFolder?.title || '',
                           category: selectedCategory,
                         })}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
+                        className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer w-full sm:w-auto"
                       >
                         <Upload className="w-4 h-4" />
                         <span>Upload Files</span>
                       </button>
                       <button
                         onClick={() => setIsNewFolderOpen(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-colors cursor-pointer"
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-colors cursor-pointer w-full sm:w-auto"
                       >
                         <FolderPlus className="w-4 h-4 text-blue-400" />
                         <span>New Folder</span>

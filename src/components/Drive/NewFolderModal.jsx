@@ -54,8 +54,8 @@ export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreat
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-fade-in select-none">
-      <div className="relative w-full max-w-sm rounded-3xl bg-zinc-950 border border-white/10 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl animate-fade-in select-none">
+      <div className="relative w-full max-w-sm rounded-3xl bg-zinc-950 border border-white/10 p-4 sm:p-6 shadow-2xl">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-zinc-400 hover:text-white transition-all cursor-pointer"
@@ -101,9 +101,9 @@ export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreat
                     : 'bg-zinc-900/50 border-white/5 text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
                   <div
-                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
                       isLocked
                         ? 'bg-rose-500/20 text-rose-400'
                         : 'bg-zinc-800 text-zinc-500'
@@ -115,17 +115,17 @@ export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreat
                       <Lock className="w-4 h-4" />
                     )}
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-white leading-tight">
                       Lock Folder (Passcode)
                     </p>
-                    <p className="text-[10px] text-zinc-400">
+                    <p className="text-[10px] text-zinc-400 truncate">
                       Require PIN or biometric verification to open
                     </p>
                   </div>
                 </div>
                 <div
-                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${
                     isLocked
                       ? 'bg-rose-500 border-rose-500 text-white'
                       : 'border-white/20 bg-zinc-800'
@@ -144,9 +144,9 @@ export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreat
                     : 'bg-zinc-900/50 border-white/5 text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
                   <div
-                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${
+                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
                       isHidden
                         ? 'bg-purple-500/20 text-purple-400'
                         : 'bg-zinc-800 text-zinc-500'
@@ -154,11 +154,11 @@ export const NewFolderModal = ({ isOpen, onClose, currentFolderId, onFolderCreat
                   >
                     <span className="text-sm">👁️‍🗨️</span>
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-white leading-tight">
                       Hide Folder (Private Vault)
                     </p>
-                    <p className="text-[10px] text-zinc-400">
+                    <p className="text-[10px] text-zinc-400 truncate">
                       Hidden from drive, searches, and recents
                     </p>
                   </div>

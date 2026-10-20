@@ -15,7 +15,8 @@ import {
   ArrowLeft,
   Sun,
   Moon,
-  Folder
+  Folder,
+  Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
@@ -30,6 +31,7 @@ export const DriveHeader = ({
   currentNav,
   currentFolder,
   onResetToRoot,
+  onToggleMobileMenu,
 }) => {
   const { user, isAuthenticated, hasPin, setIsSetPinModalOpen, setIsSettingsOpen } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -50,6 +52,10 @@ export const DriveHeader = ({
     if (currentNav === 'starred') return 'Starred';
     if (currentNav === 'recent') return 'Recent';
     if (currentNav === 'trash') return 'Trash';
+    if (currentNav === 'timeline') return 'Timeline';
+    if (currentNav === 'this-week') return 'This Week';
+    if (currentNav === 'this-month') return 'This Month';
+    if (currentNav === 'vault') return 'Private Vault';
     return selectedCategory === 'All' ? 'Vaultgram' : selectedCategory;
   };
 
@@ -91,7 +97,7 @@ export const DriveHeader = ({
   };
 
   return (
-    <header className="h-16 px-4 md:px-6 border-b border-white/10 bg-zinc-950/90 backdrop-blur-md flex items-center justify-between gap-3 shrink-0 select-none z-30">
+    <header className="h-16 px-3 sm:px-4 md:px-6 border-b border-white/10 bg-zinc-950/90 backdrop-blur-md flex items-center justify-between gap-2 sm:gap-3 shrink-0 select-none z-30">
       {/* Mobile Search Overlay Bar */}
       {isMobileSearchOpen ? (
         <div className="flex items-center gap-2 w-full animate-fade-in md:hidden">
@@ -127,32 +133,42 @@ export const DriveHeader = ({
       ) : (
         <>
           {/* Left: App Brand & Navigation Title / Breadcrumbs */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+            {/* Mobile Drawer Hamburger Button */}
+            <button
+              onClick={onToggleMobileMenu}
+              className="md:hidden p-1.5 -ml-1 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+              title="Open Navigation"
+              aria-label="Open Navigation Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
             {/* Mobile Logo Brand */}
-            <div className="flex items-center gap-2 md:hidden">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
-                <Sparkles className="w-4 h-4" />
+            <div className="hidden min-[360px]:flex items-center gap-2 md:hidden shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
+                <Sparkles className="w-3.5 h-3.5" />
               </div>
             </div>
 
             <button
               onClick={onResetToRoot}
-              className="text-xs md:text-sm font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer truncate"
+              className="text-xs md:text-sm font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer truncate max-w-[90px] min-[360px]:max-w-[120px] sm:max-w-none shrink-0"
             >
-              {selectedCategory === 'All' && currentNav === 'all' && !currentFolder ? 'Vaultgram Drive' : 'My Drive'}
+              {selectedCategory === 'All' && currentNav === 'all' && !currentFolder ? 'Vaultgram' : 'My Drive'}
             </button>
 
-            {currentFolder && currentNav === 'all' && (
+            {currentFolder && (
               <>
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-                <span className="text-xs font-bold text-cyan-400 truncate flex items-center gap-1.5">
-                  <Folder className="w-3.5 h-3.5" />
-                  <span>{currentFolder.title}</span>
+                <span className="text-xs font-bold text-cyan-400 truncate max-w-[90px] min-[360px]:max-w-[130px] sm:max-w-[200px] flex items-center gap-1 min-w-0">
+                  <Folder className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{currentFolder.title}</span>
                 </span>
 
                 <button
                   onClick={handleCurrentFolderLockToggle}
-                  className={`ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                  className={`ml-1 inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer shrink-0 ${
                     isCurrentFolderLocked
                       ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                       : 'bg-zinc-900 text-zinc-400 border border-white/10 hover:text-white'
@@ -174,12 +190,12 @@ export const DriveHeader = ({
             {!currentFolder && selectedCategory !== 'All' && currentNav === 'all' && (
               <>
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-                <span className="text-xs font-bold text-cyan-400 truncate">#{selectedCategory}</span>
+                <span className="text-xs font-bold text-cyan-400 truncate max-w-[100px] sm:max-w-[160px]">#{selectedCategory}</span>
 
                 {/* Folder Lock / Unlock Quick Button */}
                 <button
                   onClick={handleHeaderLockToggle}
-                  className={`ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                  className={`ml-1 inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer shrink-0 ${
                     isCurrentCategoryLocked
                       ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                       : 'bg-zinc-900 text-zinc-400 border border-white/10 hover:text-white'
@@ -198,10 +214,20 @@ export const DriveHeader = ({
               </>
             )}
 
-            {currentNav !== 'all' && (
+            {!currentFolder && currentNav === 'vault' && (
               <>
                 <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-                <span className="text-xs font-bold text-white truncate">{getNavTitle()}</span>
+                <span className="text-xs font-bold text-purple-400 truncate flex items-center gap-1 max-w-[110px] sm:max-w-none">
+                  <Shield className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span className="truncate">Private Vault</span>
+                </span>
+              </>
+            )}
+
+            {!currentFolder && currentNav !== 'all' && currentNav !== 'vault' && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                <span className="text-xs font-bold text-white truncate max-w-[100px] sm:max-w-none">{getNavTitle()}</span>
               </>
             )}
           </div>

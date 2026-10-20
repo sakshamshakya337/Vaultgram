@@ -110,8 +110,8 @@ export const CategoryPinModal = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl p-4 animate-fade-in select-none">
-      <div className="w-full max-w-sm rounded-3xl bg-zinc-950 border border-white/10 p-6 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xl p-3 sm:p-4 animate-fade-in select-none">
+      <div className="w-full max-w-sm rounded-3xl bg-zinc-950 border border-white/10 p-4 sm:p-6 shadow-2xl relative">
         <PinKeypad
           title={isReelsLock ? 'Unlock Reels Feed' : `Unlock ${lockTitle}`}
           subtitle={

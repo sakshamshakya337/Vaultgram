@@ -23,7 +23,7 @@ export const DriveSelectionBar = ({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 backdrop-blur-xl shadow-xl shadow-cyan-950/30 animate-fade-in text-xs select-none">
+    <div className="w-full flex items-center justify-between px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 backdrop-blur-xl shadow-xl shadow-cyan-950/30 animate-fade-in text-xs select-none gap-2">
       {/* Left: Select All Checkbox & Count */}
       <div className="flex items-center gap-3">
         <button

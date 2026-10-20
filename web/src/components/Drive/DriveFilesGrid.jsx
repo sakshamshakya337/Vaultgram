@@ -300,7 +300,7 @@ export const DriveFilesGrid = ({
                     <div className="flex items-center justify-between group/title">
                       <h4
                         onDoubleClick={(e) => handleStartRename(e, video)}
-                        className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors truncate select-text"
+                        className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors truncate min-w-0 flex-1 select-text"
                         title={`${video.title} (Double-click to rename)`}
                       >
                         {video.title || 'Untitled'}

@@ -49,20 +49,22 @@ export const DriveContextMenu = ({
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('touchstart', handleClickOutside);
     window.addEventListener('scroll', onClose, true);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('touchstart', handleClickOutside);
       window.removeEventListener('scroll', onClose, true);
     };
   }, [onClose]);
 
   // Adjust menu position to guarantee it stays inside window viewport
-  const menuWidth = 210;
+  const menuWidth = Math.min(210, window.innerWidth - 20);
   const menuHeight = isFolder ? 270 : 250;
-  const adjustedX = Math.min(Math.max(10, x), window.innerWidth - menuWidth - 10);
-  const adjustedY = Math.min(Math.max(10, y), window.innerHeight - menuHeight - 10);
+  const adjustedX = Math.max(10, Math.min(x, window.innerWidth - menuWidth - 10));
+  const adjustedY = Math.max(10, Math.min(y, window.innerHeight - menuHeight - 10));
 
   const isLocked = !!(item?.isLocked);
   const isHidden = !!(item?.isHidden);
@@ -71,7 +73,7 @@ export const DriveContextMenu = ({
     <div
       ref={menuRef}
       style={{ left: `${adjustedX}px`, top: `${adjustedY}px` }}
-      className="fixed z-50 w-52 rounded-2xl bg-zinc-950/95 border border-white/10 shadow-2xl p-1.5 backdrop-blur-2xl animate-fade-in text-xs select-none"
+      className="fixed z-50 w-52 max-w-[calc(100vw-20px)] rounded-2xl bg-zinc-950/95 border border-white/10 shadow-2xl p-1.5 backdrop-blur-2xl animate-fade-in text-xs select-none"
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >

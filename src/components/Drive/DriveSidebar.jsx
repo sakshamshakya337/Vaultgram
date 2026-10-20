@@ -19,7 +19,8 @@ import {
   CalendarDays,
   CalendarRange,
   Camera,
-  Mic
+  Mic,
+  X
 } from 'lucide-react';
 import { useVideoFeed } from '../../contexts/useVideoFeed';
 import { useAuth } from '../../contexts/useAuth';
@@ -33,6 +34,8 @@ export const DriveSidebar = ({
   onOpenNewFolder,
   onOpenCamera,
   onOpenVoiceMemo,
+  onClose,
+  isMobile = false,
 }) => {
   const {
     categories,
@@ -61,23 +64,40 @@ export const DriveSidebar = ({
     await toggleCategoryLock(cat);
   };
 
+  const handleNavClick = (callback) => {
+    if (callback) callback();
+    if (isMobile && onClose) onClose();
+  };
+
   return (
-    <aside className="w-64 h-screen bg-zinc-950 border-r border-white/10 flex flex-col justify-between shrink-0 select-none">
+    <aside className="w-64 max-w-[85vw] h-full bg-zinc-950 border-r border-white/10 flex flex-col justify-between shrink-0 select-none overflow-hidden">
       {/* Top Header & Logo */}
-      <div className="p-5 flex flex-col gap-4 shrink-0">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center p-0.5 shadow-lg shadow-cyan-500/20">
-            <div className="w-full h-full bg-zinc-950 rounded-[12px] flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-cyan-400" />
+      <div className="p-4 sm:p-5 flex flex-col gap-4 shrink-0">
+        {/* Brand Logo & Mobile Close */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-rose-500 flex items-center justify-center p-0.5 shadow-lg shadow-cyan-500/20">
+              <div className="w-full h-full bg-zinc-950 rounded-[12px] flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-cyan-400" />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-lg font-black tracking-tight text-white leading-none">
+                Stream<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-rose-500">Vault</span>
+              </h1>
+              <span className="text-[10px] font-mono text-zinc-500">CLOUD DRIVE</span>
             </div>
           </div>
-          <div>
-            <h1 className="text-lg font-black tracking-tight text-white leading-none">
-              Stream<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-rose-500">Vault</span>
-            </h1>
-            <span className="text-[10px] font-mono text-zinc-500">CLOUD DRIVE</span>
-          </div>
+
+          {isMobile && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              aria-label="Close navigation"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Primary "+ New" Action Button with Dropdown */}
@@ -150,7 +170,7 @@ export const DriveSidebar = ({
         <div className="space-y-1">
           <button
             onClick={() => {
-              onSelectNav('reels');
+              handleNavClick(() => onSelectNav('reels'));
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'reels'
@@ -169,8 +189,10 @@ export const DriveSidebar = ({
 
           <button
             onClick={() => {
-              onSelectNav('all');
-              requestCategory('All');
+              handleNavClick(() => {
+                onSelectNav('all');
+                requestCategory('All');
+              });
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'all' && selectedCategory === 'All'
@@ -183,7 +205,7 @@ export const DriveSidebar = ({
           </button>
 
           <button
-            onClick={() => onSelectNav('starred')}
+            onClick={() => handleNavClick(() => onSelectNav('starred'))}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'starred'
                 ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
@@ -195,7 +217,7 @@ export const DriveSidebar = ({
           </button>
 
           <button
-            onClick={() => onSelectNav('recent')}
+            onClick={() => handleNavClick(() => onSelectNav('recent'))}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'recent'
                 ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
@@ -207,7 +229,7 @@ export const DriveSidebar = ({
           </button>
 
           <button
-            onClick={() => onSelectNav('timeline')}
+            onClick={() => handleNavClick(() => onSelectNav('timeline'))}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'timeline'
                 ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
@@ -219,7 +241,7 @@ export const DriveSidebar = ({
           </button>
 
           <button
-            onClick={() => onSelectNav('this-week')}
+            onClick={() => handleNavClick(() => onSelectNav('this-week'))}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'this-week'
                 ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
@@ -231,7 +253,7 @@ export const DriveSidebar = ({
           </button>
 
           <button
-            onClick={() => onSelectNav('this-month')}
+            onClick={() => handleNavClick(() => onSelectNav('this-month'))}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'this-month'
                 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
@@ -243,7 +265,7 @@ export const DriveSidebar = ({
           </button>
 
           <button
-            onClick={() => onSelectNav('trash')}
+            onClick={() => handleNavClick(() => onSelectNav('trash'))}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'trash'
                 ? 'bg-zinc-800 text-zinc-200 border border-zinc-700'
@@ -257,15 +279,17 @@ export const DriveSidebar = ({
           {/* Dedicated Private Vault Navigation */}
           <button
             onClick={() => {
-              if (isVaultUnlocked) {
-                onSelectNav('vault');
-              } else {
-                if (!hasPin) {
-                  setIsSetPinModalOpen(true);
+              handleNavClick(() => {
+                if (isVaultUnlocked) {
+                  onSelectNav('vault');
                 } else {
-                  setIsPrivateVaultModalOpen(true);
+                  if (!hasPin) {
+                    setIsSetPinModalOpen(true);
+                  } else {
+                    setIsPrivateVaultModalOpen(true);
+                  }
                 }
-              }
+              });
             }}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               currentNav === 'vault'
@@ -311,8 +335,10 @@ export const DriveSidebar = ({
                 <div
                   key={cat}
                   onClick={() => {
-                    onSelectNav('all');
-                    requestCategory(cat);
+                    handleNavClick(() => {
+                      onSelectNav('all');
+                      requestCategory(cat);
+                    });
                   }}
                   className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer group ${
                     isSelected
