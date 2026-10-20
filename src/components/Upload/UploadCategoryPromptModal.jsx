@@ -35,7 +35,9 @@ export const UploadCategoryPromptModal = () => {
   };
 
   const fileCount = categoryPrompt.files.length;
-  const targetName = categoryPrompt.targetFolder?.title || 'My Drive';
+  const targetName = categoryPrompt.isVault
+    ? (categoryPrompt.targetFolder?.title ? `Private Vault / ${categoryPrompt.targetFolder.title}` : 'Private Vault')
+    : (categoryPrompt.targetFolder?.title || 'My Drive');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-fade-in select-none">
@@ -54,6 +56,7 @@ export const UploadCategoryPromptModal = () => {
             </div>
           </div>
           <button
+            type="button"
             onClick={closeCategoryPrompt}
             className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-zinc-400 hover:text-white transition-colors cursor-pointer"
           >

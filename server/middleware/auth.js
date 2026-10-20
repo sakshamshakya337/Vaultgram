@@ -60,7 +60,11 @@ const requireAdmin = (req, res, next) => {
 };
 
 const verifyVaultToken = (req) => {
-  const token = req.headers['x-vault-token'] || req.query?.vaultToken;
+  const token =
+    req.headers['x-vault-token'] ||
+    req.query?.vaultToken ||
+    req.body?.vaultToken ||
+    req.cookies?.vaultToken;
   if (!token) return null;
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');

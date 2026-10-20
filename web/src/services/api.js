@@ -104,14 +104,39 @@ export const removeStoredUser = () => {
   } catch {}
 };
 
+const VAULT_TOKEN_KEY = 'streamvault_vault_token';
+const VAULT_EXPIRES_KEY = 'streamvault_vault_expires_at';
+
 let currentVaultToken = null;
 let vaultExpiresAt = null;
 
 export const getVaultToken = () => {
+  // Check memory first, or initialize from sessionStorage if available
+  if (!currentVaultToken && typeof window !== 'undefined') {
+    try {
+      const savedToken = sessionStorage.getItem(VAULT_TOKEN_KEY);
+      const savedExpires = sessionStorage.getItem(VAULT_EXPIRES_KEY);
+      if (savedToken && savedExpires) {
+        const expiresNum = parseInt(savedExpires, 10);
+        if (Date.now() < expiresNum) {
+          currentVaultToken = savedToken;
+          vaultExpiresAt = expiresNum;
+        } else {
+          sessionStorage.removeItem(VAULT_TOKEN_KEY);
+          sessionStorage.removeItem(VAULT_EXPIRES_KEY);
+        }
+      }
+    } catch {}
+  }
+
   if (vaultExpiresAt && Date.now() > vaultExpiresAt) {
     currentVaultToken = null;
     vaultExpiresAt = null;
     if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.removeItem(VAULT_TOKEN_KEY);
+        sessionStorage.removeItem(VAULT_EXPIRES_KEY);
+      } catch {}
       window.dispatchEvent(new Event('vault:expired'));
     }
     return null;
@@ -122,11 +147,28 @@ export const getVaultToken = () => {
 export const setVaultToken = (token, expiresInSeconds = 900) => {
   currentVaultToken = token;
   vaultExpiresAt = token ? Date.now() + expiresInSeconds * 1000 : null;
+  if (typeof window !== 'undefined') {
+    try {
+      if (token && vaultExpiresAt) {
+        sessionStorage.setItem(VAULT_TOKEN_KEY, token);
+        sessionStorage.setItem(VAULT_EXPIRES_KEY, String(vaultExpiresAt));
+      } else {
+        sessionStorage.removeItem(VAULT_TOKEN_KEY);
+        sessionStorage.removeItem(VAULT_EXPIRES_KEY);
+      }
+    } catch {}
+  }
 };
 
 export const clearVaultToken = () => {
   currentVaultToken = null;
   vaultExpiresAt = null;
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.removeItem(VAULT_TOKEN_KEY);
+      sessionStorage.removeItem(VAULT_EXPIRES_KEY);
+    } catch {}
+  }
 };
 
 let refreshPromise = null;
@@ -203,6 +245,12 @@ async function request(path, options = {}) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 403 && (data?.code === 'VAULT_SESSION_EXPIRED' || data?.error === 'VAULT_SESSION_EXPIRED')) {
+      clearVaultToken();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('vault:expired'));
+      }
+    }
     const message = data?.message || `HTTP error ${response.status}`;
     const error = new Error(message);
     error.status = response.status;
@@ -217,6 +265,7 @@ export function uploadWithProgress(formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const token = getAccessToken();
+    const vaultToken = getVaultToken();
 
     const endpoint = `${BASE_URL}/videos/upload`;
     const url = endpoint;
@@ -226,6 +275,12 @@ export function uploadWithProgress(formData, onProgress) {
 
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    if (vaultToken) {
+      xhr.setRequestHeader('x-vault-token', vaultToken);
+      if (typeof FormData !== 'undefined' && formData instanceof FormData && !formData.has('vaultToken')) {
+        formData.append('vaultToken', vaultToken);
+      }
     }
 
     xhr.upload.onprogress = (event) => {
@@ -250,6 +305,12 @@ export function uploadWithProgress(formData, onProgress) {
         try {
           const json = JSON.parse(xhr.responseText);
           if (json.message) errMessage = json.message;
+          if (xhr.status === 403 && (json.code === 'VAULT_SESSION_EXPIRED' || json.error === 'VAULT_SESSION_EXPIRED')) {
+            clearVaultToken();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('vault:expired'));
+            }
+          }
         } catch {}
         if (xhr.status === 413) {
           errMessage = 'File exceeds maximum upload limit.';
@@ -581,6 +642,8 @@ export const api = {
       request('/videos/trash/empty', {
         method: 'DELETE',
       }),
+
+    getThumbnailUrl: (id) => (id ? `${BASE_URL}/videos/${id}/thumbnail` : ''),
   },
 
   stream: {
@@ -667,7 +730,12 @@ export function formatRelativeTime(dateString) {
 
 export function getFileKind(file) {
   const mime = (file?.mimeType || '').toLowerCase();
-  const ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
+  let ext = (file?.extension || '').toLowerCase().replace(/^\./, '');
+  if (!ext) {
+    const candidateName = file?.originalName || file?.title || '';
+    const match = candidateName.match(/\.([a-zA-Z0-9_-]+)$/);
+    if (match) ext = match[1].toLowerCase();
+  }
   const fileCategory = (file?.fileCategory || '').toLowerCase();
   const fileType = (file?.fileType || '').toLowerCase();
 
@@ -681,7 +749,7 @@ export function getFileKind(file) {
     fileType === 'image' ||
     fileCategory === 'image' ||
     mime.startsWith('image/') ||
-    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff', 'heic', 'heif'].includes(ext);
+    ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff', 'tif', 'heic', 'heif', 'apng', 'jxl', 'jp2'].includes(ext);
 
   const isAudio =
     fileType === 'audio' ||

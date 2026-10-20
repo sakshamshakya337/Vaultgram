@@ -30,6 +30,10 @@ const {
   convertHeicToJpeg,
   generateImageThumbnail,
   getImageMetadata,
+  detectImageFormatFromBuffer,
+  getMimeForFormat,
+  isSupportedImageExtension,
+  SUPPORTED_IMAGE_EXTENSIONS,
 } = require('../services/imageService');
 
 // Multer memory storage (zero local disk usage)
@@ -846,34 +850,50 @@ exports.uploadMedia = async (req, res) => {
     let compressionRatio = 0;
     let compressedMeta = {};
 
-    // ─── Apple HEIC / HEIF Auto-Conversion to Universal JPEG ───────────────────
-    if (isHeicFormat(uploadedFile.originalname, uploadedFile.mimetype)) {
-      console.log(`[uploadMedia] Detected Apple HEIC/HEIF image: ${uploadedFile.originalname}. Converting to browser-compatible JPEG...`);
+    // ─── Format Inspection: Magic Bytes & Extension ─────────────────────────────
+    const bufferImageFormat = detectImageFormatFromBuffer(uploadedFile.buffer);
+    const parsedExt = path.extname(uploadedFile.originalname).replace(/^\./, '').toLowerCase();
+    const effectiveImageFormat = bufferImageFormat || (isSupportedImageExtension(parsedExt) ? parsedExt : null);
+
+    if (effectiveImageFormat) {
+      // Establish canonical MIME type if missing, generic or mismatched
+      if (!uploadMimetype || uploadMimetype === 'application/octet-stream' || uploadMimetype === 'image/jpeg' || !uploadMimetype.startsWith('image/')) {
+        uploadMimetype = getMimeForFormat(effectiveImageFormat);
+      }
+      originalFormat = effectiveImageFormat;
+    }
+
+    let activeThumbBuffer = thumbFile?.buffer || null;
+
+    // ─── Apple HEIC / HEIF Preview Generation (PRESERVES ORIGINAL BYTES) ─────────
+    if (effectiveImageFormat === 'heic' || effectiveImageFormat === 'heif' || isHeicFormat(uploadedFile.originalname, uploadedFile.mimetype)) {
+      console.log(`[uploadMedia] Apple HEIC/HEIF image detected: ${uploadedFile.originalname}. Generating compatible JPEG preview...`);
+      originalFormat = 'heic';
+      uploadMimetype = 'image/heic';
       try {
         const convertedJpegBuffer = await convertHeicToJpeg(uploadedFile.buffer);
-        finalBuffer = convertedJpegBuffer;
-        finalSize = convertedJpegBuffer.length;
-        uploadFilename = `${path.parse(uploadedFile.originalname).name}.jpg`;
-        uploadMimetype = 'image/jpeg';
-        originalFormat = 'heic';
-        servedFormat = 'jpeg';
+        if (!activeThumbBuffer) {
+          activeThumbBuffer = convertedJpegBuffer;
+        }
         isConverted = true;
-        console.log(`[uploadMedia] Successfully converted HEIC (${(uploadedFile.size / 1024).toFixed(1)} KB) to JPEG (${(finalSize / 1024).toFixed(1)} KB)`);
+        servedFormat = 'jpeg';
+        console.log(`[uploadMedia] Successfully generated compatible JPEG preview for HEIC (${(convertedJpegBuffer.length / 1024).toFixed(1)} KB)`);
       } catch (convErr) {
-        console.error('[uploadMedia] HEIC conversion error:', convErr.message);
+        console.error('[uploadMedia] HEIC preview generation error:', convErr.message);
       }
     }
 
-    const autoFileType = isConverted ? 'image' : detectFileType(uploadFilename, uploadMimetype);
-    const autoCategory = isConverted ? 'image' : detectFileCategory(uploadFilename, uploadMimetype);
+    const autoFileType = effectiveImageFormat ? 'image' : detectFileType(uploadFilename, uploadMimetype);
+    const autoCategory = effectiveImageFormat ? 'image' : detectFileCategory(uploadFilename, uploadMimetype);
     const videoExtRegex = /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts|wmv|ogv)$/i;
-    const isImage = autoFileType === 'image' || autoCategory === 'image' || (uploadMimetype && uploadMimetype.startsWith('image/'));
+    const isImage = autoFileType === 'image' || autoCategory === 'image' || (uploadMimetype && uploadMimetype.startsWith('image/')) || !!effectiveImageFormat;
     const isVideo =
-      autoFileType === 'video' ||
+      !isImage &&
+      (autoFileType === 'video' ||
       autoCategory === 'video' ||
       (uploadMimetype && uploadMimetype.startsWith('video/')) ||
       videoExtRegex.test(uploadedFile.originalname) ||
-      videoExtRegex.test(uploadFilename);
+      videoExtRegex.test(uploadFilename));
 
     // ─── Automatic Video Compression to <= 20MB ONLY when exceeding 20MB ──────
     if (isVideo) {
@@ -923,7 +943,71 @@ exports.uploadMedia = async (req, res) => {
     const targetParent = folderId || parentFolderId;
     const parentId = targetParent && targetParent !== 'root' && targetParent !== 'null' ? targetParent : null;
 
-    let activeThumbBuffer = thumbFile?.buffer || null;
+    let finalCategory = (category?.trim() || '').replace(/^#/, '').trim();
+    let isFileHidden = false;
+    let isFileLocked = false;
+    let parentFolder = null;
+
+    if (parentId) {
+      parentFolder = await Media.findById(parentId).lean();
+      if (!parentFolder) {
+        return res.status(404).json({ message: 'Target folder not found', requestId: correlationId });
+      }
+      const reqUserId = req.user?._id?.toString() || req.user?.id?.toString();
+      const folderOwner = parentFolder.uploadedBy?.toString();
+      if (folderOwner && reqUserId && folderOwner !== reqUserId) {
+        console.warn(`[${correlationId}] [uploadMedia] User ${reqUserId} attempted to upload into folder owned by ${folderOwner}`);
+        return res.status(403).json({
+          code: 'ACCESS_DENIED',
+          error: 'ACCESS_DENIED',
+          message: 'Not authorized to upload into this folder',
+          requestId: correlationId,
+        });
+      }
+      if (!finalCategory || finalCategory.toLowerCase() === 'general' || finalCategory.toLowerCase() === 'all') {
+        finalCategory = parentFolder.category || parentFolder.title;
+      }
+      if (parentFolder.isHidden) {
+        isFileHidden = true;
+      }
+      if (parentFolder.isLocked) {
+        isFileLocked = true;
+      }
+    }
+    if (req.body.isHidden === 'true' || req.body.isHidden === true || req.headers['x-upload-vault'] === 'true') {
+      isFileHidden = true;
+    }
+    if (!finalCategory) finalCategory = 'General';
+
+    // If uploading into a hidden folder or private vault, strictly verify vault session
+    if (isFileHidden) {
+      const vaultSession = verifyVaultToken(req);
+      if (vaultSession?.expired) {
+        console.warn(`[${correlationId}] [uploadMedia] Private vault session expired for user ${req.user?._id || req.user?.id}`);
+        return res.status(403).json({
+          code: 'VAULT_SESSION_EXPIRED',
+          error: 'VAULT_SESSION_EXPIRED',
+          message: 'Private vault session has expired. Please unlock the vault again.',
+          requestId: correlationId,
+        });
+      }
+      const reqUserId = req.user?._id?.toString() || req.user?.id?.toString();
+      const folderOwner = parentFolder?.uploadedBy?.toString();
+      if (
+        !vaultSession ||
+        (reqUserId && vaultSession.userId && String(vaultSession.userId) !== String(reqUserId)) ||
+        (folderOwner && vaultSession.userId && String(vaultSession.userId) !== String(folderOwner))
+      ) {
+        console.warn(`[${correlationId}] [uploadMedia] Unauthorized vault upload attempt (session present: ${!!vaultSession})`);
+        return res.status(403).json({
+          code: 'VAULT_AUTH_REQUIRED',
+          error: 'VAULT_AUTH_REQUIRED',
+          message: 'Cannot upload into private vault folder without active vault session',
+          requestId: correlationId,
+        });
+      }
+      console.log(`[${correlationId}] [uploadMedia] Valid vault session verified for user ${reqUserId}`);
+    }
 
     // Automatic thumbnail generation for video files if no custom thumbnail was provided
     if (!activeThumbBuffer && isVideo) {
@@ -991,36 +1075,6 @@ exports.uploadMedia = async (req, res) => {
     );
 
     // 2. Save document in MongoDB
-    let finalCategory = (category?.trim() || '').replace(/^#/, '').trim();
-    let isFileHidden = false;
-    let isFileLocked = false;
-
-    if (parentId) {
-      const parentFolder = await Media.findById(parentId).lean();
-      if (parentFolder) {
-        if (!finalCategory || finalCategory.toLowerCase() === 'general' || finalCategory.toLowerCase() === 'all') {
-          finalCategory = parentFolder.category || parentFolder.title;
-        }
-        if (parentFolder.isHidden) {
-          isFileHidden = true;
-        }
-        if (parentFolder.isLocked) {
-          isFileLocked = true;
-        }
-      }
-    }
-    if (!finalCategory) finalCategory = 'General';
-
-    // If uploading into a hidden folder, verify vault session
-    if (isFileHidden) {
-      const vaultSession = verifyVaultToken(req);
-      if (!vaultSession) {
-        return res.status(403).json({
-          message: 'Cannot upload into private vault folder without active vault session',
-          requestId: correlationId,
-        });
-      }
-    }
 
     const doc = await Media.create({
       title: finalTitle,
@@ -1031,11 +1085,11 @@ exports.uploadMedia = async (req, res) => {
       fileType: fileType || autoFileType,
       mediaType: mediaType || autoCategory,
       fileCategory: fileCategory || autoCategory,
-      extension: extension || path.extname(uploadFilename).replace('.', ''),
-      originalFormat: originalFormat || (isHeicFormat(uploadedFile.originalname, uploadedFile.mimetype) ? 'heic' : ''),
-      servedFormat: servedFormat || (isConverted ? 'jpeg' : ''),
+      extension: extension || parsedExt || effectiveImageFormat || path.extname(uploadFilename).replace('.', ''),
+      originalFormat: originalFormat || (effectiveImageFormat || ''),
+      servedFormat: servedFormat || (isConverted ? 'jpeg' : (effectiveImageFormat || '')),
       isConverted: isConverted,
-      mimeType: uploadMimetype || '',
+      mimeType: uploadMimetype || (effectiveImageFormat ? getMimeForFormat(effectiveImageFormat) : ''),
       thumbnail: finalThumbnail,
       thumbnailFileId: thumbnailFileId,
       telegramFileId: fileId,
@@ -1811,15 +1865,41 @@ exports.downloadFile = async (req, res) => {
 
     const isInline = req.query.inline === 'true' || req.query.inline === '1' || req.query.preview === 'true';
     const rawTitle = item.title || 'file';
-    const ext = item.extension ? `.${item.extension.replace(/^\./, '')}` : '';
-    const safeFilename = rawTitle.endsWith(ext) ? rawTitle : `${rawTitle}${ext}`;
+    let ext = item.extension ? `.${item.extension.replace(/^\./, '')}` : '';
+    if (!ext) {
+      const parsed = path.extname(item.originalName || rawTitle);
+      if (parsed) ext = parsed;
+      else if (item.mimeType) {
+        const mimeMap = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png',
+          'image/webp': '.webp',
+          'image/avif': '.avif',
+          'image/gif': '.gif',
+          'image/svg+xml': '.svg',
+          'image/bmp': '.bmp',
+          'image/tiff': '.tiff',
+          'image/heic': '.heic',
+          'image/heif': '.heif',
+          'image/x-icon': '.ico',
+          'video/mp4': '.mp4',
+        };
+        ext = mimeMap[item.mimeType.toLowerCase()] || '';
+      }
+    }
+    const safeFilename = rawTitle.toLowerCase().endsWith(ext.toLowerCase()) ? rawTitle : `${rawTitle}${ext}`;
     const asciiFilename = safeFilename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '');
     const utf8Filename = encodeURIComponent(safeFilename);
     const dispositionType = isInline ? 'inline' : 'attachment';
 
     res.setHeader('Content-Disposition', `${dispositionType}; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`);
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    if (item.mimeType) res.setHeader('Content-Type', item.mimeType);
+    const effectiveMime = item.mimeType || (ext ? getMimeForFormat(ext.replace('.', '')) : 'application/octet-stream');
+    res.setHeader('Content-Type', effectiveMime);
+    if (effectiveMime === 'image/svg+xml') {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+    }
     if (item.fileSizeBytes) res.setHeader('Content-Length', item.fileSizeBytes);
 
     response.data.pipe(res);
@@ -2075,8 +2155,16 @@ exports.getVideoThumbnail = async (req, res) => {
         timeout: 60000,
       });
 
-      res.setHeader('Content-Type', 'image/jpeg');
+      const contentType = item.thumbnailFileId
+        ? 'image/jpeg'
+        : (item.mimeType || getMimeForFormat(item.extension) || 'image/jpeg');
+
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+      if (contentType === 'image/svg+xml') {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+      }
       return response.data.pipe(res);
     }
 

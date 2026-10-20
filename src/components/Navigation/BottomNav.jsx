@@ -60,10 +60,12 @@ export const BottomNav = ({ currentNav = 'all', currentFolder = null, onSelectNa
 
       {/* 3. Center Quick Upload Button */}
       <button
+        type="button"
         onClick={() => openFilePicker({
           folderId: currentFolder?._id || null,
           folderTitle: currentFolder?.title || '',
           category: selectedCategory,
+          isVault: currentNav === 'vault',
         })}
         className="flex items-center justify-center -translate-y-2.5 w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 via-blue-500 to-rose-500 text-white shadow-lg shadow-cyan-500/30 active:scale-90 transition-transform cursor-pointer border-2 border-zinc-950 shrink-0"
         aria-label="Upload File"

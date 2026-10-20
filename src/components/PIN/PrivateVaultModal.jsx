@@ -32,19 +32,25 @@ export const PrivateVaultModal = ({ onSuccess, onCancel }) => {
     setLoading(true);
     try {
       const opts = await api.auth.biometric.getAuthOptions();
-      if (!opts?.options) {
+      const optionsJSON = opts?.options || opts;
+      if (!optionsJSON || (!optionsJSON.challenge && !optionsJSON.options?.challenge)) {
         throw new Error('Could not initialize biometric challenge');
       }
+      const finalOptions = optionsJSON.challenge ? optionsJSON : optionsJSON.options;
       const { startAuthentication } = await import('@simplewebauthn/browser');
-      const assertion = await startAuthentication({ optionsJSON: opts.options });
+      const assertion = await startAuthentication({ optionsJSON: finalOptions });
       const res = await openPrivateVaultWithBiometrics(assertion);
-      if (res?.success || res?.vaultToken) {
+      if (res?.success || res?.vaultToken || res?.valid) {
         setIsPrivateVaultModalOpen(false);
         if (onSuccess) onSuccess();
       }
     } catch (err) {
-      if (err.name !== 'NotAllowedError') {
-        setError(err.message || 'Biometric authentication failed');
+      if (err.name === 'NotAllowedError') {
+        setError('Biometric authentication was cancelled.');
+      } else if (err.name === 'NotSupportedError') {
+        setError('Biometric / passkey authentication is not supported on this device.');
+      } else {
+        setError(err.message || 'Biometric authentication failed. Please enter your PIN.');
       }
     } finally {
       setLoading(false);

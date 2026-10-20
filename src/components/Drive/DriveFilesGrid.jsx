@@ -182,7 +182,7 @@ export const DriveFilesGrid = ({
                 {isImage ? (
                   <>
                     <img
-                      src={video.thumbnail || video.streamUrl || api.stream.getUrl(videoId)}
+                      src={video.thumbnail || (video.thumbnailFileId ? api.videos.getThumbnailUrl(videoId) : (video.streamUrl || api.stream.getUrl(videoId)))}
                       alt={video.title || 'Photo'}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"
@@ -192,8 +192,13 @@ export const DriveFilesGrid = ({
                         if (fallback) fallback.style.display = 'flex';
                       }}
                     />
-                    <div className="photo-fallback hidden w-full h-full bg-gradient-to-tr from-emerald-950/20 to-zinc-950 items-center justify-center">
+                    <div className="photo-fallback hidden w-full h-full bg-gradient-to-tr from-emerald-950/20 to-zinc-950 flex flex-col items-center justify-center gap-1.5 p-2">
                       <ImageIcon className="w-8 h-8 text-zinc-600 group-hover:text-emerald-400 transition-colors" />
+                      {extension && (
+                        <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 border border-white/5">
+                          {extension}
+                        </span>
+                      )}
                     </div>
                   </>
                 ) : isVideo && (video.thumbnail || video.thumbnailFileId) ? (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getAccessToken, API_BASE_URL, api } from '../services/api';
+import { getAccessToken, getVaultToken, clearVaultToken, API_BASE_URL, api } from '../services/api';
 import {
   UploadContext,
   MAX_VIDEO_UPLOAD_SIZE_MB,
@@ -65,7 +65,7 @@ export const UploadProvider = ({ children }) => {
     const type = file.type || '';
     const name = file.name || '';
     if (type.startsWith('video/') || /\.(mp4|mov|webm|mkv|avi|3gp|m4v|flv|ts)$/i.test(name)) return 'video';
-    if (type.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i.test(name)) return 'image';
+    if (type.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|avif|tiff|tif|heic|heif|apng|jxl|jp2)$/i.test(name)) return 'image';
     if (type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac|wma)$/i.test(name)) return 'audio';
     if (type.includes('pdf') || /\.(pdf)$/i.test(name)) return 'pdf';
     if (type.includes('word') || type.includes('document') || /\.(doc|docx|txt|rtf|odt|md)$/i.test(name)) return 'document';
@@ -86,7 +86,7 @@ export const UploadProvider = ({ children }) => {
    * Directly enqueue validated files into the upload queue.
    * Skips duplicates in the same batch, already-queued files, and files already in the vault.
    */
-  const enqueueDirectly = useCallback(async (files, { folderId = null, folderTitle = '', category = 'General' } = {}) => {
+  const enqueueDirectly = useCallback(async (files, { folderId = null, folderTitle = '', category = 'General', isVault = false, isHidden = false } = {}) => {
     if (!files || files.length === 0) return;
 
     const fileList = Array.from(files);
@@ -174,6 +174,8 @@ export const UploadProvider = ({ children }) => {
         category: category || 'General',
         folderId: folderId || null,
         folderTitle: folderTitle || '',
+        isVault: !!isVault || !!isHidden,
+        isHidden: !!isVault || !!isHidden,
         createdAt: Date.now(),
         result: null,
       };
@@ -271,11 +273,13 @@ export const UploadProvider = ({ children }) => {
   /**
    * Prompt category modal for files dropped/selected at root
    */
-  const promptCategoryForFiles = useCallback((files, targetFolder = null) => {
+  const promptCategoryForFiles = useCallback((files, targetFolder = null, options = {}) => {
     setCategoryPrompt({
       isOpen: true,
       files: Array.from(files),
       targetFolder,
+      isVault: !!options.isVault,
+      isHidden: !!options.isHidden,
     });
   }, []);
 
@@ -284,6 +288,8 @@ export const UploadProvider = ({ children }) => {
       isOpen: false,
       files: [],
       targetFolder: null,
+      isVault: false,
+      isHidden: false,
     });
   }, []);
 
@@ -293,6 +299,8 @@ export const UploadProvider = ({ children }) => {
         category: chosenCategory,
         folderId: categoryPrompt.targetFolder?._id || null,
         folderTitle: categoryPrompt.targetFolder?.title || '',
+        isVault: !!categoryPrompt.isVault,
+        isHidden: !!categoryPrompt.isHidden,
       });
     }
     closeCategoryPrompt();
@@ -301,13 +309,15 @@ export const UploadProvider = ({ children }) => {
   /**
    * Trigger the file picker for "+ Upload" button flow
    */
-  const openFilePicker = useCallback(({ folderId = null, folderTitle = '', category = 'All' } = {}) => {
+  const openFilePicker = useCallback(({ folderId = null, folderTitle = '', category = 'All', isVault = false } = {}) => {
     const isRoot = !folderId && (!category || category === 'All');
     filePickerTargetRef.current = {
       folderId: folderId || null,
       folderTitle: folderTitle || '',
       category: category !== 'All' ? category : 'General',
       isRoot,
+      isVault: !!isVault,
+      isHidden: !!isVault,
     };
 
     if (fileInputRef.current) {
@@ -320,14 +330,16 @@ export const UploadProvider = ({ children }) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const target = filePickerTargetRef.current;
-    if (target.isRoot) {
+    const target = filePickerTargetRef.current || {};
+    if (target.isRoot && !target.isVault) {
       promptCategoryForFiles(files, null);
     } else {
       addToQueue(files, {
         folderId: target.folderId,
         folderTitle: target.folderTitle,
         category: target.category || 'General',
+        isVault: !!target.isVault,
+        isHidden: !!target.isHidden,
       });
     }
   };
@@ -530,6 +542,7 @@ export const UploadProvider = ({ children }) => {
       currentProcessingIdRef.current = item.id;
 
       const token = getAccessToken();
+      const vaultToken = getVaultToken();
       const endpoint = `${BASE_URL}/videos/upload`;
       const url = endpoint;
 
@@ -537,6 +550,12 @@ export const UploadProvider = ({ children }) => {
       xhr.setRequestHeader('bypass-tunnel-reminder', 'true');
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      if (vaultToken) {
+        xhr.setRequestHeader('x-vault-token', vaultToken);
+      }
+      if (item.isVault || item.isHidden) {
+        xhr.setRequestHeader('x-upload-vault', 'true');
       }
 
       // Live progress tracking
@@ -603,11 +622,22 @@ export const UploadProvider = ({ children }) => {
           resolve({ success: true, data: responseData });
         } else {
           let errMessage = `Upload failed (${xhr.status})`;
+          let isVaultExpired = false;
           try {
             const json = JSON.parse(xhr.responseText);
             if (json.message) errMessage = json.message;
             else if (json.error) errMessage = json.error;
+            if (xhr.status === 403 && (json.code === 'VAULT_SESSION_EXPIRED' || json.error === 'VAULT_SESSION_EXPIRED')) {
+              isVaultExpired = true;
+            }
           } catch {}
+
+          if (isVaultExpired) {
+            clearVaultToken();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('vault:expired'));
+            }
+          }
 
           if (xhr.status === 413) {
             errMessage = 'File too large for upload server.';
@@ -667,6 +697,12 @@ export const UploadProvider = ({ children }) => {
       formData.append('category', item.category || 'General');
       if (item.folderId && item.folderId !== 'root') {
         formData.append('folderId', item.folderId);
+      }
+      if (vaultToken) {
+        formData.append('vaultToken', vaultToken);
+      }
+      if (item.isVault || item.isHidden) {
+        formData.append('isHidden', 'true');
       }
 
       xhr.send(formData);

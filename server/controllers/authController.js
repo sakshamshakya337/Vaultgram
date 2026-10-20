@@ -574,7 +574,8 @@ exports.getBiometricAuthOptions = async (req, res) => {
     user.currentChallenge = options.challenge;
     await user.save();
 
-    res.json(options);
+    console.log(`[WebAuthn] Generated auth options for user ${user._id} (RP ID: ${rpID})`);
+    res.json({ ...options, options });
   } catch (err) {
     console.error('[getBiometricAuthOptions error]:', err.message);
     res.status(500).json({ message: 'Failed to generate biometric authentication options' });
@@ -611,6 +612,7 @@ exports.verifyBiometricAuth = async (req, res) => {
       'http://localhost:5173',
       'http://127.0.0.1:5173',
       'https://vaultgram-two.vercel.app',
+      ...(process.env.CLIENT_URL ? [process.env.CLIENT_URL.replace(/\/+$/, '')] : []),
     ];
 
     const verification = await verifyAuthenticationResponse({
@@ -627,6 +629,7 @@ exports.verifyBiometricAuth = async (req, res) => {
     });
 
     if (!verification.verified) {
+      console.warn(`[WebAuthn] Verification failed for user ${user._id}`);
       return res.status(401).json({ valid: false, message: 'Biometric verification failed' });
     }
 
@@ -644,6 +647,7 @@ exports.verifyBiometricAuth = async (req, res) => {
       );
     }
 
+    console.log(`[WebAuthn] Successfully verified biometrics for user ${user._id}${forVault ? ' (Private Vault session created)' : ''}`);
     res.json({
       valid: true,
       message: 'Biometrics verified successfully',

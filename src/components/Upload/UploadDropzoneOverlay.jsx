@@ -2,16 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Upload, Folder, Sparkles, Cloud } from 'lucide-react';
 import { useUploadQueue } from '../../contexts/useUploadQueue';
 
-export const UploadDropzoneOverlay = ({ currentFolder, selectedCategory }) => {
+export const UploadDropzoneOverlay = ({ currentFolder, selectedCategory, currentNav = 'all', isVault = false }) => {
   const { addToQueue, promptCategoryForFiles } = useUploadQueue();
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
 
+  const effectiveIsVault = isVault || currentNav === 'vault' || !!currentFolder?.isHidden;
+
   // Compute destination title
-  let targetTitle = 'My Drive';
-  let targetSubtitle = 'Files will be placed at the root level';
+  let targetTitle = effectiveIsVault ? 'Private Vault' : 'My Drive';
+  let targetSubtitle = effectiveIsVault ? 'Encrypted & hidden files' : 'Files will be placed at the root level';
   if (currentFolder) {
-    targetTitle = currentFolder.title || 'Current Folder';
+    targetTitle = currentFolder.title || (effectiveIsVault ? 'Private Folder' : 'Current Folder');
     targetSubtitle = `Uploading to folder "${targetTitle}"`;
   } else if (selectedCategory && selectedCategory !== 'All') {
     targetTitle = `#${selectedCategory}`;
@@ -60,6 +62,14 @@ export const UploadDropzoneOverlay = ({ currentFolder, selectedCategory }) => {
           folderId: currentFolder._id || currentFolder.id,
           folderTitle: currentFolder.title || '',
           category: currentFolder.category || 'General',
+          isVault: effectiveIsVault,
+          isHidden: effectiveIsVault,
+        });
+      } else if (effectiveIsVault) {
+        addToQueue(files, {
+          category: selectedCategory && selectedCategory !== 'All' ? selectedCategory : 'General',
+          isVault: true,
+          isHidden: true,
         });
       } else if (selectedCategory && selectedCategory !== 'All') {
         addToQueue(files, {
@@ -67,7 +77,7 @@ export const UploadDropzoneOverlay = ({ currentFolder, selectedCategory }) => {
         });
       } else {
         // At root level: prompt user for category selection
-        promptCategoryForFiles(files, null);
+        promptCategoryForFiles(files, null, { isVault: effectiveIsVault, isHidden: effectiveIsVault });
       }
     };
 

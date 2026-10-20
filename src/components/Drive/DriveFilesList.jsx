@@ -189,15 +189,18 @@ export const DriveFilesList = ({
 
                   <div className="w-10 h-7 rounded-lg bg-zinc-950 border border-white/10 overflow-hidden shrink-0 flex items-center justify-center relative">
                     {isImage ? (
-                      <img
-                        src={video.thumbnail || video.streamUrl || api.stream.getUrl(videoId)}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
+                      <>
+                        <ImageIcon className="w-4 h-4 text-emerald-400/80 absolute inset-0 m-auto" />
+                        <img
+                          src={video.thumbnail || (video.thumbnailFileId ? api.videos.getThumbnailUrl(videoId) : (video.streamUrl || api.stream.getUrl(videoId)))}
+                          alt=""
+                          className="w-full h-full object-cover relative z-10"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </>
                     ) : isVideo && (video.thumbnail || video.thumbnailFileId) ? (
                       <img
                         src={video.thumbnail || api.videos.getThumbnailUrl(videoId)}

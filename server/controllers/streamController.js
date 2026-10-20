@@ -1,7 +1,11 @@
-'use strict';
 const axios = require('axios');
+const path = require('path');
 const Media = require('../models/Media');
 const { resolveFileUrl } = require('../services/telegramService');
+const {
+  FORMAT_MIME_MAP,
+  isSupportedImageExtension,
+} = require('../services/imageService');
 
 /**
  * GET /api/v1/stream/:id
@@ -199,7 +203,12 @@ const MIME_EXTENSION_MAP = {
   'image/heic': 'heic',
   'image/heif': 'heif',
   'image/x-icon': 'ico',
+  'image/vnd.microsoft.icon': 'ico',
   'image/tiff': 'tiff',
+  'image/apng': 'apng',
+  'image/jxl': 'jxl',
+  'image/jp2': 'jp2',
+  'image/jfif': 'jfif',
 
   // Videos
   'video/mp4': 'mp4',
@@ -209,6 +218,8 @@ const MIME_EXTENSION_MAP = {
   'video/x-msvideo': 'avi',
   'video/3gpp': '3gp',
   'video/ogg': 'ogv',
+  'video/x-flv': 'flv',
+  'video/mp2t': 'ts',
 
   // Audio
   'audio/mpeg': 'mp3',
@@ -219,6 +230,7 @@ const MIME_EXTENSION_MAP = {
   'audio/aac': 'aac',
   'audio/flac': 'flac',
   'audio/webm': 'weba',
+  'audio/opus': 'opus',
 
   // Documents & Archives
   'application/pdf': 'pdf',
@@ -246,13 +258,17 @@ function resolveFileExtension(item, contentType) {
     if (clean && clean.length <= 8) return clean;
   }
 
-  // 2. From Content-Type / MIME
+  // 2. From item.originalName or item.title
+  const fromName = path.extname(item.originalName || item.title || '').toLowerCase().replace(/^\./, '').trim();
+  if (fromName && fromName.length <= 8) return fromName;
+
+  // 3. From Content-Type / MIME
   const effectiveMime = (contentType || item.mimeType || '').toLowerCase().split(';')[0].trim();
   if (MIME_EXTENSION_MAP[effectiveMime]) {
     return MIME_EXTENSION_MAP[effectiveMime];
   }
 
-  // 3. From item.fileType / item.fileCategory fallbacks
+  // 4. From item.fileType / item.fileCategory fallbacks
   const cat = (item.fileCategory || item.mediaType || item.fileType || '').toLowerCase();
   if (cat === 'video') return 'mp4';
   if (cat === 'image') return 'jpg';
@@ -308,43 +324,50 @@ function getSanitizedFilename(rawTitle, extension) {
       'Cache-Control': 'public, max-age=86400',
     };
 
+    const cleanExt = (
+      item.extension ||
+      path.extname(item.originalName || item.title || '').replace(/^\./, '')
+    ).toLowerCase().trim();
+
     const isImage =
       item.fileCategory === 'image' ||
       item.mediaType === 'image' ||
       item.fileType === 'image' ||
       (item.mimeType && item.mimeType.startsWith('image/')) ||
-      ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'avif', 'heic', 'heif', 'ico', 'tiff'].includes((item.extension || '').toLowerCase().replace('.', ''));
+      isSupportedImageExtension(cleanExt);
 
-    // Fallback & guarantee valid mime types for browsers
-    let contentType = tgResponse.headers['content-type'];
-    const ext = (item.extension || '').toLowerCase().replace('.', '');
+    // Determine the true canonical MIME type (never let Telegram CDN override known types)
+    let contentType = null;
 
-    if (!contentType || contentType === 'application/octet-stream' || contentType === 'text/plain' || (isImage && !contentType.startsWith('image/'))) {
-      if (isVideo) {
-        if (ext === 'webm') contentType = 'video/webm';
-        else if (ext === 'mov') contentType = 'video/quicktime';
-        else if (ext === 'ogg' || ext === 'ogv') contentType = 'video/ogg';
-        else contentType = item.mimeType || 'video/mp4';
-      } else if (isAudio) {
-        if (ext === 'mp3') contentType = 'audio/mpeg';
-        else if (ext === 'wav') contentType = 'audio/wav';
-        else if (ext === 'ogg' || ext === 'oga') contentType = 'audio/ogg';
-        else contentType = item.mimeType || 'audio/mpeg';
-      } else if (isImage) {
-        if (ext === 'webp') contentType = 'image/webp';
-        else if (ext === 'png') contentType = 'image/png';
-        else if (ext === 'gif') contentType = 'image/gif';
-        else if (ext === 'svg') contentType = 'image/svg+xml';
-        else if (ext === 'avif') contentType = 'image/avif';
-        else if (ext === 'bmp') contentType = 'image/bmp';
-        else if (ext === 'ico') contentType = 'image/x-icon';
-        else if (ext === 'heic' || ext === 'heif') contentType = item.servedFormat === 'jpeg' ? 'image/jpeg' : 'image/heic';
-        else contentType = item.mimeType && item.mimeType.startsWith('image/') ? item.mimeType : 'image/jpeg';
-      } else if (ext === 'pdf' || item.fileCategory === 'pdf' || item.mimeType === 'application/pdf') {
-        contentType = 'application/pdf';
+    if (isImage) {
+      if (cleanExt && FORMAT_MIME_MAP[cleanExt]) {
+        contentType = FORMAT_MIME_MAP[cleanExt];
+      } else if (item.mimeType && item.mimeType.startsWith('image/')) {
+        contentType = item.mimeType;
+      } else if (tgResponse.headers['content-type'] && tgResponse.headers['content-type'].startsWith('image/')) {
+        contentType = tgResponse.headers['content-type'];
       } else {
-        contentType = item.mimeType || 'application/octet-stream';
+        contentType = 'image/jpeg';
       }
+    } else if (isVideo) {
+      if (cleanExt === 'webm') contentType = 'video/webm';
+      else if (cleanExt === 'mov') contentType = 'video/quicktime';
+      else if (cleanExt === 'ogg' || cleanExt === 'ogv') contentType = 'video/ogg';
+      else if (cleanExt === 'mkv') contentType = 'video/x-matroska';
+      else if (cleanExt === 'avi') contentType = 'video/x-msvideo';
+      else if (cleanExt === '3gp') contentType = 'video/3gpp';
+      else contentType = item.mimeType && item.mimeType.startsWith('video/') ? item.mimeType : 'video/mp4';
+    } else if (isAudio) {
+      if (cleanExt === 'mp3') contentType = 'audio/mpeg';
+      else if (cleanExt === 'wav') contentType = 'audio/wav';
+      else if (cleanExt === 'ogg' || cleanExt === 'oga') contentType = 'audio/ogg';
+      else if (cleanExt === 'flac') contentType = 'audio/flac';
+      else if (cleanExt === 'm4a' || cleanExt === 'aac') contentType = 'audio/mp4';
+      else contentType = item.mimeType && item.mimeType.startsWith('audio/') ? item.mimeType : 'audio/mpeg';
+    } else if (cleanExt === 'pdf' || item.fileCategory === 'pdf' || item.mimeType === 'application/pdf') {
+      contentType = 'application/pdf';
+    } else {
+      contentType = item.mimeType || tgResponse.headers['content-type'] || 'application/octet-stream';
     }
 
     const statusCode = tgResponse.status === 200 && range && isStreamable ? 206 : tgResponse.status;
@@ -352,6 +375,12 @@ function getSanitizedFilename(rawTitle, extension) {
       ...corsHeaders,
       'Content-Type': contentType,
     };
+
+    // Safe policy for SVG files: prevent scripts from executing if opened in browser tab
+    if (contentType === 'image/svg+xml') {
+      responseHeaders['X-Content-Type-Options'] = 'nosniff';
+      responseHeaders['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'";
+    }
 
     // Construct filename and RFC-compliant Content-Disposition
     const targetExt = resolveFileExtension(item, contentType);

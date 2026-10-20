@@ -103,6 +103,7 @@ export const DriveSidebar = ({
         {/* Primary "+ New" Action Button with Dropdown */}
         <div className="relative">
           <button
+            type="button"
             onClick={() => setShowNewMenu((prev) => !prev)}
             className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-blue-500 text-white font-bold text-sm shadow-xl shadow-cyan-500/20 hover:opacity-95 active:scale-[0.98] transition-all cursor-pointer"
           >
@@ -113,12 +114,14 @@ export const DriveSidebar = ({
           {showNewMenu && (
             <div className="absolute left-0 right-0 top-14 z-50 rounded-2xl bg-zinc-900 border border-white/10 p-1.5 shadow-2xl backdrop-blur-xl animate-fade-in space-y-1">
               <button
+                type="button"
                 onClick={() => {
                   setShowNewMenu(false);
                   openFilePicker({
                     folderId: currentFolder?._id || null,
                     folderTitle: currentFolder?.title || '',
                     category: selectedCategory,
+                    isVault: currentNav === 'vault',
                   });
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition-colors cursor-pointer"
@@ -128,6 +131,7 @@ export const DriveSidebar = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setShowNewMenu(false);
                   if (onOpenCamera) onOpenCamera();
@@ -139,6 +143,7 @@ export const DriveSidebar = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setShowNewMenu(false);
                   if (onOpenVoiceMemo) onOpenVoiceMemo();
@@ -150,6 +155,7 @@ export const DriveSidebar = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setShowNewMenu(false);
                   if (onOpenNewFolder) onOpenNewFolder();
@@ -278,6 +284,7 @@ export const DriveSidebar = ({
 
           {/* Dedicated Private Vault Navigation */}
           <button
+            type="button"
             onClick={() => {
               handleNavClick(() => {
                 if (isVaultUnlocked) {

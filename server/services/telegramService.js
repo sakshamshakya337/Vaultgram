@@ -3,19 +3,26 @@ const axios = require('axios');
 const FormData = require('form-data');
 const path = require('path');
 const { TELEGRAM_API_BASE, TELEGRAM_FILE_BASE } = require('../config/telegram');
+const {
+  getMimeForFormat,
+  isSupportedImageExtension,
+  detectImageFormatFromBuffer,
+} = require('./imageService');
 
 /**
  * Detects general fileType from filename and MIME type
  */
-function detectFileType(filename = '', mimetype = '') {
+function detectFileType(filename = '', mimetype = '', buffer = null) {
   const ext = path.extname(filename).toLowerCase().replace('.', '');
+  const detectedFormat = buffer ? detectImageFormatFromBuffer(buffer) : null;
 
-  if (mimetype.startsWith('video/') || ['mp4', 'mkv', 'mov', 'webm', 'avi', '3gp', 'flv', 'wmv', 'm4v', 'ts'].includes(ext)) {
+  if (mimetype.startsWith('video/') || ['mp4', 'mkv', 'mov', 'webm', 'avi', '3gp', 'flv', 'wmv', 'm4v', 'ts', 'ogv'].includes(ext)) {
     return 'video';
   }
   if (
+    detectedFormat ||
     mimetype.startsWith('image/') ||
-    ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'avif', 'heic', 'heif', 'ico', 'tiff', 'apng', 'jfif', 'pjpeg', 'pjp'].includes(ext)
+    isSupportedImageExtension(ext)
   ) {
     return 'image';
   }
@@ -186,11 +193,17 @@ async function uploadDocumentToTelegram(fileBuffer, filename, mimetype = 'applic
     throw new Error('TELEGRAM_CHAT_ID or TELEGRAM_BOT_TOKEN is not configured in .env');
   }
 
-  console.log(`[${correlationId}] [sendDocument] Preparing upload: ${safeFilename} (${fileBuffer.length} bytes, MIME: ${mimetype || 'application/octet-stream'}), target chat: ${chatId}`);
+  const detectedFormat = detectImageFormatFromBuffer(fileBuffer);
+  const cleanExt = (ext || detectedFormat || '').toLowerCase();
+  const effectiveMime = (mimetype && mimetype !== 'application/octet-stream' && mimetype !== 'text/plain')
+    ? mimetype
+    : (getMimeForFormat(cleanExt || detectedFormat) || mimetype || 'application/octet-stream');
+
+  console.log(`[${correlationId}] [sendDocument] Preparing upload: ${safeFilename} (${fileBuffer.length} bytes, MIME: ${effectiveMime}), target chat: ${chatId}`);
 
   const form = new FormData();
   form.append('chat_id', chatId);
-  form.append('document', fileBuffer, { filename: safeFilename, contentType: mimetype || 'application/octet-stream' });
+  form.append('document', fileBuffer, { filename: safeFilename, contentType: effectiveMime });
   if (thumbBuffer && Buffer.isBuffer(thumbBuffer) && thumbBuffer.length > 0) {
     form.append('thumbnail', thumbBuffer, { filename: 'thumbnail.jpg', contentType: 'image/jpeg' });
   }

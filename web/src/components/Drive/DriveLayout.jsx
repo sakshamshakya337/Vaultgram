@@ -185,6 +185,7 @@ export const DriveLayout = () => {
       const matchesNav =
         currentNav === 'all' ||
         currentNav === 'recent' ||
+        currentNav === 'vault' ||
         (currentNav === 'starred' && newDoc.isStarred);
 
       if (isSameFolder && isSameCategory && matchesNav) {
@@ -678,7 +679,7 @@ export const DriveLayout = () => {
   return (
     <div className="flex w-full max-w-full h-full min-h-0 bg-black text-white overflow-hidden select-none font-sans relative">
       {/* Full-window Drag-and-Drop Dropzone Overlay */}
-      <UploadDropzoneOverlay currentFolder={currentFolder} selectedCategory={selectedCategory} />
+      <UploadDropzoneOverlay currentFolder={currentFolder} selectedCategory={selectedCategory} currentNav={currentNav} isVault={currentNav === 'vault'} />
 
       {/* 1. Left Sidebar (Desktop Only) */}
       <div className="hidden md:flex shrink-0 h-full">
@@ -809,6 +810,7 @@ export const DriveLayout = () => {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     lockVault();
                     setCurrentNav('all');
@@ -834,6 +836,7 @@ export const DriveLayout = () => {
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setIsPrivateVaultModalOpen(true)}
                   className="w-full sm:w-auto px-6 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 text-white font-bold text-xs shadow-lg shadow-purple-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer"
                 >
@@ -938,6 +941,7 @@ export const DriveLayout = () => {
                 <div className="flex items-center gap-2">
                   {selectedCategory !== 'All' && currentNav === 'all' && (
                     <button
+                      type="button"
                       onClick={() => setShareFolderTarget({ category: selectedCategory })}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 text-xs font-semibold transition-colors cursor-pointer"
                       title={`Share #${selectedCategory} folder`}
@@ -949,6 +953,7 @@ export const DriveLayout = () => {
 
                   {currentFolder && (
                     <button
+                      type="button"
                       onClick={handleResetToRoot}
                       className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
                     >
@@ -1019,10 +1024,12 @@ export const DriveLayout = () => {
                   {(currentNav === 'all' || currentNav === 'vault') && (
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto px-4 sm:px-0">
                       <button
+                        type="button"
                         onClick={() => openFilePicker({
                           folderId: currentFolder?._id || null,
                           folderTitle: currentFolder?.title || '',
                           category: selectedCategory,
+                          isVault: currentNav === 'vault',
                         })}
                         className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all cursor-pointer w-full sm:w-auto"
                       >
@@ -1030,6 +1037,7 @@ export const DriveLayout = () => {
                         <span>Upload Files</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => setIsNewFolderOpen(true)}
                         className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs border border-white/10 transition-colors cursor-pointer w-full sm:w-auto"
                       >

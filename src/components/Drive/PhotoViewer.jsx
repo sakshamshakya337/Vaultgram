@@ -52,6 +52,20 @@ export const PhotoViewer = ({
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [offlineBlobUrl, setOfflineBlobUrl] = useState(null);
 
+  // Image loading & decoding error states
+  const [isImageLoading, setIsImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
+  const [triedFallback, setTriedFallback] = useState(false);
+
+  // Background scroll lock
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   // UI overlay toggle
   const [showControls, setShowControls] = useState(true);
 
@@ -76,11 +90,14 @@ export const PhotoViewer = ({
     }
   }, [currentIndex]);
 
-  // Reset zoom & pan when photo changes
+  // Reset zoom, pan, loading & error state when photo changes
   useEffect(() => {
     setScale(1);
     setPan({ x: 0, y: 0 });
     setDragOffset({ x: 0, y: 0 });
+    setIsImageLoading(true);
+    setImageError(false);
+    setTriedFallback(false);
   }, [safeIndex]);
 
   // Navigation handlers
@@ -191,7 +208,8 @@ export const PhotoViewer = ({
   const streamUrl = currentPhoto.streamUrl || api.stream.getUrl(fileId);
   const downloadUrl = api.stream.getUrl(fileId, true);
   const isStarred = !!currentPhoto.isStarred;
-  const activeSrc = offlineBlobUrl || streamUrl;
+  const fallbackPreviewUrl = currentPhoto.thumbnail || (currentPhoto.thumbnailFileId ? api.videos.getThumbnailUrl(fileId) : '');
+  const activeSrc = offlineBlobUrl || (triedFallback && fallbackPreviewUrl ? fallbackPreviewUrl : streamUrl);
   const isCached = isOfflineAvailable(fileId);
   const caching = isCaching(fileId);
 
@@ -664,18 +682,68 @@ export const PhotoViewer = ({
           onClick={() => setShowControls((prev) => !prev)}
           onDoubleClick={handleDoubleTap}
         >
-          <img
-            key={fileId}
-            src={activeSrc}
-            alt={currentPhoto.title || 'Photo'}
-            className="w-full h-full object-contain pointer-events-none select-none max-w-[100vw] max-h-[100vh]"
-            style={{
-              transform: `translate3d(${dragOffset.x + pan.x}px, ${dragOffset.y + pan.y}px, 0) scale(${scale})`,
-              transition: isDragging ? 'none' : 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
-              willChange: 'transform',
-            }}
-            draggable={false}
-          />
+          {imageError ? (
+            <div
+              className="flex flex-col items-center justify-center p-6 max-w-sm mx-4 text-center z-20 bg-zinc-900/95 border border-white/15 rounded-3xl shadow-2xl backdrop-blur-2xl animate-fade-in pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4 text-cyan-400">
+                <HardDrive className="w-8 h-8" />
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-[11px] font-mono font-bold uppercase tracking-wider border border-cyan-500/30">
+                  {currentPhoto.extension || 'IMAGE'}
+                </span>
+                <h4 className="text-sm md:text-base font-bold text-white truncate max-w-[200px]" title={currentPhoto.title}>
+                  {currentPhoto.title || 'Image Preview'}
+                </h4>
+              </div>
+              <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
+                Your browser cannot decode this format ({currentPhoto.extension ? currentPhoto.extension.toUpperCase() : 'image'}) natively. The original file is stored safely in your cloud vault.
+              </p>
+              <a
+                href={downloadUrl}
+                download
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-semibold text-xs shadow-lg shadow-cyan-500/25 transition-all transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Original ({formatBytes(currentPhoto.fileSizeBytes || currentPhoto.originalSizeBytes || 0)})</span>
+              </a>
+            </div>
+          ) : (
+            <>
+              {isImageLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 pointer-events-none">
+                  <Loader2 className="w-9 h-9 text-cyan-400 animate-spin" />
+                  <span className="text-xs font-mono text-zinc-400">Loading high-res image...</span>
+                </div>
+              )}
+              <img
+                key={`${fileId}-${triedFallback ? 'fallback' : 'orig'}`}
+                src={activeSrc}
+                alt={currentPhoto.title || 'Photo'}
+                onLoad={() => setIsImageLoading(false)}
+                onError={() => {
+                  setIsImageLoading(false);
+                  if (!triedFallback && fallbackPreviewUrl && fallbackPreviewUrl !== activeSrc) {
+                    setTriedFallback(true);
+                    setIsImageLoading(true);
+                  } else {
+                    setImageError(true);
+                  }
+                }}
+                className={`w-full h-full object-contain pointer-events-none select-none max-w-[100vw] max-h-[100vh] transition-opacity duration-200 ${
+                  isImageLoading ? 'opacity-0' : 'opacity-100'
+                }`}
+                style={{
+                  transform: `translate3d(${dragOffset.x + pan.x}px, ${dragOffset.y + pan.y}px, 0) scale(${scale})`,
+                  transition: isDragging ? 'none' : 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
+                  willChange: 'transform',
+                }}
+                draggable={false}
+              />
+            </>
+          )}
         </div>
 
         {/* ─── Bottom Floating Metadata Bar ──────────────────────────────── */}

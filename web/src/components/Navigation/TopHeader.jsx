@@ -39,6 +39,7 @@ export const TopHeader = () => {
 
         {/* Upload Button */}
         <button
+          type="button"
           onClick={() => openFilePicker({ category: selectedCategory })}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-bold shadow-md shadow-cyan-500/20 hover:opacity-90 active:scale-95 transition-all cursor-pointer"
         >
