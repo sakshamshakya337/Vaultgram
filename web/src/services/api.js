@@ -638,6 +638,29 @@ export const api = {
         method: 'DELETE',
       }),
 
+    deleteFolder: (id, options = {}) => {
+      const headers = {};
+      if (options.pin) headers['x-folder-pin'] = options.pin;
+      const params = new URLSearchParams();
+      if (options.unlockedCategories) {
+        params.append('unlockedCategories', options.unlockedCategories);
+      }
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+      return request(`/videos/folder/${id}${queryStr}`, {
+        method: 'DELETE',
+        headers,
+      });
+    },
+
+    retryDeleteFolder: (id, options = {}) => {
+      const headers = {};
+      if (options.pin) headers['x-folder-pin'] = options.pin;
+      return request(`/videos/folder/${id}/retry`, {
+        method: 'POST',
+        headers,
+      });
+    },
+
     emptyTrash: () =>
       request('/videos/trash/empty', {
         method: 'DELETE',

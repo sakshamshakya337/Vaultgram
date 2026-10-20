@@ -8,16 +8,19 @@ const User = require('../models/User');
 const WatchHistory = require('../models/WatchHistory');
 const Like = require('../models/Like');
 const Playlist = require('../models/Playlist');
+const ShareLink = require('../models/ShareLink');
 const { verifyVaultToken } = require('../middleware/auth');
+const telegramService = require('../services/telegramService');
 const {
   uploadMediaToTelegram,
   uploadVideoToTelegram,
   uploadDocumentToTelegram,
   deleteMediaFromTelegram,
+  deleteTelegramMessages,
   detectFileCategory,
   detectFileType,
   resolveFileUrl,
-} = require('../services/telegramService');
+} = telegramService;
 const {
   compressVideoIfNeeded,
   generateVideoThumbnail,
@@ -171,7 +174,7 @@ exports.listMedia = async (req, res) => {
     const { cursor, page: rawPage, filter: rawFilter, folderId, fileCategory, fileType, category, q, search } = req.query;
     const filterType = rawFilter || 'my-drive'; // my-drive, starred, recent, this-week, this-month, trash, vault
 
-    const query = {};
+    const query = { status: { $ne: 'deleting' } };
 
     // Check Vault Session
     const vaultSession = verifyVaultToken(req);
@@ -797,11 +800,40 @@ exports.listVaultFolders = async (req, res) => {
       isFolder: true,
       isHidden: true,
       isTrashed: { $ne: true },
+      status: { $ne: 'deleting' },
       ...(userId ? { uploadedBy: userId } : {}),
     }).sort({ title: 1 }).lean();
 
+    const folderIds = folders.map((f) => f._id);
+    const countAgg = await Media.aggregate([
+      {
+        $match: {
+          isFolder: false,
+          isTrashed: { $ne: true },
+          status: { $ne: 'deleting' },
+          folderId: { $in: folderIds },
+        },
+      },
+      {
+        $group: {
+          _id: '$folderId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const countMap = {};
+    for (const c of countAgg) {
+      countMap[String(c._id)] = c.count;
+    }
+
+    const enhancedFolders = folders.map((f) => {
+      const obj = ensureFileType(f);
+      obj.itemCount = countMap[String(f._id)] || 0;
+      return obj;
+    });
+
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.json({ folders: folders.map(ensureFileType) });
+    res.json({ folders: enhancedFolders });
   } catch (err) {
     console.error('[listVaultFolders error]:', err.message);
     res.status(500).json({ message: 'Failed to list private vault folders' });
@@ -953,6 +985,13 @@ exports.uploadMedia = async (req, res) => {
       if (!parentFolder) {
         return res.status(404).json({ message: 'Target folder not found', requestId: correlationId });
       }
+      if (parentFolder.status === 'deleting') {
+        return res.status(409).json({
+          code: 'FOLDER_DELETING',
+          message: 'Target folder is currently being deleted. Uploads not permitted.',
+          requestId: correlationId,
+        });
+      }
       const reqUserId = req.user?._id?.toString() || req.user?.id?.toString();
       const folderOwner = parentFolder.uploadedBy?.toString();
       if (folderOwner && reqUserId && folderOwner !== reqUserId) {
@@ -1034,6 +1073,7 @@ exports.uploadMedia = async (req, res) => {
     }
 
     let thumbnailFileId = '';
+    let thumbnailMessageId = null;
     let finalThumbnail = req.body.thumbnail || '';
 
     if (activeThumbBuffer) {
@@ -1047,6 +1087,7 @@ exports.uploadMedia = async (req, res) => {
           { correlationId }
         );
         thumbnailFileId = thumbUpload?.fileId || '';
+        thumbnailMessageId = thumbUpload?.messageId || null;
       } catch (tUploadErr) {
         console.warn(`[${correlationId}] [uploadMedia] Telegram thumbnail upload note (continuing with base64 thumbnail):`, tUploadErr.message);
       }
@@ -1092,6 +1133,7 @@ exports.uploadMedia = async (req, res) => {
       mimeType: uploadMimetype || (effectiveImageFormat ? getMimeForFormat(effectiveImageFormat) : ''),
       thumbnail: finalThumbnail,
       thumbnailFileId: thumbnailFileId,
+      thumbnailMessageId: thumbnailMessageId,
       telegramFileId: fileId,
       telegramMessageId: messageId,
       duration: duration || compressedMeta.duration || 0,
@@ -1482,6 +1524,392 @@ exports.toggleStar = async (req, res) => {
  * POST /api/v1/media/:id/trash
  */
 /**
+ * Performs complete cascading deletion of a folder across Telegram, MongoDB, and thumbnails.
+ *
+ * 1. Verifies ownership and biometric/PIN lock security.
+ * 2. Recursively collects all descendant subfolders and files.
+ * 3. Collects all Telegram message IDs (file, thumbnail, chunks, parts).
+ * 4. Marks folder and contents as 'deleting' in MongoDB.
+ * 5. Batch-deletes Telegram messages with rate-limit backoff and idempotency.
+ * 6. Preserves DB records and flags 'delete_failed' if Telegram fails.
+ * 7. Purges all MongoDB documents (Media, Likes, WatchHistory, Playlists, ShareLinks, User locks) if Telegram succeeds.
+ */
+async function deleteFolderCascade(userId, folderId, options = {}) {
+  const correlationId = options.correlationId || `cascade_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  console.log(`[${correlationId}] [deleteFolderCascade] Starting cascade delete for folderId=${folderId}, userId=${userId}`);
+
+  const folder = await Media.findOne({ _id: folderId, isFolder: true });
+  if (!folder) {
+    const error = new Error('Folder not found');
+    error.status = 404;
+    error.code = 'NOT_FOUND';
+    throw error;
+  }
+
+  // 1. Authorization: Verify folder belongs to user
+  const folderOwner = folder.uploadedBy || folder.userId;
+  if (folderOwner && !userId) {
+    const error = new Error('Authentication required to delete folder');
+    error.status = 401;
+    error.code = 'UNAUTHORIZED';
+    throw error;
+  }
+  if (folderOwner && userId && String(folderOwner) !== String(userId)) {
+    const error = new Error('Not authorized to delete this folder');
+    error.status = 403;
+    error.code = 'ACCESS_DENIED';
+    throw error;
+  }
+
+  // 2. Lock & Biometric Protection: Never allow delete to bypass lock!
+  let userLocked = [];
+  let user = null;
+  if (userId) {
+    user = await User.findById(userId).select('+pinHash');
+    if (Array.isArray(user?.lockedCategories)) {
+      userLocked = user.lockedCategories;
+    }
+  }
+
+  const folderTitle = (folder.title || '').trim().toLowerCase();
+  const folderIdStr = String(folder._id).toLowerCase();
+  const folderCat = (folder.category || '').trim().replace(/^#/, '').toLowerCase();
+
+  const isFolderLocked = folder.isLocked || userLocked.some((c) => {
+    const clean = (typeof c === 'string' ? c : c?.category || '').trim().toLowerCase();
+    return clean === folderTitle || clean === folderIdStr || (folderCat && clean === folderCat);
+  });
+
+  const isFolderHidden = !!folder.isHidden;
+
+  if (isFolderHidden) {
+    let hasVaultAuth = false;
+    if (options.req) {
+      const vaultSession = verifyVaultToken(options.req);
+      if (vaultSession && (!userId || String(vaultSession.userId) === String(userId))) {
+        hasVaultAuth = true;
+      }
+    }
+    if (!hasVaultAuth && options.vaultToken) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(options.vaultToken, process.env.JWT_SECRET || 'vault_secret_fallback');
+        if (decoded && (!userId || String(decoded.userId) === String(userId))) {
+          hasVaultAuth = true;
+        }
+      } catch {}
+    }
+    const pinProvided = options.pin || options.req?.body?.pin || options.req?.headers?.['x-folder-pin'];
+    if (!hasVaultAuth && pinProvided && user?.pinHash) {
+      const isValidPin = await user.comparePin(pinProvided);
+      if (isValidPin) hasVaultAuth = true;
+    }
+
+    if (!hasVaultAuth) {
+      const error = new Error('Active Private Vault session or PIN required to delete hidden folder');
+      error.status = 403;
+      error.code = 'VAULT_AUTH_REQUIRED';
+      throw error;
+    }
+  }
+
+  if (isFolderLocked) {
+    let isUnlocked = false;
+    const rawUnlocked = options.unlockedCategories || options.req?.query?.unlockedCategories || options.req?.headers?.['x-unlocked-categories'] || '';
+    const unlockedList = (typeof rawUnlocked === 'string' ? rawUnlocked.split(',') : Array.isArray(rawUnlocked) ? rawUnlocked : [])
+      .map((c) => String(c).trim().replace(/^#/, '').toLowerCase())
+      .filter(Boolean);
+
+    if (unlockedList.some((c) => c === folderTitle || c === folderIdStr || (folderCat && c === folderCat))) {
+      isUnlocked = true;
+    }
+
+    const pinProvided = options.pin || options.req?.body?.pin || options.req?.headers?.['x-folder-pin'];
+    if (!isUnlocked && pinProvided && user?.pinHash) {
+      const valid = await user.comparePin(pinProvided);
+      if (valid) isUnlocked = true;
+    }
+
+    if (!isUnlocked) {
+      const error = new Error(`Folder "${folder.title}" is locked. PIN passcode or unlock required before deletion.`);
+      error.status = 403;
+      error.code = 'FOLDER_LOCKED';
+      throw error;
+    }
+  }
+
+  // 3. Collect everything: Folder + all descendants (recursive subfolders)
+  const allFolderIds = [folder._id];
+  const allFolderTitles = [folder.title];
+  const queue = [folder._id];
+
+  while (queue.length > 0) {
+    const parentId = queue.shift();
+    const children = await Media.find({ folderId: parentId, isFolder: true }).lean();
+    for (const child of children) {
+      allFolderIds.push(child._id);
+      if (child.title && !allFolderTitles.includes(child.title)) {
+        allFolderTitles.push(child.title);
+      }
+      queue.push(child._id);
+    }
+  }
+
+  // Find all file records inside any of these folders
+  const files = await Media.find({
+    folderId: { $in: allFolderIds },
+    isFolder: false,
+  }).lean();
+
+  const fileIds = files.map((f) => f._id);
+
+  // Collect all Telegram message IDs across files, thumbnails, chunks, and pending deletes
+  const rawMessageIds = [];
+  let filesWithoutMessageId = 0;
+  let thumbnailsWithoutMessageId = 0;
+
+  for (const f of files) {
+    if (f.telegramMessageId) {
+      rawMessageIds.push(f.telegramMessageId);
+    } else {
+      filesWithoutMessageId++;
+    }
+
+    if (f.thumbnailMessageId) {
+      rawMessageIds.push(f.thumbnailMessageId);
+    } else if (f.thumbnailFileId) {
+      thumbnailsWithoutMessageId++;
+    }
+
+    if (Array.isArray(f.chunks)) {
+      for (const ch of f.chunks) {
+        if (ch.telegramMessageId) rawMessageIds.push(ch.telegramMessageId);
+      }
+    }
+
+    if (Array.isArray(f.parts)) {
+      for (const pt of f.parts) {
+        if (pt.telegramMessageId) rawMessageIds.push(pt.telegramMessageId);
+      }
+    }
+  }
+
+  // Also include any previously pending message IDs on the folders
+  if (Array.isArray(folder.pendingTelegramDeletes)) {
+    rawMessageIds.push(...folder.pendingTelegramDeletes);
+  }
+
+  const telegramMessageIds = Array.from(
+    new Set(rawMessageIds.map(Number).filter((id) => !isNaN(id) && id > 0))
+  );
+
+  console.log(`[${correlationId}] [deleteFolderCascade] Discovered ${allFolderIds.length} folder(s), ${files.length} file(s), ${telegramMessageIds.length} unique Telegram message(s)`);
+
+  // 4. Mark folders and files as "deleting" in MongoDB before external calls
+  await Media.updateMany(
+    { _id: { $in: allFolderIds } },
+    { $set: { status: 'deleting', pendingTelegramDeletes: telegramMessageIds } }
+  );
+  if (fileIds.length > 0) {
+    await Media.updateMany(
+      { _id: { $in: fileIds } },
+      { $set: { status: 'deleting' } }
+    );
+  }
+
+  // 5. Delete Telegram messages in batches with retry, rate-limit backoff, and idempotency
+  let tgResult = { success: true, deletedCount: 0, failedIds: [], errors: [] };
+  if (telegramMessageIds.length > 0) {
+    const deleteFn = options.deleteTelegramMessages || telegramService.deleteTelegramMessages;
+    tgResult = await deleteFn(telegramMessageIds, { correlationId });
+  }
+
+  // 6. Handle Telegram partial failures:
+  // If Telegram deletion failed permanently for some messages, do NOT drop the MongoDB records!
+  if (!tgResult.success && tgResult.failedIds.length > 0) {
+    console.warn(`[${correlationId}] [deleteFolderCascade] Partial Telegram delete failure: ${tgResult.failedIds.length} messages failed`);
+    await Media.findByIdAndUpdate(folder._id, {
+      status: 'delete_failed',
+      pendingTelegramDeletes: tgResult.failedIds,
+    });
+
+    return {
+      success: false,
+      status: 'delete_failed',
+      folderId: folder._id,
+      folderTitle: folder.title,
+      message: 'Some files could not be removed from Telegram. Database records preserved. Please retry.',
+      deletedTelegramCount: tgResult.deletedCount,
+      failedTelegramIds: tgResult.failedIds,
+      errors: tgResult.errors,
+      filesCount: files.length,
+      foldersCount: allFolderIds.length,
+    };
+  }
+
+  // 7. Telegram deletion succeeded! Now delete MongoDB documents in cascade
+  console.log(`[${correlationId}] [deleteFolderCascade] Telegram deletion complete. Purging MongoDB records...`);
+
+  let session = null;
+  let useTransaction = false;
+  try {
+    session = await mongoose.startSession();
+    session.startTransaction();
+    useTransaction = true;
+  } catch (txErr) {
+    console.log(`[${correlationId}] [deleteFolderCascade] Standalone MongoDB deployment detected (transactions unsupported). Using ordered deletes.`);
+    session = null;
+    useTransaction = false;
+  }
+
+  try {
+    const opts = session ? { session } : {};
+
+    // Delete Media files and folders
+    if (fileIds.length > 0) {
+      await Media.deleteMany({ _id: { $in: fileIds } }, opts);
+    }
+    await Media.deleteMany({ _id: { $in: allFolderIds } }, opts);
+
+    // Delete related Likes
+    if (fileIds.length > 0) {
+      await Like.deleteMany({ $or: [{ mediaId: { $in: fileIds } }, { videoId: { $in: fileIds } }] }, opts);
+    }
+
+    // Delete related WatchHistory
+    if (fileIds.length > 0) {
+      await WatchHistory.deleteMany({ $or: [{ mediaId: { $in: fileIds } }, { videoId: { $in: fileIds } }] }, opts);
+    }
+
+    // Remove file references from Playlists
+    if (fileIds.length > 0) {
+      await Playlist.updateMany(
+        {},
+        { $pull: { mediaIds: { $in: fileIds }, videoIds: { $in: fileIds } } },
+        opts
+      );
+    }
+
+    // Delete related ShareLinks (files and folder links)
+    const folderTitleConditions = allFolderTitles
+      .filter(Boolean)
+      .flatMap((t) => [{ category: t }, { folderTitle: t }]);
+
+    const shareConditions = [];
+    if (fileIds.length > 0) {
+      shareConditions.push({ fileId: { $in: fileIds } });
+    }
+    if (folderTitleConditions.length > 0) {
+      shareConditions.push(...folderTitleConditions);
+    }
+    if (shareConditions.length > 0) {
+      await ShareLink.deleteMany({ $or: shareConditions }, opts);
+    }
+
+    // Clean up User.lockedCategories
+    if (user) {
+      const cleanTitles = allFolderTitles.map((t) => t.trim().toLowerCase());
+      const cleanIds = allFolderIds.map((id) => String(id).toLowerCase());
+      user.lockedCategories = (user.lockedCategories || []).filter((c) => {
+        const clean = (typeof c === 'string' ? c : c?.category || '').trim().toLowerCase();
+        return !cleanTitles.includes(clean) && !cleanIds.includes(clean);
+      });
+      await user.save(opts);
+    }
+
+    if (session && useTransaction) {
+      await session.commitTransaction();
+    }
+  } catch (dbErr) {
+    if (session && useTransaction) {
+      await session.abortTransaction();
+    }
+    throw dbErr;
+  } finally {
+    if (session) {
+      session.endSession();
+    }
+  }
+
+  console.log(`[${correlationId}] [deleteFolderCascade] Successfully completed cascade delete for folder "${folder.title}"`);
+
+  return {
+    success: true,
+    status: 'deleted',
+    folderId: folder._id,
+    folderTitle: folder.title,
+    message: `Folder "${folder.title}" and all its contents were completely deleted`,
+    deletedFilesCount: files.length,
+    deletedFoldersCount: allFolderIds.length,
+    deletedTelegramMessagesCount: tgResult.deletedCount,
+    legacyFilesWithoutMessageId: filesWithoutMessageId,
+    legacyThumbnailsWithoutMessageId: thumbnailsWithoutMessageId,
+  };
+}
+
+exports.deleteFolderCascade = deleteFolderCascade;
+
+/**
+ * DELETE /api/v1/media/folder/:id
+ */
+exports.deleteFolder = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const folderId = req.params.id;
+    const options = {
+      pin: req.body?.pin || req.headers['x-folder-pin'],
+      vaultToken: req.headers['x-vault-token'],
+      unlockedCategories: req.query?.unlockedCategories || req.headers['x-unlocked-categories'],
+      req,
+    };
+
+    const result = await deleteFolderCascade(userId, folderId, options);
+    if (!result.success && result.status === 'delete_failed') {
+      return res.status(502).json(result);
+    }
+    return res.json(result);
+  } catch (err) {
+    const status = err.status || 500;
+    console.error('[deleteFolder error]:', err.message);
+    return res.status(status).json({
+      success: false,
+      error: err.code || 'DELETE_FAILED',
+      message: err.message || 'Failed to delete folder',
+    });
+  }
+};
+
+/**
+ * POST /api/v1/media/folder/:id/retry
+ */
+exports.retryDeleteFolder = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const folderId = req.params.id;
+    const options = {
+      pin: req.body?.pin || req.headers['x-folder-pin'],
+      vaultToken: req.headers['x-vault-token'],
+      unlockedCategories: req.query?.unlockedCategories || req.headers['x-unlocked-categories'],
+      req,
+    };
+
+    const result = await deleteFolderCascade(userId, folderId, options);
+    if (!result.success && result.status === 'delete_failed') {
+      return res.status(502).json(result);
+    }
+    return res.json(result);
+  } catch (err) {
+    const status = err.status || 500;
+    console.error('[retryDeleteFolder error]:', err.message);
+    return res.status(status).json({
+      success: false,
+      error: err.code || 'RETRY_FAILED',
+      message: err.message || 'Failed to retry folder deletion',
+    });
+  }
+};
+
+/**
  * POST /api/v1/media/:id/trash or DELETE /api/v1/media/:id
  */
 exports.trashOrDelete = async (req, res) => {
@@ -1493,28 +1921,55 @@ exports.trashOrDelete = async (req, res) => {
     const isPermanent = item.isTrashed || req.query.permanent === 'true' || req.method === 'DELETE';
 
     if (isPermanent) {
-      let telegramResult = { success: true };
-
-      // If it's a folder, permanently delete all children and their Telegram messages
+      // If it's a folder, run full cascade deletion
       if (item.isFolder) {
-        const nestedFiles = await Media.find({ folderId: item._id });
-        for (const nested of nestedFiles) {
-          if (nested.telegramMessageId) {
-            await deleteMediaFromTelegram(nested.telegramMessageId);
-          }
+        const userId = req.user?._id || req.user?.id;
+        const options = {
+          pin: req.body?.pin || req.headers['x-folder-pin'],
+          vaultToken: req.headers['x-vault-token'],
+          unlockedCategories: req.query?.unlockedCategories || req.headers['x-unlocked-categories'],
+          req,
+        };
+        const cascadeResult = await deleteFolderCascade(userId, item._id, options);
+        if (!cascadeResult.success && cascadeResult.status === 'delete_failed') {
+          return res.status(502).json(cascadeResult);
         }
-        await Media.deleteMany({ folderId: item._id });
-      } else if (item.telegramMessageId) {
-        telegramResult = await deleteMediaFromTelegram(item.telegramMessageId);
+        return res.json(cascadeResult);
       }
+
+      // Permanent file deletion
+      const fileTgIds = [];
+      if (item.telegramMessageId) fileTgIds.push(item.telegramMessageId);
+      if (item.thumbnailMessageId) fileTgIds.push(item.thumbnailMessageId);
+      if (Array.isArray(item.chunks)) {
+        for (const ch of item.chunks) {
+          if (ch.telegramMessageId) fileTgIds.push(ch.telegramMessageId);
+        }
+      }
+      if (Array.isArray(item.parts)) {
+        for (const pt of item.parts) {
+          if (pt.telegramMessageId) fileTgIds.push(pt.telegramMessageId);
+        }
+      }
+
+      let tgRes = { success: true, deletedCount: 0 };
+      if (fileTgIds.length > 0) {
+        tgRes = await deleteTelegramMessages(fileTgIds);
+      }
+
+      // Clean up relations
+      await Like.deleteMany({ $or: [{ mediaId: item._id }, { videoId: item._id }] });
+      await WatchHistory.deleteMany({ $or: [{ mediaId: item._id }, { videoId: item._id }] });
+      await Playlist.updateMany({}, { $pull: { mediaIds: item._id, videoIds: item._id } });
+      await ShareLink.deleteMany({ fileId: item._id });
 
       await Media.findByIdAndDelete(req.params.id);
 
       return res.json({
         success: true,
         message: 'Item permanently deleted',
-        telegramDeleted: telegramResult.success,
-        telegramNote: telegramResult.error ? `Telegram note: ${telegramResult.error}` : undefined,
+        telegramDeleted: tgRes.success,
+        telegramDeletedCount: tgRes.deletedCount,
       });
     }
 
@@ -1525,7 +1980,12 @@ exports.trashOrDelete = async (req, res) => {
     res.json({ message: 'Item moved to trash', item: ensureFileType(item.toObject()) });
   } catch (err) {
     console.error('[trashOrDelete error]:', err.message);
-    res.status(500).json({ message: 'Failed to delete item' });
+    const status = err.status || 500;
+    res.status(status).json({
+      success: false,
+      error: err.code || 'DELETE_FAILED',
+      message: err.message || 'Failed to delete item',
+    });
   }
 };
 
@@ -1617,14 +2077,44 @@ exports.listFolders = async (req, res) => {
       isFolder: true,
       isTrashed: { $ne: true },
       isHidden: { $ne: true },
+      status: { $ne: 'deleting' },
     };
     const userId = req.user?._id || req.user?.id;
     if (userId) {
       filter.uploadedBy = userId;
     }
     const folders = await Media.find(filter).sort({ title: 1 }).lean();
+
+    const folderIds = folders.map((f) => f._id);
+    const countAgg = await Media.aggregate([
+      {
+        $match: {
+          isFolder: false,
+          isTrashed: { $ne: true },
+          status: { $ne: 'deleting' },
+          folderId: { $in: folderIds },
+        },
+      },
+      {
+        $group: {
+          _id: '$folderId',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+    const countMap = {};
+    for (const c of countAgg) {
+      countMap[String(c._id)] = c.count;
+    }
+
+    const enhancedFolders = folders.map((f) => {
+      const obj = ensureFileType(f);
+      obj.itemCount = countMap[String(f._id)] || 0;
+      return obj;
+    });
+
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.json({ folders: folders.map(ensureFileType) });
+    res.json({ folders: enhancedFolders });
   } catch (err) {
     res.status(500).json({ message: 'Failed to list folders' });
   }
@@ -2013,6 +2503,7 @@ exports.getFeed = async (req, res) => {
     const query = {
       isTrashed: { $ne: true },
       isFolder: { $ne: true },
+      status: { $ne: 'deleting' },
       $or: [
         { fileType: 'video' },
         { fileCategory: 'video' },
@@ -2175,5 +2666,185 @@ exports.getVideoThumbnail = async (req, res) => {
   }
 };
 
+/**
+ * Safe maintenance routine that identifies and cleans orphaned data.
+ * Defaults to dry-run (report only). Only deletes when options.dryRun === false.
+ */
+async function cleanupOrphans(options = {}) {
+  const dryRun = options.dryRun !== false; // default true
+  const correlationId = options.correlationId || `cleanup_${Date.now()}`;
+  console.log(`[${correlationId}] [cleanupOrphans] Running orphan scan (dryRun=${dryRun})...`);
+
+  // 1. Existing folder IDs
+  const allFolders = await Media.find({ isFolder: true }).select('_id title category').lean();
+  const folderIdSet = new Set(allFolders.map((f) => String(f._id)));
+  const folderTitlesAndCats = new Set(
+    allFolders.flatMap((f) => [f.title, f.category].filter(Boolean).map((s) => s.trim().toLowerCase()))
+  );
+
+  // 2. Orphaned files whose folderId is not in existing folders
+  const filesWithFolder = await Media.find({
+    isFolder: false,
+    folderId: { $ne: null },
+  }).lean();
+  const orphanedFiles = filesWithFolder.filter((f) => !folderIdSet.has(String(f.folderId)));
+
+  // 3. Orphaned subfolders whose folderId is not in existing folders
+  const subfoldersWithFolder = await Media.find({
+    isFolder: true,
+    folderId: { $ne: null },
+  }).lean();
+  const orphanedSubfolders = subfoldersWithFolder.filter((sf) => !folderIdSet.has(String(sf.folderId)));
+
+  // 4. All existing Media IDs for reference checks
+  const allMediaDocs = await Media.find({}).select('_id').lean();
+  const mediaIdSet = new Set(allMediaDocs.map((m) => String(m._id)));
+
+  // 5. Orphaned Likes
+  const allLikes = await Like.find({}).lean();
+  const orphanedLikes = allLikes.filter(
+    (l) => (l.mediaId && !mediaIdSet.has(String(l.mediaId))) || (l.videoId && !mediaIdSet.has(String(l.videoId)))
+  );
+
+  // 6. Orphaned WatchHistory
+  const allHistory = await WatchHistory.find({}).lean();
+  const orphanedHistory = allHistory.filter(
+    (h) => (h.mediaId && !mediaIdSet.has(String(h.mediaId))) || (h.videoId && !mediaIdSet.has(String(h.videoId)))
+  );
+
+  // 7. Orphaned ShareLinks
+  const allShares = await ShareLink.find({}).lean();
+  const orphanedShares = allShares.filter((s) => {
+    if (s.scope === 'file') {
+      return s.fileId && !mediaIdSet.has(String(s.fileId));
+    }
+    if (s.scope === 'folder') {
+      const cat = (s.category || '').trim().toLowerCase();
+      const ft = (s.folderTitle || '').trim().toLowerCase();
+      return (cat && !folderTitlesAndCats.has(cat)) && (ft && !folderTitlesAndCats.has(ft));
+    }
+    return false;
+  });
+
+  // 8. Orphaned locks in Users
+  const allUsers = await User.find({}).select('_id username lockedCategories').lean();
+  const orphanedUserLocks = [];
+  for (const u of allUsers) {
+    const locks = u.lockedCategories || [];
+    for (const item of locks) {
+      if (mongoose.Types.ObjectId.isValid(item) && !folderIdSet.has(String(item))) {
+        orphanedUserLocks.push({ userId: u._id, username: u.username, lockItem: item });
+      }
+    }
+  }
+
+  // 9. Files lacking telegramMessageId or thumbnails lacking thumbnailMessageId
+  const legacyFilesWithoutMessageId = await Media.find({
+    isFolder: false,
+    $or: [{ telegramMessageId: { $exists: false } }, { telegramMessageId: null }],
+  }).select('_id title').lean();
+
+  const legacyThumbnailsWithoutMessageId = await Media.find({
+    isFolder: false,
+    thumbnailFileId: { $exists: true, $ne: '' },
+    $or: [{ thumbnailMessageId: { $exists: false } }, { thumbnailMessageId: null }],
+  }).select('_id title thumbnailFileId').lean();
+
+  const report = {
+    dryRun,
+    orphanedFilesCount: orphanedFiles.length,
+    orphanedFiles: orphanedFiles.map((f) => ({ _id: f._id, title: f.title, folderId: f.folderId, telegramMessageId: f.telegramMessageId })),
+    orphanedSubfoldersCount: orphanedSubfolders.length,
+    orphanedSubfolders: orphanedSubfolders.map((sf) => ({ _id: sf._id, title: sf.title, folderId: sf.folderId })),
+    orphanedLikesCount: orphanedLikes.length,
+    orphanedWatchHistoryCount: orphanedHistory.length,
+    orphanedShareLinksCount: orphanedShares.length,
+    orphanedUserLocksCount: orphanedUserLocks.length,
+    legacyFilesWithoutMessageIdCount: legacyFilesWithoutMessageId.length,
+    legacyThumbnailsWithoutMessageIdCount: legacyThumbnailsWithoutMessageId.length,
+    deleted: null,
+  };
+
+  if (!dryRun) {
+    console.log(`[${correlationId}] [cleanupOrphans] Executing live deletion of orphaned data...`);
+
+    // 1. Delete Telegram messages for orphaned files
+    const tgIdsToDelete = [];
+    for (const f of orphanedFiles) {
+      if (f.telegramMessageId) tgIdsToDelete.push(f.telegramMessageId);
+      if (f.thumbnailMessageId) tgIdsToDelete.push(f.thumbnailMessageId);
+    }
+    let tgDeletedCount = 0;
+    if (tgIdsToDelete.length > 0) {
+      const tgRes = await deleteTelegramMessages(tgIdsToDelete, { correlationId });
+      tgDeletedCount = tgRes.deletedCount;
+    }
+
+    // 2. Delete orphaned files and subfolders
+    const fileIdsToDelete = orphanedFiles.map((f) => f._id);
+    const subfolderIdsToDelete = orphanedSubfolders.map((sf) => sf._id);
+    const allIds = [...fileIdsToDelete, ...subfolderIdsToDelete];
+    if (allIds.length > 0) {
+      await Media.deleteMany({ _id: { $in: allIds } });
+    }
+
+    // 3. Delete orphaned Likes
+    if (orphanedLikes.length > 0) {
+      const likeIds = orphanedLikes.map((l) => l._id);
+      await Like.deleteMany({ _id: { $in: likeIds } });
+    }
+
+    // 4. Delete orphaned WatchHistory
+    if (orphanedHistory.length > 0) {
+      const historyIds = orphanedHistory.map((h) => h._id);
+      await WatchHistory.deleteMany({ _id: { $in: historyIds } });
+    }
+
+    // 5. Delete orphaned ShareLinks
+    if (orphanedShares.length > 0) {
+      const shareIds = orphanedShares.map((s) => s._id);
+      await ShareLink.deleteMany({ _id: { $in: shareIds } });
+    }
+
+    // 6. Clean orphaned locks in Users
+    for (const item of orphanedUserLocks) {
+      await User.findByIdAndUpdate(item.userId, {
+        $pull: { lockedCategories: item.lockItem },
+      });
+    }
+
+    report.deleted = {
+      telegramMessages: tgDeletedCount,
+      mediaDocuments: allIds.length,
+      likes: orphanedLikes.length,
+      watchHistory: orphanedHistory.length,
+      shareLinks: orphanedShares.length,
+      userLocks: orphanedUserLocks.length,
+    };
+
+    console.log(`[${correlationId}] [cleanupOrphans] Cleanup executed successfully:`, report.deleted);
+  }
+
+  return report;
+}
+
+exports.cleanupOrphans = cleanupOrphans;
+
+exports.cleanupOrphansHandler = async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun !== false && req.query?.dryRun !== 'false';
+    const report = await cleanupOrphans({ dryRun });
+    res.json({
+      success: true,
+      message: dryRun ? 'Orphan scan completed (dry run). No changes made.' : 'Orphan cleanup executed successfully.',
+      ...report,
+    });
+  } catch (err) {
+    console.error('[cleanupOrphansHandler error]:', err.message);
+    res.status(500).json({ success: false, message: 'Failed to run orphan cleanup', error: err.message });
+  }
+};
+
 // Aliases
 exports.deleteMedia = exports.trashOrDelete;
+

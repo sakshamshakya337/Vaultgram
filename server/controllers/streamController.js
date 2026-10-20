@@ -29,6 +29,13 @@ exports.streamMedia = async (req, res) => {
       });
     }
 
+    if (item.status === 'deleting') {
+      return res.status(410).json({
+        error: 'ITEM_DELETING',
+        message: 'This file is currently being deleted and is no longer accessible',
+      });
+    }
+
     if (!item.telegramFileId) {
       console.error(`[streamMedia] Missing telegramFileId for item: ${item._id}`);
       return res.status(404).json({

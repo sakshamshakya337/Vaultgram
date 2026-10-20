@@ -284,17 +284,19 @@ async function resolveFileUrl(fileId) {
  * Deletes video/file message from Telegram cloud channel
  * POST https://api.telegram.org/bot<TOKEN>/deleteMessage
  */
-async function deleteVideoFromTelegram(messageId) {
+async function deleteVideoFromTelegram(messageId, context = {}) {
   const chatId = getTelegramChatId();
   const botToken = getTelegramBotToken();
+  const correlationId = context.correlationId || `del_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   if (!chatId || !botToken) {
-    console.warn('[deleteVideoFromTelegram] Telegram credentials not configured in .env');
+    console.warn(`[${correlationId}] [deleteVideoFromTelegram] Telegram credentials not configured in .env`);
     return { success: false, error: 'Telegram credentials missing' };
   }
 
-  if (!messageId) {
-    return { success: false, error: 'No telegramMessageId provided' };
+  const msgId = Number(messageId);
+  if (!msgId || isNaN(msgId)) {
+    return { success: false, error: 'No valid telegramMessageId provided' };
   }
 
   try {
@@ -302,26 +304,150 @@ async function deleteVideoFromTelegram(messageId) {
       () =>
         axios.post(`${TELEGRAM_API_BASE()}/deleteMessage`, {
           chat_id: chatId,
-          message_id: messageId,
+          message_id: msgId,
         }),
-      'deleteMessage'
+      'deleteMessage',
+      3,
+      { correlationId }
     );
 
     if (data.ok) {
-      console.log(`[deleteVideoFromTelegram] Successfully deleted Telegram message ${messageId} from channel ${chatId}`);
-      return { success: true, data };
+      console.log(`[${correlationId}] [deleteVideoFromTelegram] Successfully deleted message ${msgId} from channel ${chatId}`);
+      return { success: true, messageId: msgId };
     } else {
-      console.warn(`[deleteVideoFromTelegram] Telegram deleteMessage returned not ok: ${data.description}`);
-      return { success: false, error: data.description || 'Unknown Telegram delete error' };
+      console.warn(`[${correlationId}] [deleteVideoFromTelegram] Telegram deleteMessage returned not ok: ${data.description}`);
+      return { success: false, messageId: msgId, error: data.description || 'Unknown Telegram delete error' };
     }
   } catch (err) {
     const errMsg = err.response?.data?.description || err.message;
-    console.warn(`[deleteVideoFromTelegram] Telegram deleteMessage failed for messageId ${messageId}:`, errMsg);
-    return { success: false, error: errMsg };
+    // Idempotent handling: If message is already deleted or not found, treat as success
+    if (errMsg && (
+      errMsg.toLowerCase().includes('message to delete not found') ||
+      errMsg.toLowerCase().includes("message can't be deleted") ||
+      errMsg.toLowerCase().includes('message not found')
+    )) {
+      console.log(`[${correlationId}] [deleteVideoFromTelegram] Message ${msgId} already deleted or not found. Treating as success.`);
+      return { success: true, messageId: msgId, alreadyDeleted: true };
+    }
+
+    console.warn(`[${correlationId}] [deleteVideoFromTelegram] Telegram deleteMessage failed for messageId ${msgId}:`, errMsg);
+    return { success: false, messageId: msgId, error: errMsg };
   }
 }
 
 const deleteMediaFromTelegram = deleteVideoFromTelegram;
+
+/**
+ * Deletes a batch of Telegram messages using deleteMessages (Telegram Bot API 7.0+),
+ * with fallback to individual deleteMessage, rate-limit backoff, and idempotent retry.
+ *
+ * @param {Array<number|string>} messageIds
+ * @param {object} options
+ * @returns {Promise<{ success: boolean, deletedCount: number, failedIds: number[], errors: string[] }>}
+ */
+async function deleteTelegramMessages(messageIds = [], options = {}) {
+  const chatId = getTelegramChatId();
+  const botToken = getTelegramBotToken();
+  const correlationId = options.correlationId || `batch_del_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  // Filter and de-duplicate valid integer IDs
+  const rawIds = Array.isArray(messageIds) ? messageIds : [messageIds];
+  const uniqueIds = Array.from(
+    new Set(
+      rawIds
+        .map((id) => Number(id))
+        .filter((id) => !isNaN(id) && id > 0)
+    )
+  );
+
+  if (uniqueIds.length === 0) {
+    return { success: true, deletedCount: 0, failedIds: [], errors: [] };
+  }
+
+  if (!chatId || !botToken) {
+    console.warn(`[${correlationId}] [deleteTelegramMessages] Telegram credentials not configured in .env`);
+    return {
+      success: false,
+      deletedCount: 0,
+      failedIds: uniqueIds,
+      errors: ['Telegram credentials missing in .env'],
+    };
+  }
+
+  console.log(`[${correlationId}] [deleteTelegramMessages] Starting deletion of ${uniqueIds.length} messages from chat ${chatId}`);
+
+  // Telegram deleteMessages accepts up to 100 messages per call
+  const BATCH_SIZE = 100;
+  const batches = [];
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    batches.push(uniqueIds.slice(i, i + BATCH_SIZE));
+  }
+
+  const failedIds = [];
+  const errors = [];
+  let deletedCount = 0;
+
+  for (let bIndex = 0; bIndex < batches.length; bIndex++) {
+    const currentBatch = batches[bIndex];
+    console.log(`[${correlationId}] [deleteTelegramMessages] Processing batch ${bIndex + 1}/${batches.length} (${currentBatch.length} messages)`);
+
+    let batchSucceeded = false;
+
+    // Try Telegram Bot API batch deleteMessages endpoint first
+    try {
+      const { data } = await executeWithTelegramRetry(
+        () =>
+          axios.post(`${TELEGRAM_API_BASE()}/deleteMessages`, {
+            chat_id: chatId,
+            message_ids: currentBatch,
+          }),
+        'deleteMessages',
+        3,
+        { correlationId }
+      );
+
+      if (data.ok) {
+        deletedCount += currentBatch.length;
+        batchSucceeded = true;
+        console.log(`[${correlationId}] [deleteTelegramMessages] Batch ${bIndex + 1} deleted successfully via deleteMessages`);
+      }
+    } catch (batchErr) {
+      console.warn(`[${correlationId}] [deleteTelegramMessages] deleteMessages batch failed: ${batchErr.message}. Falling back to individual delete.`);
+    }
+
+    // If batch delete failed, fallback to individual deletion with backoff and idempotent checks
+    if (!batchSucceeded) {
+      for (const singleId of currentBatch) {
+        const singleRes = await deleteVideoFromTelegram(singleId, { correlationId });
+        if (singleRes.success) {
+          deletedCount++;
+        } else {
+          failedIds.push(singleId);
+          if (singleRes.error && !errors.includes(singleRes.error)) {
+            errors.push(singleRes.error);
+          }
+        }
+        // Small throttle between individual deletions to be gentle on Telegram API
+        await sleep(35);
+      }
+    }
+
+    // Small delay between batches
+    if (bIndex < batches.length - 1) {
+      await sleep(100);
+    }
+  }
+
+  const isSuccess = failedIds.length === 0;
+  console.log(`[${correlationId}] [deleteTelegramMessages] Completed: ${deletedCount}/${uniqueIds.length} deleted, ${failedIds.length} failed`);
+
+  return {
+    success: isSuccess,
+    deletedCount,
+    failedIds,
+    errors,
+  };
+}
 
 /**
  * Tests Telegram bot credentials and group access without revealing secrets
@@ -385,7 +511,9 @@ module.exports = {
   resolveFileUrl,
   deleteMediaFromTelegram,
   deleteVideoFromTelegram,
+  deleteTelegramMessages,
   detectFileCategory,
   detectFileType,
   testTelegramConnection,
 };
+

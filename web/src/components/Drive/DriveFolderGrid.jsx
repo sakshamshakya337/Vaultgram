@@ -40,6 +40,7 @@ export const DriveFolderGrid = ({
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [deleteFolderTarget, setDeleteFolderTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const handleToggleLock = async (e, identifier, secondaryId = null, folderObj = null) => {
     e.stopPropagation();
@@ -79,16 +80,21 @@ export const DriveFolderGrid = ({
   const handleConfirmDeleteFolder = async () => {
     if (!deleteFolderTarget) return;
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       if (onDeleteFolder) {
-        await onDeleteFolder(deleteFolderTarget._id || deleteFolderTarget.id);
+        await onDeleteFolder(deleteFolderTarget);
       }
       setDeleteFolderTarget(null);
     } catch (err) {
-      alert(err.message || 'Failed to delete folder');
+      setDeleteError(err.message || 'Failed to delete folder');
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleRetryDeleteFolder = async () => {
+    await handleConfirmDeleteFolder();
   };
 
   return (
@@ -378,9 +384,15 @@ export const DriveFolderGrid = ({
         title="Delete Folder"
         itemName={deleteFolderTarget?.title || 'this folder'}
         itemType="folder"
+        fileCount={deleteFolderTarget?.itemCount ?? 0}
         loading={isDeleting}
+        error={deleteError}
         onConfirm={handleConfirmDeleteFolder}
-        onCancel={() => setDeleteFolderTarget(null)}
+        onRetry={handleRetryDeleteFolder}
+        onCancel={() => {
+          setDeleteFolderTarget(null);
+          setDeleteError(null);
+        }}
       />
     </>
   );

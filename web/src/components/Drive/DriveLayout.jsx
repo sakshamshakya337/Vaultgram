@@ -311,15 +311,22 @@ export const DriveLayout = () => {
     setSelectedFileIds([]);
   };
 
-  const handleDeleteFolder = async (folderId) => {
-    if (window.confirm('Are you sure you want to delete this folder?')) {
-      try {
-        await api.drive.delete(folderId);
-        loadDriveItems();
-        if (fetchLibraryStats) fetchLibraryStats();
-      } catch (err) {
-        alert(err.message || 'Failed to delete folder');
+  const handleDeleteFolder = async (folderOrId) => {
+    const folderId = typeof folderOrId === 'string' ? folderOrId : folderOrId?._id || folderOrId?.id;
+    if (!folderId) return;
+    try {
+      const unlockedCats = Array.from(sessionUnlockedCategories || []).join(',');
+      const res = await api.drive.deleteFolder(folderId, { unlockedCategories: unlockedCats });
+      if (currentFolder && (String(currentFolder._id) === String(folderId) || String(currentFolder.id) === String(folderId))) {
+        setCurrentFolder(null);
       }
+      loadDriveItems();
+      if (fetchLibraryStats) fetchLibraryStats();
+      if (fetchCategories) fetchCategories();
+      return res;
+    } catch (err) {
+      console.error('[handleDeleteFolder error]:', err.message);
+      throw err;
     }
   };
 

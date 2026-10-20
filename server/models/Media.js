@@ -86,6 +86,28 @@ const mediaSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    thumbnailMessageId: {
+      type: Number,
+      default: null,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'deleting', 'delete_failed'],
+      default: 'active',
+      index: true,
+    },
+    pendingTelegramDeletes: {
+      type: [Number],
+      default: [],
+    },
+    chunks: [
+      {
+        partNumber: Number,
+        telegramFileId: String,
+        telegramMessageId: Number,
+        sizeBytes: Number,
+      },
+    ],
     duration: {
       type: Number,
       default: 0,
