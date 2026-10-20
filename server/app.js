@@ -101,14 +101,27 @@ app.get('/api/v1/health/telegram', async (_req, res) => {
 
 // Enforce DB connectivity for all API routes
 app.use('/api/v1/auth', dbMiddleware, authRoutes);
+app.use('/api/auth', dbMiddleware, authRoutes);
+
 app.use('/api/v1/media', dbMiddleware, mediaRoutes);
+app.use('/api/media', dbMiddleware, mediaRoutes);
+
 app.use('/api/v1/videos', dbMiddleware, mediaRoutes);
+app.use('/api/videos', dbMiddleware, mediaRoutes);
+
 app.use('/api/v1/files', dbMiddleware, mediaRoutes);
+app.use('/api/files', dbMiddleware, mediaRoutes);
+
 app.use('/api/v1/share', dbMiddleware, shareRoutes);
+app.use('/api/share', dbMiddleware, shareRoutes);
+app.use('/share', dbMiddleware, shareRoutes);
+
 app.use('/api/v1/stream', dbMiddleware, streamRoutes);
+app.use('/api/stream', dbMiddleware, streamRoutes);
+app.use('/stream', dbMiddleware, streamRoutes);
 
 // 404 handler for all unmatched API and stream routes (ensures JSON responses, never HTML)
-app.all(['/api/*', '/stream/*'], (_req, res) => {
+app.use(['/api', '/api/*', '/stream', '/stream/*', '/share', '/share/*'], (_req, res) => {
   res.status(404).json({
     success: false,
     error: 'NOT_FOUND',

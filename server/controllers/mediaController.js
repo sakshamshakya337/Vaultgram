@@ -270,6 +270,23 @@ exports.listMedia = async (req, res) => {
         } else {
           query.folderId = folderId;
         }
+
+        if (req.user?._id) {
+          const userScope = {
+            $or: [
+              { uploadedBy: req.user._id },
+              { userId: req.user._id },
+              { uploadedBy: null, userId: null },
+              { uploadedBy: { $exists: false } },
+            ],
+          };
+          if (query.$or) {
+            query.$and = (query.$and || []).concat([{ $or: query.$or }, userScope]);
+            delete query.$or;
+          } else {
+            query.$or = userScope.$or;
+          }
+        }
       }
     }
 
@@ -1589,7 +1606,18 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
     console.log(`[${correlationId}] [deleteFolderCascade] Folder document missing but found ${orphanedChildren.length} orphaned child records. Cleaning up remaining children...`);
   }
 
-  // 1. Authorization: Verify folder belongs to user
+  // 1. Authorization & User Context
+  let userLocked = [];
+  let user = null;
+  if (userId) {
+    user = await User.findById(userId).select('+pinHash');
+    if (Array.isArray(user?.lockedCategories)) {
+      userLocked = user.lockedCategories;
+    }
+  }
+
+  const isAdmin = user?.role === 'admin' || (user?.email && user.email.toLowerCase() === 'sakshamshakya231@gmail.com');
+
   if (folder) {
     const folderOwner = folder.uploadedBy || folder.userId;
     if (folderOwner && !userId) {
@@ -1599,22 +1627,18 @@ async function deleteFolderCascade(userId, folderId, options = {}) {
       throw error;
     }
     if (folderOwner && userId && String(folderOwner) !== String(userId)) {
-      const error = new Error('Not authorized to delete this folder');
-      error.status = 403;
-      error.code = 'ACCESS_DENIED';
-      throw error;
+      if (isAdmin) {
+        console.log(`[${correlationId}] [deleteFolderCascade] Admin ${user?.username || userId} authorized to delete folder ${folderId} owned by ${folderOwner}`);
+      } else {
+        const error = new Error('Not authorized to delete this folder');
+        error.status = 403;
+        error.code = 'ACCESS_DENIED';
+        throw error;
+      }
     }
   }
 
   // 2. Lock & Biometric Protection: Never allow delete to bypass lock!
-  let userLocked = [];
-  let user = null;
-  if (userId) {
-    user = await User.findById(userId).select('+pinHash');
-    if (Array.isArray(user?.lockedCategories)) {
-      userLocked = user.lockedCategories;
-    }
-  }
 
   const folderTitle = (folder?.title || '').trim().toLowerCase();
   const folderIdStr = folder ? String(folder._id).toLowerCase() : String(folderId).toLowerCase();
@@ -1914,7 +1938,8 @@ exports.getFolderInfo = async (req, res) => {
     }
 
     const userId = req.user?._id || req.user?.id;
-    if (folder.uploadedBy && userId && String(folder.uploadedBy) !== String(userId)) {
+    const isAdmin = req.user?.role === 'admin' || (req.user?.email && req.user.email.toLowerCase() === 'sakshamshakya231@gmail.com');
+    if (folder.uploadedBy && userId && String(folder.uploadedBy) !== String(userId) && !isAdmin) {
       return res.status(403).json({ success: false, error: 'ACCESS_DENIED', message: 'Not authorized to view folder info' });
     }
 
@@ -2194,7 +2219,12 @@ exports.listFolders = async (req, res) => {
     };
     const userId = req.user?._id || req.user?.id;
     if (userId) {
-      filter.uploadedBy = userId;
+      filter.$or = [
+        { uploadedBy: userId },
+        { userId: userId },
+        { uploadedBy: null, userId: null },
+        { uploadedBy: { $exists: false } },
+      ];
     }
     const folders = await Media.find(filter).sort({ title: 1 }).lean();
 
